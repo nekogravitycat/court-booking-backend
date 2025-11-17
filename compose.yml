@@ -1,0 +1,17 @@
+services:
+  db:
+    image: postgres:18
+    container_name: court-booking-db
+    restart: always
+    environment:
+      POSTGRES_USER: gravity
+      POSTGRES_PASSWORD: yLJuh3kGh9j5
+      POSTGRES_DB: mydb
+    ports:
+      - "5432:5432"
+    volumes:
+      - db-data:/var/lib/postgresql
+    shm_size: 128mb
+
+volumes:
+  db-data:
