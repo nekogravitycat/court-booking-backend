@@ -9,6 +9,8 @@ require (
 	golang.org/x/crypto v0.44.0
 )
 
+require github.com/jackc/pgerrcode v0.0.0-20250907135507-afb5586c32a6 // indirect
+
 require (
 	github.com/bytedance/gopkg v0.1.3 // indirect
 	github.com/bytedance/sonic v1.14.1 // indirect

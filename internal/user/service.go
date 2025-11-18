@@ -81,6 +81,10 @@ func (s *service) Register(ctx context.Context, email, password, displayName str
 	}
 
 	if err := s.repo.Create(ctx, u); err != nil {
+		// Check for unique violation error from the repository.
+		if errors.Is(err, ErrEmailAlreadyUsed) {
+			return nil, ErrEmailAlreadyUsed
+		}
 		return nil, fmt.Errorf("failed to create user: %w", err)
 	}
 

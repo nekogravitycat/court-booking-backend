@@ -6,7 +6,9 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/jackc/pgerrcode"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -106,6 +108,10 @@ func (r *pgxUserRepository) Create(ctx context.Context, u *User) error {
 		u.IsActive,
 	).Scan(&u.ID, &u.CreatedAt)
 	if err != nil {
+		var e *pgconn.PgError
+		if errors.As(err, &e) && e.Code == pgerrcode.UniqueViolation {
+			return ErrEmailAlreadyUsed
+		}
 		return fmt.Errorf("Create user failed: %w", err)
 	}
 
