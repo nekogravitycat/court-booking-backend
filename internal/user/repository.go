@@ -1,9 +1,11 @@
 package user
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
+	"strconv"
 	"time"
 
 	"github.com/jackc/pgerrcode"
@@ -18,6 +20,8 @@ type Repository interface {
 	GetByID(ctx context.Context, id string) (*User, error)
 	Create(ctx context.Context, u *User) error
 	UpdateLastLogin(ctx context.Context, id string, t time.Time) error
+	List(ctx context.Context, filter UserFilter) ([]*User, int, error)
+	Update(ctx context.Context, u *User) error
 }
 
 // ErrNotFound is returned when a user is not found in the repository.
@@ -36,7 +40,7 @@ func NewPgxRepository(pool *pgxpool.Pool) Repository {
 
 func (r *pgxUserRepository) GetByEmail(ctx context.Context, email string) (*User, error) {
 	const query = `
-		SELECT id, email, password_hash, display_name, created_at, last_login_at, is_active
+		SELECT id, email, password_hash, display_name, created_at, last_login_at, is_active, is_system_admin
 		FROM public.users
 		WHERE email = $1
 	`
@@ -52,6 +56,7 @@ func (r *pgxUserRepository) GetByEmail(ctx context.Context, email string) (*User
 		&u.CreatedAt,
 		&u.LastLoginAt,
 		&u.IsActive,
+		&u.IsSystemAdmin,
 	)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -65,7 +70,7 @@ func (r *pgxUserRepository) GetByEmail(ctx context.Context, email string) (*User
 
 func (r *pgxUserRepository) GetByID(ctx context.Context, id string) (*User, error) {
 	const query = `
-		SELECT id, email, password_hash, display_name, created_at, last_login_at, is_active
+		SELECT id, email, password_hash, display_name, created_at, last_login_at, is_active, is_system_admin
 		FROM public.users
 		WHERE id = $1
 	`
@@ -81,6 +86,7 @@ func (r *pgxUserRepository) GetByID(ctx context.Context, id string) (*User, erro
 		&u.CreatedAt,
 		&u.LastLoginAt,
 		&u.IsActive,
+		&u.IsSystemAdmin,
 	)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -94,8 +100,8 @@ func (r *pgxUserRepository) GetByID(ctx context.Context, id string) (*User, erro
 
 func (r *pgxUserRepository) Create(ctx context.Context, u *User) error {
 	const query = `
-		INSERT INTO public.users (email, password_hash, display_name, is_active)
-		VALUES ($1, $2, $3, $4)
+		INSERT INTO public.users (email, password_hash, display_name, is_active, is_system_admin)
+		VALUES ($1, $2, $3, $4, $5)
 		RETURNING id, created_at
 	`
 
@@ -106,6 +112,7 @@ func (r *pgxUserRepository) Create(ctx context.Context, u *User) error {
 		u.PasswordHash,
 		u.DisplayName,
 		u.IsActive,
+		u.IsSystemAdmin,
 	).Scan(&u.ID, &u.CreatedAt)
 	if err != nil {
 		var e *pgconn.PgError
@@ -128,6 +135,107 @@ func (r *pgxUserRepository) UpdateLastLogin(ctx context.Context, id string, t ti
 	ct, err := r.pool.Exec(ctx, query, t, id)
 	if err != nil {
 		return fmt.Errorf("UpdateLastLogin failed: %w", err)
+	}
+
+	if ct.RowsAffected() == 0 {
+		return ErrNotFound
+	}
+
+	return nil
+}
+
+func (r *pgxUserRepository) List(ctx context.Context, filter UserFilter) ([]*User, int, error) {
+	var args []interface{}
+	queryBuilder := bytes.NewBufferString(`
+		SELECT id, email, password_hash, display_name, created_at, last_login_at, is_active, is_system_admin, count(*) OVER() AS total_count
+		FROM public.users
+		WHERE 1=1
+	`)
+
+	// Dynamic filtering
+	if filter.Email != "" {
+		args = append(args, "%"+filter.Email+"%")
+		queryBuilder.WriteString(" AND email ILIKE $" + strconv.Itoa(len(args)))
+	}
+	if filter.DisplayName != "" {
+		args = append(args, "%"+filter.DisplayName+"%")
+		queryBuilder.WriteString(" AND display_name ILIKE $" + strconv.Itoa(len(args)))
+	}
+	if filter.IsActive != nil {
+		args = append(args, *filter.IsActive)
+		queryBuilder.WriteString(" AND is_active = $" + strconv.Itoa(len(args)))
+	}
+
+	// Sorting (whitelist fields to prevent injection)
+	sort := "created_at DESC" // default
+	if filter.Sort != "" {
+		// Basic validation logic can be added here or in service layer
+		// For now, we assume input is sanitized or we handle mapped values
+		switch filter.Sort {
+		case "created_at":
+			sort = "created_at ASC"
+		case "-created_at":
+			sort = "created_at DESC"
+		case "email":
+			sort = "email ASC"
+		case "-email":
+			sort = "email DESC"
+		}
+	}
+	queryBuilder.WriteString(" ORDER BY " + sort)
+
+	// Pagination
+	if filter.Page < 1 {
+		filter.Page = 1
+	}
+	if filter.PageSize < 1 {
+		filter.PageSize = 20
+	}
+	offset := (filter.Page - 1) * filter.PageSize
+
+	args = append(args, filter.PageSize, offset)
+	queryBuilder.WriteString(" LIMIT $" + strconv.Itoa(len(args)-1) + " OFFSET $" + strconv.Itoa(len(args)))
+
+	rows, err := r.pool.Query(ctx, queryBuilder.String(), args...)
+	if err != nil {
+		return nil, 0, fmt.Errorf("list users failed: %w", err)
+	}
+	defer rows.Close()
+
+	var users []*User
+	var total int
+
+	for rows.Next() {
+		var u User
+		if err := rows.Scan(
+			&u.ID,
+			&u.Email,
+			&u.PasswordHash,
+			&u.DisplayName,
+			&u.CreatedAt,
+			&u.LastLoginAt,
+			&u.IsActive,
+			&u.IsSystemAdmin,
+			&total, // Scan the window function result
+		); err != nil {
+			return nil, 0, fmt.Errorf("scan user failed: %w", err)
+		}
+		users = append(users, &u)
+	}
+
+	return users, total, nil
+}
+
+func (r *pgxUserRepository) Update(ctx context.Context, u *User) error {
+	const query = `
+		UPDATE public.users
+		SET display_name = $1, is_active = $2, is_system_admin = $3
+		WHERE id = $4
+	`
+
+	ct, err := r.pool.Exec(ctx, query, u.DisplayName, u.IsActive, u.IsSystemAdmin, u.ID)
+	if err != nil {
+		return fmt.Errorf("update user failed: %w", err)
 	}
 
 	if ct.RowsAffected() == 0 {

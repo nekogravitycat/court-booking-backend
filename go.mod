@@ -9,7 +9,7 @@ require (
 	golang.org/x/crypto v0.44.0
 )
 
-require github.com/jackc/pgerrcode v0.0.0-20250907135507-afb5586c32a6 // indirect
+require github.com/jackc/pgerrcode v0.0.0-20250907135507-afb5586c32a6
 
 require (
 	github.com/bytedance/gopkg v0.1.3 // indirect
@@ -17,6 +17,7 @@ require (
 	github.com/bytedance/sonic/loader v0.3.0 // indirect
 	github.com/cloudwego/base64x v0.1.6 // indirect
 	github.com/gabriel-vasile/mimetype v1.4.10 // indirect
+	github.com/gin-contrib/cors v1.7.6
 	github.com/gin-contrib/sse v1.1.0 // indirect
 	github.com/go-playground/locales v0.14.1 // indirect
 	github.com/go-playground/universal-translator v0.18.1 // indirect

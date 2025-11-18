@@ -21,11 +21,13 @@ type LoginRequest struct {
 
 // UserResponse is the shape of user data returned in API responses.
 type UserResponse struct {
-	ID          string     `json:"id"`
-	Email       string     `json:"email"`
-	DisplayName *string    `json:"display_name,omitempty"`
-	CreatedAt   time.Time  `json:"created_at"`
-	LastLoginAt *time.Time `json:"last_login_at,omitempty"`
+	ID            string     `json:"id"`
+	Email         string     `json:"email"`
+	DisplayName   *string    `json:"display_name,omitempty"`
+	CreatedAt     time.Time  `json:"created_at"`
+	LastLoginAt   *time.Time `json:"last_login_at,omitempty"`
+	IsActive      bool       `json:"is_active"`
+	IsSystemAdmin bool       `json:"is_system_admin"`
 }
 
 // RegisterResponse is the response for POST /v1/auth/register.
@@ -55,10 +57,12 @@ func NewUserResponse(u *user.User) UserResponse {
 	}
 
 	return UserResponse{
-		ID:          u.ID,
-		Email:       u.Email,
-		DisplayName: u.DisplayName,
-		CreatedAt:   createdAt,
-		LastLoginAt: lastLoginAt,
+		ID:            u.ID,
+		Email:         u.Email,
+		DisplayName:   u.DisplayName,
+		CreatedAt:     createdAt,
+		LastLoginAt:   lastLoginAt,
+		IsActive:      u.IsActive,
+		IsSystemAdmin: u.IsSystemAdmin,
 	}
 }

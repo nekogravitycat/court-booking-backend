@@ -10,11 +10,20 @@ import (
 	"github.com/nekogravitycat/court-booking-backend/internal/auth"
 )
 
+type UpdateUserRequest struct {
+	DisplayName   *string
+	IsActive      *bool
+	IsSystemAdmin *bool
+}
+
 // Service defines business logic related to users.
 type Service interface {
 	Register(ctx context.Context, email, password, displayName string) (*User, error)
 	Login(ctx context.Context, email, password string) (*User, error)
 	GetByID(ctx context.Context, id string) (*User, error)
+
+	List(ctx context.Context, filter UserFilter) ([]*User, int, error)
+	Update(ctx context.Context, id string, req UpdateUserRequest) (*User, error)
 }
 
 // Service errors used to communicate business logic failures.
@@ -130,4 +139,34 @@ func (s *service) GetByID(ctx context.Context, id string) (*User, error) {
 // normalizeEmail trims spaces and lowercases the email.
 func normalizeEmail(email string) string {
 	return strings.ToLower(strings.TrimSpace(email))
+}
+
+func (s *service) List(ctx context.Context, filter UserFilter) ([]*User, int, error) {
+	return s.repo.List(ctx, filter)
+}
+
+func (s *service) Update(ctx context.Context, id string, req UpdateUserRequest) (*User, error) {
+	// 1. Check if user exists
+	u, err := s.repo.GetByID(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+
+	// 2. Apply updates if provided
+	if req.DisplayName != nil {
+		u.DisplayName = req.DisplayName
+	}
+	if req.IsActive != nil {
+		u.IsActive = *req.IsActive
+	}
+	if req.IsSystemAdmin != nil {
+		u.IsSystemAdmin = *req.IsSystemAdmin
+	}
+
+	// 3. Save changes
+	if err := s.repo.Update(ctx, u); err != nil {
+		return nil, err
+	}
+
+	return u, nil
 }
