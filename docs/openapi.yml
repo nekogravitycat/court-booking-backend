@@ -2,10 +2,7 @@ openapi: 3.0.3
 info:
   title: Court Booking Backend API
   version: "v1"
-  description: |
-    Court Booking Backend — API v1
-    使用者自行註冊，管理員將既有使用者加入組織並設定角色 (owner/admin/member)。
-    文件同時包含中文註解 (繁體) 以利團隊溝通.
+  description: Court Booking Backend — API v1
 servers:
   - url: http://localhost:8082/v1
     description: Local Server

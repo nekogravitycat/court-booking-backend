@@ -1,0 +1,11 @@
+services:
+  swagger-ui:
+    image: docker.swagger.io/swaggerapi/swagger-ui
+    container_name: court-booking-swagger
+    restart: always
+    ports:
+      - "8081:8080"
+    environment:
+      - SWAGGER_JSON=/docs/openapi.yml
+    volumes:
+      - ./docs/openapi.yml:/docs/openapi.yml
