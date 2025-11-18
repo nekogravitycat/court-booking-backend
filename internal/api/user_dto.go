@@ -1,13 +1,11 @@
-// internal/api/user_dto.go
-
 package api
 
 // PageResponse is the standard wrapper for list endpoints.
 type PageResponse struct {
-	Items    interface{} `json:"items"`
-	Page     int         `json:"page"`
-	PageSize int         `json:"page_size"`
-	Total    int         `json:"total"`
+	Items    any `json:"items"`
+	Page     int `json:"page"`
+	PageSize int `json:"page_size"`
+	Total    int `json:"total"`
 }
 
 // UpdateUserBody defines fields allowed to be updated via PATCH /users/:id.
