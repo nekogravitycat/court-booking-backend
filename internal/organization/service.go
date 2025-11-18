@@ -6,12 +6,18 @@ import (
 	"strings"
 )
 
+// UpdateOrganizationRequest defines the fields that can be updated.
+type UpdateOrganizationRequest struct {
+	Name     *string
+	IsActive *bool
+}
+
 // Service defines business logic for organizations.
 type Service interface {
 	Create(ctx context.Context, name string) (*Organization, error)
 	GetByID(ctx context.Context, id int64) (*Organization, error)
 	List(ctx context.Context, filter OrganizationFilter) ([]*Organization, int, error)
-	Update(ctx context.Context, id int64, name string) (*Organization, error)
+	Update(ctx context.Context, id int64, req UpdateOrganizationRequest) (*Organization, error)
 	Delete(ctx context.Context, id int64) error
 }
 
@@ -49,10 +55,12 @@ func (s *service) List(ctx context.Context, filter OrganizationFilter) ([]*Organ
 	return s.repo.List(ctx, filter)
 }
 
-func (s *service) Update(ctx context.Context, id int64, name string) (*Organization, error) {
-	name = strings.TrimSpace(name)
-	if name == "" {
-		return nil, errors.New("organization name cannot be empty")
+func (s *service) Update(ctx context.Context, id int64, req UpdateOrganizationRequest) (*Organization, error) {
+	if req.Name != nil {
+		*req.Name = strings.TrimSpace(*req.Name)
+		if *req.Name == "" {
+			return nil, errors.New("organization name cannot be empty")
+		}
 	}
 
 	// Check existence
@@ -61,10 +69,23 @@ func (s *service) Update(ctx context.Context, id int64, name string) (*Organizat
 		return nil, err
 	}
 
-	org.Name = name
+	// Apply updates if provided
+	if req.Name != nil {
+		newName := strings.TrimSpace(*req.Name)
+		if newName == "" {
+			return nil, errors.New("organization name cannot be empty")
+		}
+		org.Name = newName
+	}
+	if req.IsActive != nil {
+		org.IsActive = *req.IsActive
+	}
+
+	// Save updates
 	if err := s.repo.Update(ctx, org); err != nil {
 		return nil, err
 	}
+
 	return org, nil
 }
 

@@ -45,7 +45,7 @@ func (r *pgxRepository) GetByID(ctx context.Context, id int64) (*Organization, e
 	const query = `
 		SELECT id, name, created_at, is_active
 		FROM public.organizations
-		WHERE id = $1
+		WHERE id = $1 AND is_active = true
 	`
 	row := r.pool.QueryRow(ctx, query, id)
 
@@ -104,10 +104,10 @@ func (r *pgxRepository) List(ctx context.Context, filter OrganizationFilter) ([]
 func (r *pgxRepository) Update(ctx context.Context, org *Organization) error {
 	const query = `
 		UPDATE public.organizations
-		SET name = $1
-		WHERE id = $2
+		SET name = $1, is_active = $2
+		WHERE id = $3
 	`
-	ct, err := r.pool.Exec(ctx, query, org.Name, org.ID)
+	ct, err := r.pool.Exec(ctx, query, org.Name, org.IsActive, org.ID)
 	if err != nil {
 		return fmt.Errorf("Update failed: %w", err)
 	}

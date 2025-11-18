@@ -8,9 +8,6 @@ import (
 func RegisterRoutes(g *gin.RouterGroup, h *OrganizationHandler, authMiddleware, adminMiddleware gin.HandlerFunc) {
 	orgGroup := g.Group("/organizations")
 
-	// ==============================
-	// Public / Authenticated Routes
-	// ==============================
 	// Currently, listing and getting organizations are open to authenticated users.
 	// We apply authMiddleware to the entire group or specific routes.
 	orgGroup.Use(authMiddleware)
@@ -24,9 +21,6 @@ func RegisterRoutes(g *gin.RouterGroup, h *OrganizationHandler, authMiddleware, 
 		orgGroup.GET("/:id", h.Get)
 	}
 
-	// ==============================
-	// System Admin Routes
-	// ==============================
 	// Operations that modify organizations require system admin privileges.
 	// Note: Currently restricted to System Admin, might allow Org Owner in the future.
 	adminGroup := orgGroup.Group("")

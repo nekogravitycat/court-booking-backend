@@ -20,7 +20,8 @@ type CreateOrganizationRequest struct {
 
 // UpdateOrganizationRequest is the payload for PATCH /organizations/:id.
 type UpdateOrganizationRequest struct {
-	Name string `json:"name" binding:"required"`
+	Name     *string `json:"name"`
+	IsActive *bool   `json:"is_active"`
 }
 
 func NewOrganizationResponse(o *organization.Organization) OrganizationResponse {

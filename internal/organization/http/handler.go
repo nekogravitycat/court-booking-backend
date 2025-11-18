@@ -93,19 +93,27 @@ func (h *OrganizationHandler) Update(c *gin.Context) {
 		return
 	}
 
-	var req UpdateOrganizationRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
+	// Bind to HTTP DTO
+	var body UpdateOrganizationRequest
+	if err := c.ShouldBindJSON(&body); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request body"})
 		return
 	}
 
-	org, err := h.service.Update(c.Request.Context(), id, req.Name)
+	// Map HTTP DTO to Service DTO
+	req := organization.UpdateOrganizationRequest{
+		Name:     body.Name,
+		IsActive: body.IsActive,
+	}
+
+	org, err := h.service.Update(c.Request.Context(), id, req)
 	if err != nil {
 		if err == organization.ErrNotFound {
 			c.JSON(http.StatusNotFound, gin.H{"error": "organization not found"})
 			return
 		}
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to update organization"})
+		// Handle validation error (e.g. empty name)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 

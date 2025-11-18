@@ -42,8 +42,6 @@ func (h *UserHandler) Register(c *gin.Context) {
 		return
 	}
 
-	// Wrap in MeResponse or just return UserResponse, depending on your preference.
-	// Here matching the previous "RegisterResponse" structure which had a "user" field.
 	resp := MeResponse{
 		User: NewUserResponse(u),
 	}
@@ -170,7 +168,11 @@ func (h *UserHandler) Get(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, NewUserResponse(targetUser))
+	resp := MeResponse{
+		User: NewUserResponse(targetUser),
+	}
+
+	c.JSON(http.StatusOK, resp)
 }
 
 // PATCH /v1/users/:id
@@ -191,9 +193,17 @@ func (h *UserHandler) Update(c *gin.Context) {
 
 	updatedUser, err := h.userService.Update(c.Request.Context(), id, req)
 	if err != nil {
+		if err == user.ErrNotFound {
+			c.JSON(http.StatusNotFound, gin.H{"error": "user not found"})
+			return
+		}
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to update user"})
 		return
 	}
 
-	c.JSON(http.StatusOK, NewUserResponse(updatedUser))
+	resp := MeResponse{
+		User: NewUserResponse(updatedUser),
+	}
+
+	c.JSON(http.StatusOK, resp)
 }
