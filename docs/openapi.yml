@@ -2,10 +2,15 @@ openapi: 3.0.3
 info:
   title: Court Booking Backend API
   version: "v1"
-  description: Court Booking Backend — API v1
+  description: |
+    Court Booking Backend — API v1
+
+    **Status Update:**
+    - Implemented: Auth, Me, Users, Organizations
+    - Planned: Members, Locations, Resources, Bookings, Announcements
 servers:
-  - url: http://localhost:8082/v1
-    description: Local Server
+  - url: http://localhost:8080/v1
+    description: Local Server (Updated port to 8080 based on config)
 security:
   - bearerAuth: []
 
@@ -19,17 +24,17 @@ tags:
   - name: Organizations
     description: 組織管理
   - name: Members
-    description: 組織成員與權限
+    description: 組織成員與權限 (Planned)
   - name: Locations
-    description: 實體場館
+    description: 實體場館 (Planned)
   - name: ResourceTypes
-    description: 場地類型
+    description: 場地類型 (Planned)
   - name: Resources
-    description: 實際場地 (field / court)
+    description: 實際場地 (Planned)
   - name: Bookings
-    description: 預約相關
+    description: 預約相關 (Planned)
   - name: Announcements
-    description: 公告
+    description: 公告 (Planned)
 
 components:
   securitySchemes:
@@ -61,26 +66,19 @@ components:
       in: query
       schema:
         type: string
-      description: Sort fields, comma separated. Prefix with '-' for desc. e.g. sort=-created_at,email
+      description: Sort fields (e.g. created_at, -created_at, email)
 
   schemas:
     ErrorResponse:
       type: object
       properties:
         error:
-          type: object
-          properties:
-            code:
-              type: string
-              description: machine-readable error code
-            message:
-              type: string
-              description: human readable message
+          type: string
+          description: Error message
       example:
-        error:
-          code: "booking_conflict"
-          message: "Booking time overlaps with existing booking"
+        error: "invalid request"
 
+    # Generic Page Response matches internal/api/common_dto.go
     PageResponse:
       type: object
       properties:
@@ -95,6 +93,7 @@ components:
         total:
           type: integer
 
+    # User Matches internal/api/auth_dto.go -> UserResponse
     User:
       type: object
       properties:
@@ -105,6 +104,7 @@ components:
           type: string
         display_name:
           type: string
+          nullable: true
         created_at:
           type: string
           format: date-time
@@ -123,6 +123,13 @@ components:
         - is_active
         - is_system_admin
 
+    # Wrapper for responses that return a single user (Auth/Me)
+    UserWrapperResponse:
+      type: object
+      properties:
+        user:
+          $ref: "#/components/schemas/User"
+
     RegisterRequest:
       type: object
       properties:
@@ -135,6 +142,7 @@ components:
       required:
         - email
         - password
+        - display_name
 
     LoginRequest:
       type: object
@@ -147,27 +155,36 @@ components:
         - email
         - password
 
-    AuthResponse:
+    # Matches internal/api/auth_dto.go -> LoginResponse
+    LoginResponse:
       type: object
       properties:
         access_token:
           type: string
-        token_type:
-          type: string
-      example:
-        access_token: "eyJhbGciOiJ..."
-        token_type: "Bearer"
+        user:
+          $ref: "#/components/schemas/User"
+      required:
+        - access_token
+        - user
 
+    # Matches internal/api/organization_dto.go -> OrganizationResponse
     Organization:
       type: object
       properties:
         id:
           type: integer
           format: int64
+        name:
+          type: string
         created_at:
           type: string
           format: date-time
+      required:
+        - id
+        - name
+        - created_at
 
+    # Matches internal/api/organization_dto.go -> CreateOrganizationRequest
     OrganizationCreate:
       type: object
       properties:
@@ -175,6 +192,17 @@ components:
           type: string
       required:
         - name
+
+    # Matches internal/api/organization_dto.go -> UpdateOrganizationRequest
+    OrganizationUpdate:
+      type: object
+      properties:
+        name:
+          type: string
+      required:
+        - name
+
+    # --- Below are Schemas for Future Implementation ---
 
     OrganizationMember:
       type: object
@@ -266,20 +294,12 @@ components:
         start_time:
           type: string
           format: date-time
-          description: ISO8601 with timezone; server stores UTC
         end_time:
           type: string
           format: date-time
         status:
           type: string
           enum: [pending, confirmed, cancelled]
-      required:
-        - id
-        - resource_id
-        - user_id
-        - start_time
-        - end_time
-        - status
 
     BookingCreate:
       type: object
@@ -311,11 +331,14 @@ components:
           type: string
 
 paths:
+  # ============================
+  # Auth
+  # ============================
   /auth/register:
     post:
       tags:
         - Auth
-      summary: "使用者註冊 (User self-register)"
+      summary: "使用者註冊"
       requestBody:
         required: true
         content:
@@ -328,9 +351,15 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/User"
+                $ref: "#/components/schemas/UserWrapperResponse"
         "400":
           description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: Email already used
           content:
             application/json:
               schema:
@@ -340,7 +369,7 @@ paths:
     post:
       tags:
         - Auth
-      summary: "登入 (Login)"
+      summary: "登入"
       requestBody:
         required: true
         content:
@@ -353,7 +382,9 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/AuthResponse"
+                $ref: "#/components/schemas/LoginResponse"
+        "400":
+          description: Invalid Request
         "401":
           description: Invalid credentials
           content:
@@ -361,11 +392,14 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
+  # ============================
+  # Me
+  # ============================
   /me:
     get:
       tags:
         - Me
-      summary: "取得目前使用者資訊 (Get current user)"
+      summary: "取得目前使用者資訊"
       security:
         - bearerAuth: []
       responses:
@@ -374,14 +408,13 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/User"
+                $ref: "#/components/schemas/UserWrapperResponse"
         "401":
           description: Unauthorized
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
 
+  # ============================
+  # Users (System Admin)
+  # ============================
   /users:
     get:
       tags:
@@ -411,7 +444,13 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/PageResponse"
+                allOf:
+                  - $ref: "#/components/schemas/PageResponse"
+                  - properties:
+                      items:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/User"
         "403":
           description: Forbidden
 
@@ -435,7 +474,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/User"
+                $ref: "#/components/schemas/UserWrapperResponse"
         "403":
           description: Forbidden
         "404":
@@ -465,17 +504,20 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/User"
+                $ref: "#/components/schemas/UserWrapperResponse"
         "403":
           description: Forbidden
         "404":
           description: Not found
 
+  # ============================
+  # Organizations
+  # ============================
   /organizations:
     get:
       tags:
         - Organizations
-      summary: "列出 organizations"
+      summary: "列出 organizations (Active only)"
       security:
         - bearerAuth: []
       parameters:
@@ -487,7 +529,13 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/PageResponse"
+                allOf:
+                  - $ref: "#/components/schemas/PageResponse"
+                  - properties:
+                      items:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/Organization"
     post:
       tags:
         - Organizations
@@ -517,6 +565,7 @@ paths:
         required: true
         schema:
           type: integer
+          format: int64
     get:
       tags:
         - Organizations
@@ -535,7 +584,7 @@ paths:
     patch:
       tags:
         - Organizations
-      summary: "更新 organization (System Admin or owner)"
+      summary: "更新 organization (System Admin)"
       security:
         - bearerAuth: []
       requestBody:
@@ -543,22 +592,30 @@ paths:
         content:
           application/json:
             schema:
-              type: object
-              properties:
-                name:
-                  type: string
+              $ref: "#/components/schemas/OrganizationUpdate"
       responses:
         "200":
           description: updated
+          content:
+             application/json:
+              schema:
+                $ref: "#/components/schemas/Organization"
+        "404":
+          description: Not found
     delete:
       tags:
         - Organizations
-      summary: "刪除或停用 organization"
+      summary: "刪除 organization (Soft Delete)"
       security:
         - bearerAuth: []
       responses:
         "204":
           description: deleted
+
+  # ============================
+  # Future Implementation
+  # (Members, Locations, Resources, Bookings, Announcements)
+  # ============================
 
   /organizations/{org_id}/members:
     parameters:
@@ -570,52 +627,21 @@ paths:
     get:
       tags:
         - Members
-      summary: "列出 organization 成員"
+      summary: "列出 organization 成員 (Planned)"
       security:
         - bearerAuth: []
-      parameters:
-        - name: role
-          in: query
-          schema:
-            type: string
-            enum: [owner, admin, member]
       responses:
-        "200":
-          description: member list
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/PageResponse"
+        "501":
+          description: Not Implemented
     post:
       tags:
         - Members
-      summary: "把既有 user 加入 organization 並指定 role (owner/admin/member)"
-      description: "Body: { user_id, role }。若要用 email 搜尋 user，前端可先 GET /users?email=... 取得 user_id。"
+      summary: "加入成員 (Planned)"
       security:
         - bearerAuth: []
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              properties:
-                user_id:
-                  type: string
-                  format: uuid
-                role:
-                  type: string
-                  enum: [owner, admin, member]
-              required:
-                - user_id
-                - role
       responses:
-        "201":
-          description: created membership
-        "403":
-          description: Forbidden
-        "404":
-          description: User not found
+        "501":
+          description: Not Implemented
 
   /organizations/{org_id}/members/{user_id}:
     parameters:
@@ -633,31 +659,21 @@ paths:
     patch:
       tags:
         - Members
-      summary: "調整該 member 在 organization 的角色"
+      summary: "調整成員角色 (Planned)"
       security:
         - bearerAuth: []
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              properties:
-                role:
-                  type: string
-                  enum: [owner, admin, member]
       responses:
-        "200":
-          description: updated
+        "501":
+          description: Not Implemented
     delete:
       tags:
         - Members
-      summary: "把 user 從 organization 移除"
+      summary: "移除成員 (Planned)"
       security:
         - bearerAuth: []
       responses:
-        "204":
-          description: removed
+        "501":
+          description: Not Implemented
 
   /locations:
     get:

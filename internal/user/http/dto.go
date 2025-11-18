@@ -1,4 +1,4 @@
-package api
+package http
 
 import (
 	"time"
@@ -6,17 +6,12 @@ import (
 	"github.com/nekogravitycat/court-booking-backend/internal/user"
 )
 
-// RegisterRequest is the payload for POST /v1/auth/register.
-type RegisterRequest struct {
-	Email       string `json:"email"`
-	Password    string `json:"password"`
-	DisplayName string `json:"display_name"`
-}
-
-// LoginRequest is the payload for POST /v1/auth/login.
-type LoginRequest struct {
-	Email    string `json:"email"`
-	Password string `json:"password"`
+// UpdateUserBody defines fields allowed to be updated via PATCH /users/:id.
+// Use pointers to distinguish between "field not sent" and "field sent as false/empty".
+type UpdateUserBody struct {
+	DisplayName   *string `json:"display_name"`
+	IsActive      *bool   `json:"is_active"`
+	IsSystemAdmin *bool   `json:"is_system_admin"`
 }
 
 // UserResponse is the shape of user data returned in API responses.
@@ -28,22 +23,6 @@ type UserResponse struct {
 	LastLoginAt   *time.Time `json:"last_login_at,omitempty"`
 	IsActive      bool       `json:"is_active"`
 	IsSystemAdmin bool       `json:"is_system_admin"`
-}
-
-// RegisterResponse is the response for POST /v1/auth/register.
-type RegisterResponse struct {
-	User UserResponse `json:"user"`
-}
-
-// LoginResponse is the response for POST /v1/auth/login.
-type LoginResponse struct {
-	AccessToken string       `json:"access_token"`
-	User        UserResponse `json:"user"`
-}
-
-// MeResponse is the response for GET /v1/me.
-type MeResponse struct {
-	User UserResponse `json:"user"`
 }
 
 // NewUserResponse converts domain user.User to UserResponse used by the API.
@@ -65,4 +44,28 @@ func NewUserResponse(u *user.User) UserResponse {
 		IsActive:      u.IsActive,
 		IsSystemAdmin: u.IsSystemAdmin,
 	}
+}
+
+// RegisterRequest defines the payload for user registration.
+type RegisterRequest struct {
+	Email       string `json:"email" binding:"required,email"`
+	Password    string `json:"password" binding:"required,min=8"`
+	DisplayName string `json:"display_name"`
+}
+
+// LoginRequest defines the payload for user login.
+type LoginRequest struct {
+	Email    string `json:"email" binding:"required,email"`
+	Password string `json:"password" binding:"required"`
+}
+
+// LoginResponse returns the token and user info.
+type LoginResponse struct {
+	AccessToken string       `json:"access_token"`
+	User        UserResponse `json:"user"`
+}
+
+// MeResponse returns the current user info.
+type MeResponse struct {
+	User UserResponse `json:"user"`
 }

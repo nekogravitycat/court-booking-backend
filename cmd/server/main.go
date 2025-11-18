@@ -13,6 +13,7 @@ import (
 	"github.com/nekogravitycat/court-booking-backend/internal/auth"
 	"github.com/nekogravitycat/court-booking-backend/internal/config"
 	"github.com/nekogravitycat/court-booking-backend/internal/db"
+	"github.com/nekogravitycat/court-booking-backend/internal/organization"
 	"github.com/nekogravitycat/court-booking-backend/internal/user"
 )
 
@@ -36,12 +37,18 @@ func main() {
 
 	// Init components
 	passwordHasher := auth.NewBcryptPasswordHasher()
-	userRepo := user.NewPgxRepository(pool)
-	userService := user.NewService(userRepo, passwordHasher)
 	jwtManager := auth.NewJWTManager(cfg.JWTSecret, cfg.JWTAccessTokenTTL)
 
+	// User module
+	userRepo := user.NewPgxRepository(pool)
+	userService := user.NewService(userRepo, passwordHasher)
+
+	// Organization module
+	orgRepo := organization.NewPgxRepository(pool)
+	orgService := organization.NewService(orgRepo)
+
 	// Gin router
-	router := api.NewRouter(userService, jwtManager)
+	router := api.NewRouter(userService, orgService, jwtManager)
 
 	// Use http.Server for graceful shutdown
 	server := &http.Server{

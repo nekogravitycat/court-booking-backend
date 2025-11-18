@@ -34,7 +34,9 @@ $$;
 -- =========================================================
 CREATE TABLE IF NOT EXISTS public.organizations (
   id         BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY, -- Surrogate key
-  created_at TIMESTAMPTZ NOT NULL DEFAULT now()               -- Creation timestamp
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),              -- Creation timestamp
+  name       TEXT NOT NULL,                                   -- Organization name
+  is_active  BOOLEAN NOT NULL DEFAULT true                    -- Soft delete / Suspension status
 );
 
 -- =========================================================
