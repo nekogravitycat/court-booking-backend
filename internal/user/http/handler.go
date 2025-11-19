@@ -5,6 +5,7 @@ import (
 	"strconv"
 
 	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
 	"github.com/nekogravitycat/court-booking-backend/internal/auth"
 	"github.com/nekogravitycat/court-booking-backend/internal/pkg/response"
 	"github.com/nekogravitycat/court-booking-backend/internal/user"
@@ -161,6 +162,12 @@ func (h *UserHandler) List(c *gin.Context) {
 func (h *UserHandler) Get(c *gin.Context) {
 	id := c.Param("id")
 
+	// Validate UUID format
+	if _, err := uuid.Parse(id); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid UUID"})
+		return
+	}
+
 	targetUser, err := h.userService.GetByID(c.Request.Context(), id)
 	if err != nil {
 		if err == user.ErrNotFound {
@@ -182,6 +189,13 @@ func (h *UserHandler) Get(c *gin.Context) {
 // Access Control: System Admin only.
 func (h *UserHandler) Update(c *gin.Context) {
 	id := c.Param("id")
+
+	// Validate UUID format
+	if _, err := uuid.Parse(id); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid UUID"})
+		return
+	}
+
 	var body UpdateUserBody
 	if err := c.ShouldBindJSON(&body); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid body"})

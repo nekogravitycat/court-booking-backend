@@ -27,15 +27,15 @@ type UpdateMemberRequest struct {
 type Service interface {
 	// Organization methods
 	Create(ctx context.Context, name string) (*Organization, error)
-	GetByID(ctx context.Context, id int64) (*Organization, error)
+	GetByID(ctx context.Context, id string) (*Organization, error)
 	List(ctx context.Context, filter OrganizationFilter) ([]*Organization, int, error)
-	Update(ctx context.Context, id int64, req UpdateOrganizationRequest) (*Organization, error)
-	Delete(ctx context.Context, id int64) error
+	Update(ctx context.Context, id string, req UpdateOrganizationRequest) (*Organization, error)
+	Delete(ctx context.Context, id string) error
 	// Member methods
-	AddMember(ctx context.Context, orgID int64, req AddMemberRequest) error
-	RemoveMember(ctx context.Context, orgID int64, userID string) error
-	UpdateMemberRole(ctx context.Context, orgID int64, userID string, req UpdateMemberRequest) error
-	ListMembers(ctx context.Context, orgID int64, filter MemberFilter) ([]*Member, int, error)
+	AddMember(ctx context.Context, orgID string, req AddMemberRequest) error
+	RemoveMember(ctx context.Context, orgID string, userID string) error
+	UpdateMemberRole(ctx context.Context, orgID string, userID string, req UpdateMemberRequest) error
+	ListMembers(ctx context.Context, orgID string, filter MemberFilter) ([]*Member, int, error)
 }
 
 type service struct {
@@ -68,7 +68,7 @@ func (s *service) Create(ctx context.Context, name string) (*Organization, error
 	return org, nil
 }
 
-func (s *service) GetByID(ctx context.Context, id int64) (*Organization, error) {
+func (s *service) GetByID(ctx context.Context, id string) (*Organization, error) {
 	return s.repo.GetByID(ctx, id)
 }
 
@@ -76,7 +76,7 @@ func (s *service) List(ctx context.Context, filter OrganizationFilter) ([]*Organ
 	return s.repo.List(ctx, filter)
 }
 
-func (s *service) Update(ctx context.Context, id int64, req UpdateOrganizationRequest) (*Organization, error) {
+func (s *service) Update(ctx context.Context, id string, req UpdateOrganizationRequest) (*Organization, error) {
 	if req.Name != nil {
 		*req.Name = strings.TrimSpace(*req.Name)
 		if *req.Name == "" {
@@ -110,7 +110,7 @@ func (s *service) Update(ctx context.Context, id int64, req UpdateOrganizationRe
 	return org, nil
 }
 
-func (s *service) Delete(ctx context.Context, id int64) error {
+func (s *service) Delete(ctx context.Context, id string) error {
 	// Check existence
 	_, err := s.repo.GetByID(ctx, id)
 	if err != nil {
@@ -123,7 +123,7 @@ func (s *service) Delete(ctx context.Context, id int64) error {
 //     Member methods
 // ------------------------
 
-func (s *service) AddMember(ctx context.Context, orgID int64, req AddMemberRequest) error {
+func (s *service) AddMember(ctx context.Context, orgID string, req AddMemberRequest) error {
 	if req.UserID == "" {
 		return errors.New("user_id is required")
 	}
@@ -141,7 +141,7 @@ func (s *service) AddMember(ctx context.Context, orgID int64, req AddMemberReque
 	return s.repo.AddMember(ctx, orgID, req.UserID, req.Role)
 }
 
-func (s *service) RemoveMember(ctx context.Context, orgID int64, userID string) error {
+func (s *service) RemoveMember(ctx context.Context, orgID string, userID string) error {
 	// Verify organization exists
 	if _, err := s.repo.GetByID(ctx, orgID); err != nil {
 		return err
@@ -149,7 +149,7 @@ func (s *service) RemoveMember(ctx context.Context, orgID int64, userID string) 
 	return s.repo.RemoveMember(ctx, orgID, userID)
 }
 
-func (s *service) UpdateMemberRole(ctx context.Context, orgID int64, userID string, req UpdateMemberRequest) error {
+func (s *service) UpdateMemberRole(ctx context.Context, orgID string, userID string, req UpdateMemberRequest) error {
 	req.Role = strings.ToLower(strings.TrimSpace(req.Role))
 	if !isValidRole(req.Role) {
 		return errors.New("invalid role")
@@ -163,7 +163,7 @@ func (s *service) UpdateMemberRole(ctx context.Context, orgID int64, userID stri
 	return s.repo.UpdateMemberRole(ctx, orgID, userID, req.Role)
 }
 
-func (s *service) ListMembers(ctx context.Context, orgID int64, filter MemberFilter) ([]*Member, int, error) {
+func (s *service) ListMembers(ctx context.Context, orgID string, filter MemberFilter) ([]*Member, int, error) {
 	// Verify organization exists
 	if _, err := s.repo.GetByID(ctx, orgID); err != nil {
 		return nil, 0, err

@@ -12,7 +12,7 @@ var (
 
 // Organization represents a venue owner or brand entity.
 type Organization struct {
-	ID        int64
+	ID        string
 	Name      string
 	CreatedAt time.Time
 	IsActive  bool

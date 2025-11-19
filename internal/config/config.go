@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"log"
 	"os"
 	"strconv"
 	"time"
@@ -22,8 +23,11 @@ type Config struct {
 
 // Load loads configuration from .env (optional) and environment variables.
 func Load() (*Config, error) {
-	// Load .env file if it exists; ignore error if file is missing.
-	_ = godotenv.Load()
+	// Load .env file if it exists
+	err := godotenv.Load()
+	if err != nil {
+		log.Printf("failed to load .env file: %v", err)
+	}
 
 	cfg := &Config{}
 

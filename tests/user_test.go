@@ -8,47 +8,85 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/nekogravitycat/court-booking-backend/internal/pkg/response"
 	userHttp "github.com/nekogravitycat/court-booking-backend/internal/user/http"
 )
 
 func TestAuthFlow(t *testing.T) {
 	clearTables()
 
-	// 1. Test Register (POST /auth/register)
-	registerPayload := userHttp.RegisterRequest{
-		Email:       "test@example.com",
-		Password:    "password123",
-		DisplayName: "Tester",
-	}
-	w := executeRequest("POST", "/v1/auth/register", registerPayload, "")
+	// Variable shared between sub-tests
+	var accessToken string
 
-	assert.Equal(t, http.StatusCreated, w.Code, "Register should succeed")
+	t.Run("Register User", func(t *testing.T) {
+		registerPayload := userHttp.RegisterRequest{
+			Email:       "test@example.com",
+			Password:    "password123",
+			DisplayName: "Tester",
+		}
+		w := executeRequest("POST", "/v1/auth/register", registerPayload, "")
+		assert.Equal(t, http.StatusCreated, w.Code, "Register should succeed")
+	})
 
-	// 2. Test Duplicate Register (Should Fail)
-	wDuplicate := executeRequest("POST", "/v1/auth/register", registerPayload, "")
-	assert.Equal(t, http.StatusConflict, wDuplicate.Code, "Duplicate email should return 409")
+	t.Run("Duplicate Register", func(t *testing.T) {
+		registerPayload := userHttp.RegisterRequest{
+			Email:       "test@example.com",
+			Password:    "password123",
+			DisplayName: "Tester",
+		}
+		wDuplicate := executeRequest("POST", "/v1/auth/register", registerPayload, "")
+		assert.Equal(t, http.StatusConflict, wDuplicate.Code, "Duplicate email should return 409")
+	})
 
-	// 3. Test Login (POST /auth/login)
-	loginPayload := userHttp.LoginRequest{
-		Email:    "test@example.com",
-		Password: "password123",
-	}
-	wLogin := executeRequest("POST", "/v1/auth/login", loginPayload, "")
+	t.Run("Login", func(t *testing.T) {
+		loginPayload := userHttp.LoginRequest{
+			Email:    "test@example.com",
+			Password: "password123",
+		}
+		wLogin := executeRequest("POST", "/v1/auth/login", loginPayload, "")
 
-	// Use require here because if login fails, the rest of the test is meaningless
-	require.Equal(t, http.StatusOK, wLogin.Code, "Login should succeed")
+		// Use require because we need the token for the next step
+		require.Equal(t, http.StatusOK, wLogin.Code, "Login should succeed")
 
-	var loginResp userHttp.LoginResponse
-	err := json.Unmarshal(wLogin.Body.Bytes(), &loginResp)
-	require.NoError(t, err, "Should parse login response")
-	assert.NotEmpty(t, loginResp.AccessToken, "Access token should not be empty")
+		var loginResp userHttp.LoginResponse
+		err := json.Unmarshal(wLogin.Body.Bytes(), &loginResp)
+		require.NoError(t, err, "Should parse login response")
+		assert.NotEmpty(t, loginResp.AccessToken, "Access token should not be empty")
 
-	// 4. Test Me (GET /me)
-	wMe := executeRequest("GET", "/v1/me", nil, loginResp.AccessToken)
-	assert.Equal(t, http.StatusOK, wMe.Code, "Get Me should succeed")
+		// Save token for next step
+		accessToken = loginResp.AccessToken
+	})
+
+	t.Run("Get Current User", func(t *testing.T) {
+		wMe := executeRequest("GET", "/v1/me", nil, accessToken)
+		assert.Equal(t, http.StatusOK, wMe.Code, "Get Me should succeed")
+	})
+
+	t.Run("Login with Wrong Password", func(t *testing.T) {
+		payload := userHttp.LoginRequest{
+			Email:    "test@example.com",
+			Password: "wrongpassword",
+		}
+		w := executeRequest("POST", "/v1/auth/login", payload, "")
+		assert.Equal(t, http.StatusUnauthorized, w.Code, "Should return 401 for wrong password")
+	})
+
+	t.Run("Login with Non-existent Email", func(t *testing.T) {
+		payload := userHttp.LoginRequest{
+			Email:    "ghost@example.com",
+			Password: "password123",
+		}
+		w := executeRequest("POST", "/v1/auth/login", payload, "")
+		assert.Equal(t, http.StatusUnauthorized, w.Code, "Should return 401 for non-existent user")
+	})
+
+	t.Run("Get Me with Invalid Token", func(t *testing.T) {
+		w := executeRequest("GET", "/v1/me", nil, "invalid-token-string")
+		assert.Equal(t, http.StatusUnauthorized, w.Code, "Should return 401 for invalid token")
+	})
 }
 
-func TestUserManagement_Permissions(t *testing.T) {
+func TestUserManagementPermissions(t *testing.T) {
 	clearTables()
 
 	// Setup: Create one admin and one normal user
@@ -58,32 +96,28 @@ func TestUserManagement_Permissions(t *testing.T) {
 	adminToken := generateTokenHelper(adminUser.ID, adminUser.Email)
 	normalToken := generateTokenHelper(normalUser.ID, normalUser.Email)
 
-	// 1. Test List Users (GET /users)
-	t.Run("Admin can list users", func(t *testing.T) {
+	t.Run("Admin List Users", func(t *testing.T) {
 		w := executeRequest("GET", "/v1/users", nil, adminToken)
 		assert.Equal(t, http.StatusOK, w.Code)
 
-		// Optional: Check if response structure is correct
 		var resp map[string]any
 		err := json.Unmarshal(w.Body.Bytes(), &resp)
 		require.NoError(t, err)
 		assert.NotNil(t, resp["items"])
 	})
 
-	t.Run("Normal user cannot list users", func(t *testing.T) {
+	t.Run("Normal User List Users", func(t *testing.T) {
 		w := executeRequest("GET", "/v1/users", nil, normalToken)
 		assert.Equal(t, http.StatusForbidden, w.Code)
 	})
 
-	// 2. Test Get User (GET /users/:id)
-	t.Run("Admin can get specific user", func(t *testing.T) {
+	t.Run("Admin Get Specific User", func(t *testing.T) {
 		path := "/v1/users/" + normalUser.ID
 		w := executeRequest("GET", path, nil, adminToken)
 		assert.Equal(t, http.StatusOK, w.Code)
 	})
 
-	// 3. Test Update User (PATCH /users/:id)
-	t.Run("Admin can update user status", func(t *testing.T) {
+	t.Run("Admin Update User Status", func(t *testing.T) {
 		path := "/v1/users/" + normalUser.ID
 		isActive := false
 		updatePayload := userHttp.UpdateUserBody{
@@ -99,22 +133,34 @@ func TestUserManagement_Permissions(t *testing.T) {
 		// Verify the logic
 		assert.False(t, resp.User.IsActive, "User should be inactive after update")
 	})
+
+	t.Run("Admin List Users Filtered", func(t *testing.T) {
+		url := "/v1/users?email=admin@example.com"
+		w := executeRequest("GET", url, nil, adminToken)
+		assert.Equal(t, http.StatusOK, w.Code)
+
+		var resp response.PageResponse[userHttp.UserResponse]
+		json.Unmarshal(w.Body.Bytes(), &resp)
+
+		// Should only return 1 admin user
+		assert.Equal(t, 1, resp.Total)
+		assert.Equal(t, "admin@example.com", resp.Items[0].Email)
+	})
 }
 
-func TestUser_NotFound_And_Invalid(t *testing.T) {
+func TestUserNotFoundAndInvalidInput(t *testing.T) {
 	clearTables()
 	adminUser := createTestUser(t, "admin@sys.com", "pass", true)
 	token := generateTokenHelper(adminUser.ID, adminUser.Email)
 
-	// Test Get Non-existent User
-	fakeUUID := "00000000-0000-0000-0000-000000000000"
-	w := executeRequest("GET", "/v1/users/"+fakeUUID, nil, token)
+	t.Run("Get Non-existent User", func(t *testing.T) {
+		fakeUUID := "00000000-0000-0000-0000-000000000000"
+		w := executeRequest("GET", "/v1/users/"+fakeUUID, nil, token)
+		assert.Equal(t, http.StatusNotFound, w.Code, "Should return 404 for non-existent user")
+	})
 
-	assert.Equal(t, http.StatusNotFound, w.Code, "Should return 404 for non-existent user")
-
-	// Test Invalid UUID format (Assuming API returns 400 or 500 based on parsing logic)
-	// Since gin param binding might not catch uuid strict format unless validation is set,
-	// we just ensure it doesn't crash (200).
-	wInvalid := executeRequest("GET", "/v1/users/not-a-uuid", nil, token)
-	assert.NotEqual(t, http.StatusOK, wInvalid.Code, "Should not return 200 for invalid ID")
+	t.Run("Get Invalid UUID", func(t *testing.T) {
+		wInvalid := executeRequest("GET", "/v1/users/not-a-uuid", nil, token)
+		assert.Equal(t, http.StatusBadRequest, wInvalid.Code, "Should return 400 for invalid UUID")
+	})
 }

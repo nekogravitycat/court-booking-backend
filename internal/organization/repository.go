@@ -17,15 +17,15 @@ var ErrNotFound = errors.New("organization not found")
 type Repository interface {
 	// Organization methods
 	Create(ctx context.Context, org *Organization) error
-	GetByID(ctx context.Context, id int64) (*Organization, error)
+	GetByID(ctx context.Context, id string) (*Organization, error)
 	List(ctx context.Context, filter OrganizationFilter) ([]*Organization, int, error)
 	Update(ctx context.Context, org *Organization) error
-	Delete(ctx context.Context, id int64) error
+	Delete(ctx context.Context, id string) error
 	// Member methods
-	AddMember(ctx context.Context, orgID int64, userID string, role string) error
-	RemoveMember(ctx context.Context, orgID int64, userID string) error
-	UpdateMemberRole(ctx context.Context, orgID int64, userID string, role string) error
-	ListMembers(ctx context.Context, orgID int64, filter MemberFilter) ([]*Member, int, error)
+	AddMember(ctx context.Context, orgID string, userID string, role string) error
+	RemoveMember(ctx context.Context, orgID string, userID string) error
+	UpdateMemberRole(ctx context.Context, orgID string, userID string, role string) error
+	ListMembers(ctx context.Context, orgID string, filter MemberFilter) ([]*Member, int, error)
 }
 
 type pgxRepository struct {
@@ -53,7 +53,7 @@ func (r *pgxRepository) Create(ctx context.Context, org *Organization) error {
 		Scan(&org.ID, &org.CreatedAt)
 }
 
-func (r *pgxRepository) GetByID(ctx context.Context, id int64) (*Organization, error) {
+func (r *pgxRepository) GetByID(ctx context.Context, id string) (*Organization, error) {
 	const query = `
 		SELECT id, name, created_at, is_active
 		FROM public.organizations
@@ -129,7 +129,7 @@ func (r *pgxRepository) Update(ctx context.Context, org *Organization) error {
 	return nil
 }
 
-func (r *pgxRepository) Delete(ctx context.Context, id int64) error {
+func (r *pgxRepository) Delete(ctx context.Context, id string) error {
 	// Soft delete implementation
 	const query = `
 		UPDATE public.organizations
@@ -151,7 +151,7 @@ func (r *pgxRepository) Delete(ctx context.Context, id int64) error {
 // ------------------------
 
 // AddMember inserts a new record into organization_permissions.
-func (r *pgxRepository) AddMember(ctx context.Context, orgID int64, userID string, role string) error {
+func (r *pgxRepository) AddMember(ctx context.Context, orgID string, userID string, role string) error {
 	const query = `
 		INSERT INTO public.organization_permissions (organization_id, user_id, role)
 		VALUES ($1, $2, $3)
@@ -175,7 +175,7 @@ func (r *pgxRepository) AddMember(ctx context.Context, orgID int64, userID strin
 }
 
 // RemoveMember deletes a record from organization_permissions.
-func (r *pgxRepository) RemoveMember(ctx context.Context, orgID int64, userID string) error {
+func (r *pgxRepository) RemoveMember(ctx context.Context, orgID string, userID string) error {
 	const query = `
 		DELETE FROM public.organization_permissions
 		WHERE organization_id = $1 AND user_id = $2
@@ -191,7 +191,7 @@ func (r *pgxRepository) RemoveMember(ctx context.Context, orgID int64, userID st
 }
 
 // UpdateMemberRole updates the role in organization_permissions.
-func (r *pgxRepository) UpdateMemberRole(ctx context.Context, orgID int64, userID string, role string) error {
+func (r *pgxRepository) UpdateMemberRole(ctx context.Context, orgID string, userID string, role string) error {
 	const query = `
 		UPDATE public.organization_permissions
 		SET role = $3
@@ -208,7 +208,7 @@ func (r *pgxRepository) UpdateMemberRole(ctx context.Context, orgID int64, userI
 }
 
 // ListMembers retrieves members with their user details.
-func (r *pgxRepository) ListMembers(ctx context.Context, orgID int64, filter MemberFilter) ([]*Member, int, error) {
+func (r *pgxRepository) ListMembers(ctx context.Context, orgID string, filter MemberFilter) ([]*Member, int, error) {
 	// We count based on the organization_permissions table
 	const queryBase = `
 		SELECT

@@ -13,6 +13,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/joho/godotenv"
 	"github.com/stretchr/testify/require" // Use require for setup failures
 
 	"github.com/nekogravitycat/court-booking-backend/internal/api"
@@ -28,22 +29,31 @@ var (
 )
 
 func TestMain(m *testing.M) {
+	// 0. Load .env file if it exists; ignore error if file is missing.
+	err := godotenv.Load("../.env") // Adjust path as necessary
+	if err != nil {
+		log.Printf("No .env file found or failed to load: %v", err)
+	}
+
 	// 1. Setup Database Connection
-	dsn := os.Getenv("DB_DSN")
+	dsn := os.Getenv("TEST_DB_DSN")
 	if dsn == "" {
-		dsn = "postgres://gravity:yLJuh3kGh9j5@localhost:5432/mydb?sslmode=disable"
+		log.Fatalf("TEST_DB_DSN environment variable is not set")
 	}
 
 	ctx := context.Background()
-	var err error
 	testPool, err = pgxpool.New(ctx, dsn)
 	if err != nil {
 		log.Fatalf("Unable to connect to database: %v\n", err)
 	}
 
 	// 2. Init Components
+	testSecret := os.Getenv("TEST_JWT_SECRET")
+	if testSecret == "" {
+		log.Fatalf("TEST_JWT_SECRET environment variable is not set")
+	}
 	passwordHasher := auth.NewBcryptPasswordHasherWithCost(4)
-	jwtManager = auth.NewJWTManager("test-secret", 15*time.Minute)
+	jwtManager = auth.NewJWTManager(testSecret, 15*time.Minute)
 
 	userRepo := user.NewPgxRepository(testPool)
 	userService := user.NewService(userRepo, passwordHasher)

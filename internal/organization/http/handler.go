@@ -64,12 +64,7 @@ func (h *OrganizationHandler) Create(c *gin.Context) {
 
 // Get retrieves detailed information about a specific organization by its ID.
 func (h *OrganizationHandler) Get(c *gin.Context) {
-	idStr := c.Param("id")
-	id, err := strconv.ParseInt(idStr, 10, 64)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid organization id"})
-		return
-	}
+	id := c.Param("id")
 
 	org, err := h.service.GetByID(c.Request.Context(), id)
 	if err != nil {
@@ -88,12 +83,7 @@ func (h *OrganizationHandler) Get(c *gin.Context) {
 // It supports partial updates via a JSON body.
 // Access Control: System Admin only.
 func (h *OrganizationHandler) Update(c *gin.Context) {
-	idStr := c.Param("id")
-	id, err := strconv.ParseInt(idStr, 10, 64)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid organization id"})
-		return
-	}
+	id := c.Param("id")
 
 	// Bind to HTTP DTO
 	var body UpdateOrganizationRequest
@@ -125,12 +115,7 @@ func (h *OrganizationHandler) Update(c *gin.Context) {
 // Delete performs a soft delete on an organization, marking it as inactive.
 // Access Control: System Admin only.
 func (h *OrganizationHandler) Delete(c *gin.Context) {
-	idStr := c.Param("id")
-	id, err := strconv.ParseInt(idStr, 10, 64)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid organization id"})
-		return
-	}
+	id := c.Param("id")
 
 	if err := h.service.Delete(c.Request.Context(), id); err != nil {
 		if err == organization.ErrNotFound {
@@ -146,11 +131,7 @@ func (h *OrganizationHandler) Delete(c *gin.Context) {
 
 // ListMembers retrieves members of an organization.
 func (h *OrganizationHandler) ListMembers(c *gin.Context) {
-	orgID, err := strconv.ParseInt(c.Param("id"), 10, 64)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid organization id"})
-		return
-	}
+	orgID := c.Param("id")
 
 	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
 	pageSize, _ := strconv.Atoi(c.DefaultQuery("page_size", "20"))
@@ -182,11 +163,7 @@ func (h *OrganizationHandler) ListMembers(c *gin.Context) {
 // AddMember adds a user to an organization.
 // Access Control: System Admin (for now).
 func (h *OrganizationHandler) AddMember(c *gin.Context) {
-	orgID, err := strconv.ParseInt(c.Param("id"), 10, 64)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid organization id"})
-		return
-	}
+	orgID := c.Param("id")
 
 	var body AddMemberRequest
 	if err := c.ShouldBindJSON(&body); err != nil {
@@ -219,11 +196,7 @@ func (h *OrganizationHandler) AddMember(c *gin.Context) {
 // UpdateMemberRole modifies a member's role.
 // Access Control: System Admin (for now).
 func (h *OrganizationHandler) UpdateMemberRole(c *gin.Context) {
-	orgID, err := strconv.ParseInt(c.Param("id"), 10, 64)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid organization id"})
-		return
-	}
+	orgID := c.Param("id")
 
 	userID := c.Param("user_id")
 	if userID == "" {
@@ -257,11 +230,7 @@ func (h *OrganizationHandler) UpdateMemberRole(c *gin.Context) {
 // RemoveMember removes a user from an organization.
 // Access Control: System Admin (for now).
 func (h *OrganizationHandler) RemoveMember(c *gin.Context) {
-	orgID, err := strconv.ParseInt(c.Param("id"), 10, 64)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid organization id"})
-		return
-	}
+	orgID := c.Param("id")
 
 	userID := c.Param("user_id")
 	if userID == "" {

@@ -9,8 +9,8 @@ info:
     - Implemented: Auth, Me, Users, Organizations
     - Planned: Members, Locations, Resources, Bookings, Announcements
 servers:
-  - url: http://localhost:8080/v1
-    description: Local Server (Updated port to 8080 based on config)
+  - url: http://localhost:8082/v1
+    description: Local Server
 security:
   - bearerAuth: []
 

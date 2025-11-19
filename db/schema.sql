@@ -33,7 +33,7 @@ $$;
 --          Other entities (locations, resource_types, etc.) belong to an organization.
 -- =========================================================
 CREATE TABLE IF NOT EXISTS public.organizations (
-  id         BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY, -- Surrogate key
+  id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),      -- Organization ID (UUID)
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),              -- Creation timestamp
   name       TEXT NOT NULL,                                   -- Organization name
   is_active  BOOLEAN NOT NULL DEFAULT true                    -- Soft delete / Suspension status
@@ -44,7 +44,7 @@ CREATE TABLE IF NOT EXISTS public.organizations (
 -- Purpose: System or organization-related announcements / news.
 -- =========================================================
 CREATE TABLE IF NOT EXISTS public.announcements (
-  id         BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY, -- Announcement ID
+  id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),      -- Announcement ID (UUID)
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),              -- Creation timestamp
   title      TEXT NOT NULL,                                   -- Announcement title
   content    TEXT NOT NULL                                    -- Announcement body/content
@@ -72,9 +72,9 @@ CREATE TABLE IF NOT EXISTS public.users (
 --          Resources (courts/rooms) are conceptually inside locations.
 -- =========================================================
 CREATE TABLE IF NOT EXISTS public.locations (
-  id                   BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY, -- Location ID
+  id                   UUID PRIMARY KEY DEFAULT gen_random_uuid(),      -- Location ID (UUID)
   created_at           TIMESTAMPTZ NOT NULL DEFAULT now(),              -- Creation timestamp
-  organization_id      BIGINT NOT NULL,                                 -- Owning organization
+  organization_id      UUID NOT NULL,                                   -- Owning organization
   capacity             BIGINT NOT NULL,                                 -- Max capacity (e.g. people)
   opening_hours_start  TIME WITHOUT TIME ZONE NOT NULL,                 -- Daily opening time
   opening_hours_end    TIME WITHOUT TIME ZONE NOT NULL,                 -- Daily closing time
@@ -101,9 +101,9 @@ CREATE TABLE IF NOT EXISTS public.locations (
 --          (e.g. badminton court, tennis court, meeting room).
 -- =========================================================
 CREATE TABLE IF NOT EXISTS public.resource_types (
-  id              BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY, -- Resource type ID
+  id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),      -- Resource type ID (UUID)
   created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),              -- Creation timestamp
-  organization_id BIGINT NOT NULL,                                 -- Owning organization
+  organization_id UUID NOT NULL,                                   -- Owning organization
   CONSTRAINT resource_types_organization_id_fkey
     FOREIGN KEY (organization_id) REFERENCES public.organizations(id)
 );
@@ -115,10 +115,10 @@ CREATE TABLE IF NOT EXISTS public.resource_types (
 --          For example: Court A, Court B under "badminton_court" at Location X.
 -- =========================================================
 CREATE TABLE IF NOT EXISTS public.resources (
-  id               BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY, -- Resource ID
+  id               UUID PRIMARY KEY DEFAULT gen_random_uuid(),      -- Resource ID (UUID)
   created_at       TIMESTAMPTZ NOT NULL DEFAULT now(),              -- Creation timestamp
-  resource_type_id BIGINT NOT NULL,                                 -- Type of this resource
-  location_id      BIGINT NOT NULL,                                 -- Physical location
+  resource_type_id UUID NOT NULL,                                   -- Type of this resource
+  location_id      UUID NOT NULL,                                   -- Physical location
   CONSTRAINT resources_resource_type_id_fkey
     FOREIGN KEY (resource_type_id) REFERENCES public.resource_types(id),
   CONSTRAINT resources_location_id_fkey
@@ -131,11 +131,11 @@ CREATE TABLE IF NOT EXISTS public.resources (
 --          a continuous time range, made by a user.
 -- =========================================================
 CREATE TABLE IF NOT EXISTS public.bookings (
-  id          BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY, -- Booking ID
+  id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),      -- Booking ID (UUID)
   created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),              -- Creation timestamp
   updated_at  TIMESTAMPTZ NOT NULL DEFAULT now(),              -- Last update timestamp
 
-  resource_id BIGINT NOT NULL,                                 -- Booked resource (court/room)
+  resource_id UUID NOT NULL,                                   -- Booked resource (court/room)
   user_id     UUID NOT NULL,                                   -- User who made the booking
 
   start_time  TIMESTAMPTZ NOT NULL,                            -- Booking start time (UTC)
@@ -157,8 +157,8 @@ CREATE TABLE IF NOT EXISTS public.bookings (
 --          Venue managers = users with role 'owner' or 'admin' for some organization.
 -- =========================================================
 CREATE TABLE IF NOT EXISTS public.organization_permissions (
-  id              BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY, -- Permission row ID
-  organization_id BIGINT NOT NULL,                                 -- Target organization
+  id              BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY, -- Permission row ID (Internal)
+  organization_id UUID NOT NULL,                                   -- Target organization
   user_id         UUID NOT NULL,                                   -- Target user
   role            organization_role NOT NULL,                      -- Role within organization
   CONSTRAINT organization_permissions_organization_id_fkey
