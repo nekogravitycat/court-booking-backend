@@ -9,12 +9,11 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/nekogravitycat/court-booking-backend/internal/api"
-	"github.com/nekogravitycat/court-booking-backend/internal/auth"
+	"golang.org/x/crypto/bcrypt"
+
+	"github.com/nekogravitycat/court-booking-backend/internal/app"
 	"github.com/nekogravitycat/court-booking-backend/internal/config"
 	"github.com/nekogravitycat/court-booking-backend/internal/db"
-	"github.com/nekogravitycat/court-booking-backend/internal/organization"
-	"github.com/nekogravitycat/court-booking-backend/internal/user"
 )
 
 func main() {
@@ -35,25 +34,18 @@ func main() {
 	}
 	defer pool.Close()
 
-	// Init components
-	passwordHasher := auth.NewBcryptPasswordHasher()
-	jwtManager := auth.NewJWTManager(cfg.JWTSecret, cfg.JWTAccessTokenTTL)
-
-	// User module
-	userRepo := user.NewPgxRepository(pool)
-	userService := user.NewService(userRepo, passwordHasher)
-
-	// Organization module
-	orgRepo := organization.NewPgxRepository(pool)
-	orgService := organization.NewService(orgRepo)
-
-	// Gin router
-	router := api.NewRouter(userService, orgService, jwtManager)
+	// Initialize App Container
+	appContainer := app.NewContainer(app.Config{
+		DBPool:       pool,
+		JWTSecret:    cfg.JWTSecret,
+		JWTTTL:       cfg.JWTAccessTokenTTL,
+		PasswordCost: bcrypt.DefaultCost,
+	})
 
 	// Use http.Server for graceful shutdown
 	server := &http.Server{
 		Addr:    cfg.HTTPAddr,
-		Handler: router,
+		Handler: appContainer.Router,
 	}
 
 	// Run server in separate goroutine

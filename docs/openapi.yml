@@ -2,8 +2,7 @@ openapi: 3.0.3
 info:
   title: Court Booking Backend API
   version: "v1"
-  description: |
-    Court Booking Backend — API v1
+  description: Court Booking Backend — API v1
 servers:
   - url: http://localhost:8082/v1
     description: Local Server

@@ -19,8 +19,8 @@ func TestOrganizationCRUD(t *testing.T) {
 	admin := createTestUser(t, "admin@org.com", "pass", true)
 	user := createTestUser(t, "user@org.com", "pass", false)
 
-	adminToken := generateTokenHelper(admin.ID, admin.Email)
-	userToken := generateTokenHelper(user.ID, user.Email)
+	adminToken := generateToken(admin.ID, admin.Email)
+	userToken := generateToken(user.ID, user.Email)
 
 	// Define orgID in the outer scope to share it between sub-tests
 	var orgID string
@@ -127,7 +127,7 @@ func TestOrganizationMembers(t *testing.T) {
 	// Setup Users
 	admin := createTestUser(t, "admin@test.com", "pass", true)
 	memberUser := createTestUser(t, "member@test.com", "pass", false)
-	adminToken := generateTokenHelper(admin.ID, admin.Email)
+	adminToken := generateToken(admin.ID, admin.Email)
 
 	// Shared variables for sub-tests
 	var orgID string

@@ -93,8 +93,8 @@ func TestUserManagementPermissions(t *testing.T) {
 	adminUser := createTestUser(t, "admin@example.com", "adminpass", true)
 	normalUser := createTestUser(t, "normal@example.com", "userpass", false)
 
-	adminToken := generateTokenHelper(adminUser.ID, adminUser.Email)
-	normalToken := generateTokenHelper(normalUser.ID, normalUser.Email)
+	adminToken := generateToken(adminUser.ID, adminUser.Email)
+	normalToken := generateToken(normalUser.ID, normalUser.Email)
 
 	t.Run("Admin List Users", func(t *testing.T) {
 		w := executeRequest("GET", "/v1/users", nil, adminToken)
@@ -151,7 +151,7 @@ func TestUserManagementPermissions(t *testing.T) {
 func TestUserNotFoundAndInvalidInput(t *testing.T) {
 	clearTables()
 	adminUser := createTestUser(t, "admin@sys.com", "pass", true)
-	token := generateTokenHelper(adminUser.ID, adminUser.Email)
+	token := generateToken(adminUser.ID, adminUser.Email)
 
 	t.Run("Get Non-existent User", func(t *testing.T) {
 		fakeUUID := "00000000-0000-0000-0000-000000000000"

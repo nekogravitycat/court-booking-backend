@@ -14,11 +14,10 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/joho/godotenv"
-	"github.com/stretchr/testify/require" // Use require for setup failures
+	"github.com/stretchr/testify/require"
 
-	"github.com/nekogravitycat/court-booking-backend/internal/api"
+	"github.com/nekogravitycat/court-booking-backend/internal/app"
 	"github.com/nekogravitycat/court-booking-backend/internal/auth"
-	"github.com/nekogravitycat/court-booking-backend/internal/organization"
 	"github.com/nekogravitycat/court-booking-backend/internal/user"
 )
 
@@ -29,51 +28,53 @@ var (
 )
 
 func TestMain(m *testing.M) {
-	// 0. Load .env file if it exists; ignore error if file is missing.
-	err := godotenv.Load("../.env") // Adjust path as necessary
-	if err != nil {
+	// Attempt to load .env from parent directory
+	if err := godotenv.Load("../.env"); err != nil {
 		log.Printf("No .env file found or failed to load: %v", err)
 	}
 
-	// 1. Setup Database Connection
+	// Setup Database Connection
 	dsn := os.Getenv("TEST_DB_DSN")
 	if dsn == "" {
 		log.Fatalf("TEST_DB_DSN environment variable is not set")
 	}
 
 	ctx := context.Background()
+	var err error
 	testPool, err = pgxpool.New(ctx, dsn)
 	if err != nil {
 		log.Fatalf("Unable to connect to database: %v\n", err)
 	}
 
-	// 2. Init Components
+	// Get JWT Secret
 	testSecret := os.Getenv("TEST_JWT_SECRET")
 	if testSecret == "" {
 		log.Fatalf("TEST_JWT_SECRET environment variable is not set")
 	}
-	passwordHasher := auth.NewBcryptPasswordHasherWithCost(4)
-	jwtManager = auth.NewJWTManager(testSecret, 15*time.Minute)
 
-	userRepo := user.NewPgxRepository(testPool)
-	userService := user.NewService(userRepo, passwordHasher)
+	// Initialize App Container using shared logic
+	appContainer := app.NewContainer(app.Config{
+		DBPool:       testPool,
+		JWTSecret:    testSecret,
+		JWTTTL:       30 * time.Minute,
+		PasswordCost: 4, // Lower cost for testing purposes
+	})
 
-	orgRepo := organization.NewPgxRepository(testPool)
-	orgService := organization.NewService(orgRepo)
+	// Assign global variables for tests to use
+	testRouter = appContainer.Router
+	jwtManager = appContainer.JWTManager
 
-	// 3. Setup Router
+	// Setup Gin mode
 	gin.SetMode(gin.TestMode)
-	testRouter = api.NewRouter(userService, orgService, jwtManager)
 
-	// 4. Run Tests
+	// Run Tests
 	exitCode := m.Run()
 
-	// 5. Teardown
+	// Teardown
 	testPool.Close()
 	os.Exit(exitCode)
 }
 
-// clearTables helper
 func clearTables() {
 	ctx := context.Background()
 	queries := []string{
@@ -89,7 +90,6 @@ func clearTables() {
 	}
 }
 
-// executeRequest helper
 func executeRequest(method, path string, body interface{}, token string) *httptest.ResponseRecorder {
 	var reqBody []byte
 	if body != nil {
@@ -107,7 +107,6 @@ func executeRequest(method, path string, body interface{}, token string) *httpte
 	return w
 }
 
-// createTestUser creates a user and asserts success using require
 func createTestUser(t *testing.T, email, password string, isAdmin bool) *user.User {
 	hasher := auth.NewBcryptPasswordHasherWithCost(4)
 	hash, err := hasher.Hash(password)
@@ -131,8 +130,7 @@ func createTestUser(t *testing.T, email, password string, isAdmin bool) *user.Us
 	return savedUser
 }
 
-// generateTokenHelper
-func generateTokenHelper(userID, email string) string {
+func generateToken(userID, email string) string {
 	token, _ := jwtManager.GenerateAccessToken(userID, email)
 	return token
 }
