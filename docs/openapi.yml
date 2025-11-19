@@ -4,10 +4,6 @@ info:
   version: "v1"
   description: |
     Court Booking Backend — API v1
-
-    **Status Update:**
-    - Implemented: Auth, Me, Users, Organizations
-    - Planned: Members, Locations, Resources, Bookings, Announcements
 servers:
   - url: http://localhost:8082/v1
     description: Local Server
@@ -24,17 +20,17 @@ tags:
   - name: Organizations
     description: 組織管理
   - name: Members
-    description: 組織成員與權限 (Planned)
+    description: 組織成員與權限
   - name: Locations
-    description: 實體場館 (Planned)
+    description: 實體場館
   - name: ResourceTypes
-    description: 場地類型 (Planned)
+    description: 場地類型
   - name: Resources
-    description: 實際場地 (Planned)
+    description: 實際場地
   - name: Bookings
-    description: 預約相關 (Planned)
+    description: 預約相關
   - name: Announcements
-    description: 公告 (Planned)
+    description: 公告
 
 components:
   securitySchemes:
@@ -78,7 +74,6 @@ components:
       example:
         error: "invalid request"
 
-    # Generic Page Response matches internal/api/common_dto.go
     PageResponse:
       type: object
       properties:
@@ -93,7 +88,6 @@ components:
         total:
           type: integer
 
-    # User Matches internal/api/auth_dto.go -> UserResponse
     User:
       type: object
       properties:
@@ -123,7 +117,6 @@ components:
         - is_active
         - is_system_admin
 
-    # Wrapper for responses that return a single user (Auth/Me)
     UserWrapperResponse:
       type: object
       properties:
@@ -155,7 +148,6 @@ components:
         - email
         - password
 
-    # Matches internal/api/auth_dto.go -> LoginResponse
     LoginResponse:
       type: object
       properties:
@@ -167,13 +159,12 @@ components:
         - access_token
         - user
 
-    # Matches internal/api/organization_dto.go -> OrganizationResponse
     Organization:
       type: object
       properties:
         id:
-          type: integer
-          format: int64
+          type: string
+          format: uuid
         name:
           type: string
         created_at:
@@ -184,7 +175,6 @@ components:
         - name
         - created_at
 
-    # Matches internal/api/organization_dto.go -> CreateOrganizationRequest
     OrganizationCreate:
       type: object
       properties:
@@ -193,7 +183,6 @@ components:
       required:
         - name
 
-    # Matches internal/api/organization_dto.go -> UpdateOrganizationRequest
     OrganizationUpdate:
       type: object
       properties:
@@ -201,8 +190,6 @@ components:
           type: string
       required:
         - name
-
-    # --- Below are Schemas for Future Implementation ---
 
     OrganizationMember:
       type: object
@@ -213,26 +200,57 @@ components:
         role:
           type: string
           enum: [owner, admin, member]
+        email:
+          type: string
+        display_name:
+          type: string
+          nullable: true
+
+    OrganizationMemberAdd:
+      type: object
+      properties:
+        user_id:
+          type: string
+          format: uuid
+        role:
+          type: string
+          enum: [owner, admin, member]
+      required:
+        - user_id
+        - role
+
+    OrganizationMemberUpdate:
+      type: object
+      properties:
+        role:
+          type: string
+          enum: [owner, admin, member]
+      required:
+        - role
 
     Location:
       type: object
       properties:
         id:
-          type: integer
-          format: int64
+          type: string
+          format: uuid
         created_at:
           type: string
           format: date-time
         organization_id:
-          type: integer
+          type: string
+          format: uuid
         capacity:
           type: integer
+          format: int64
         opening_hours_start:
           type: string
           description: "time (HH:MM:SS)"
+          example: "09:00:00"
         opening_hours_end:
           type: string
           description: "time (HH:MM:SS)"
+          example: "22:00:00"
         location_info:
           type: string
         opening:
@@ -247,39 +265,51 @@ components:
           type: number
         latitude:
           type: number
+      required:
+        - organization_id
+        - location_info
+        - opening
 
     ResourceType:
       type: object
       properties:
         id:
-          type: integer
-          format: int64
+          type: string
+          format: uuid
         created_at:
           type: string
           format: date-time
         organization_id:
-          type: integer
+          type: string
+          format: uuid
+      required:
+        - organization_id
 
     Resource:
       type: object
       properties:
         id:
-          type: integer
-          format: int64
+          type: string
+          format: uuid
         created_at:
           type: string
           format: date-time
         resource_type_id:
-          type: integer
+          type: string
+          format: uuid
         location_id:
-          type: integer
+          type: string
+          format: uuid
+      required:
+        - resource_type_id
+        - location_id
 
     Booking:
       type: object
       properties:
         id:
-          type: integer
-          format: int64
+          type: string
+          format: uuid
         created_at:
           type: string
           format: date-time
@@ -287,7 +317,8 @@ components:
           type: string
           format: date-time
         resource_id:
-          type: integer
+          type: string
+          format: uuid
         user_id:
           type: string
           format: uuid
@@ -305,7 +336,8 @@ components:
       type: object
       properties:
         resource_id:
-          type: integer
+          type: string
+          format: uuid
         start_time:
           type: string
           format: date-time
@@ -321,7 +353,8 @@ components:
       type: object
       properties:
         id:
-          type: integer
+          type: string
+          format: uuid
         created_at:
           type: string
           format: date-time
@@ -564,8 +597,8 @@ paths:
         in: path
         required: true
         schema:
-          type: integer
-          format: int64
+          type: string
+          format: uuid
     get:
       tags:
         - Organizations
@@ -613,35 +646,57 @@ paths:
           description: deleted
 
   # ============================
-  # Future Implementation
-  # (Members, Locations, Resources, Bookings, Announcements)
+  # Members
   # ============================
-
   /organizations/{org_id}/members:
     parameters:
       - name: org_id
         in: path
         required: true
         schema:
-          type: integer
+          type: string
+          format: uuid
     get:
       tags:
         - Members
-      summary: "列出 organization 成員 (Planned)"
+      summary: "列出 organization 成員"
       security:
         - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/page"
+        - $ref: "#/components/parameters/page_size"
       responses:
-        "501":
-          description: Not Implemented
+        "200":
+          description: paged members
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/PageResponse"
+                  - properties:
+                      items:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/OrganizationMember"
     post:
       tags:
         - Members
-      summary: "加入成員 (Planned)"
+      summary: "加入成員"
       security:
         - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/OrganizationMemberAdd"
       responses:
-        "501":
-          description: Not Implemented
+        "201":
+          description: Member added
+        "404":
+          description: Organization or User not found
+        "409":
+          description: User already member
 
   /organizations/{org_id}/members/{user_id}:
     parameters:
@@ -649,7 +704,8 @@ paths:
         in: path
         required: true
         schema:
-          type: integer
+          type: string
+          format: uuid
       - name: user_id
         in: path
         required: true
@@ -659,22 +715,35 @@ paths:
     patch:
       tags:
         - Members
-      summary: "調整成員角色 (Planned)"
+      summary: "調整成員角色"
       security:
         - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/OrganizationMemberUpdate"
       responses:
-        "501":
-          description: Not Implemented
+        "200":
+          description: Role updated
+        "404":
+          description: Member not found
     delete:
       tags:
         - Members
-      summary: "移除成員 (Planned)"
+      summary: "移除成員"
       security:
         - bearerAuth: []
       responses:
-        "501":
-          description: Not Implemented
+        "204":
+          description: Member removed
+        "404":
+          description: Member not found
 
+  # ============================
+  # Locations
+  # ============================
   /locations:
     get:
       tags:
@@ -686,7 +755,8 @@ paths:
         - name: organization_id
           in: query
           schema:
-            type: integer
+            type: string
+            format: uuid
         - name: q
           in: query
           schema:
@@ -698,7 +768,13 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/PageResponse"
+                allOf:
+                  - $ref: "#/components/schemas/PageResponse"
+                  - properties:
+                      items:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/Location"
     post:
       tags:
         - Locations
@@ -725,7 +801,8 @@ paths:
         in: path
         required: true
         schema:
-          type: integer
+          type: string
+          format: uuid
     get:
       tags:
         - Locations
@@ -753,6 +830,10 @@ paths:
       responses:
         "200":
           description: updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Location"
     delete:
       tags:
         - Locations
@@ -763,6 +844,9 @@ paths:
         "204":
           description: deleted
 
+  # ============================
+  # Resource Types
+  # ============================
   /resource-types:
     get:
       tags:
@@ -774,14 +858,21 @@ paths:
         - name: organization_id
           in: query
           schema:
-            type: integer
+            type: string
+            format: uuid
       responses:
         "200":
           description: paged resource types
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/PageResponse"
+                allOf:
+                  - $ref: "#/components/schemas/PageResponse"
+                  - properties:
+                      items:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/ResourceType"
     post:
       tags:
         - ResourceTypes
@@ -797,6 +888,10 @@ paths:
       responses:
         "201":
           description: created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ResourceType"
 
   /resource-types/{type_id}:
     parameters:
@@ -804,7 +899,8 @@ paths:
         in: path
         required: true
         schema:
-          type: integer
+          type: string
+          format: uuid
     get:
       tags:
         - ResourceTypes
@@ -812,6 +908,10 @@ paths:
       responses:
         "200":
           description: resource type
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ResourceType"
     patch:
       tags:
         - ResourceTypes
@@ -826,6 +926,10 @@ paths:
       responses:
         "200":
           description: updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ResourceType"
     delete:
       tags:
         - ResourceTypes
@@ -836,6 +940,9 @@ paths:
         "204":
           description: deleted
 
+  # ============================
+  # Resources
+  # ============================
   /resources:
     get:
       tags:
@@ -847,18 +954,26 @@ paths:
         - name: resource_type_id
           in: query
           schema:
-            type: integer
+            type: string
+            format: uuid
         - name: location_id
           in: query
           schema:
-            type: integer
+            type: string
+            format: uuid
       responses:
         "200":
           description: paged resources
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/PageResponse"
+                allOf:
+                  - $ref: "#/components/schemas/PageResponse"
+                  - properties:
+                      items:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/Resource"
     post:
       tags:
         - Resources
@@ -874,6 +989,10 @@ paths:
       responses:
         "201":
           description: created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Resource"
 
   /resources/{resource_id}:
     parameters:
@@ -881,7 +1000,8 @@ paths:
         in: path
         required: true
         schema:
-          type: integer
+          type: string
+          format: uuid
     get:
       tags:
         - Resources
@@ -889,6 +1009,10 @@ paths:
       responses:
         "200":
           description: resource
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Resource"
     patch:
       tags:
         - Resources
@@ -903,6 +1027,10 @@ paths:
       responses:
         "200":
           description: updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Resource"
     delete:
       tags:
         - Resources
@@ -913,6 +1041,9 @@ paths:
         "204":
           description: deleted
 
+  # ============================
+  # Bookings
+  # ============================
   /bookings:
     get:
       tags:
@@ -931,7 +1062,8 @@ paths:
         - name: resource_id
           in: query
           schema:
-            type: integer
+            type: string
+            format: uuid
         - name: status
           in: query
           schema:
@@ -953,7 +1085,13 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/PageResponse"
+                allOf:
+                  - $ref: "#/components/schemas/PageResponse"
+                  - properties:
+                      items:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/Booking"
     post:
       tags:
         - Bookings
@@ -992,7 +1130,8 @@ paths:
         in: path
         required: true
         schema:
-          type: integer
+          type: string
+          format: uuid
     get:
       tags:
         - Bookings
@@ -1035,6 +1174,10 @@ paths:
       responses:
         "200":
           description: updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Booking"
     delete:
       tags:
         - Bookings
@@ -1045,6 +1188,9 @@ paths:
         "204":
           description: deleted
 
+  # ============================
+  # Announcements
+  # ============================
   /announcements:
     get:
       tags:
@@ -1059,7 +1205,13 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/PageResponse"
+                allOf:
+                  - $ref: "#/components/schemas/PageResponse"
+                  - properties:
+                      items:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/Announcement"
     post:
       tags:
         - Announcements
@@ -1075,6 +1227,10 @@ paths:
       responses:
         "201":
           description: created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Announcement"
 
   /announcements/{id}:
     parameters:
@@ -1082,7 +1238,8 @@ paths:
         in: path
         required: true
         schema:
-          type: integer
+          type: string
+          format: uuid
     get:
       tags:
         - Announcements
@@ -1110,6 +1267,10 @@ paths:
       responses:
         "200":
           description: updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Announcement"
     delete:
       tags:
         - Announcements
