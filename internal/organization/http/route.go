@@ -8,34 +8,29 @@ import (
 func RegisterRoutes(g *gin.RouterGroup, h *OrganizationHandler, authMiddleware, adminMiddleware gin.HandlerFunc) {
 	orgGroup := g.Group("/organizations")
 
-	// Currently, listing and getting organizations are open to authenticated users.
-	// We apply authMiddleware to the entire group or specific routes.
+	// === General Routes (Authenticated Users) ===
 	orgGroup.Use(authMiddleware)
 	{
-		// GET /v1/organizations
 		// List active organizations
 		orgGroup.GET("", h.List)
 
-		// GET /v1/organizations/:id
-		// Get details of a specific organization
+		// Get organization details
 		orgGroup.GET("/:id", h.Get)
 	}
 
-	// Operations that modify organizations require system admin privileges.
-	// Note: Currently restricted to System Admin, might allow Org Owner in the future.
+	// === Administration Routes (System Admin Only) ===
 	adminGroup := orgGroup.Group("")
 	adminGroup.Use(adminMiddleware)
 	{
-		// POST /v1/organizations
-		// Create a new organization
-		adminGroup.POST("", h.Create)
+		// --- Organization Management ---
+		adminGroup.POST("", h.Create)       // Create organization
+		adminGroup.PATCH("/:id", h.Update)  // Update organization info
+		adminGroup.DELETE("/:id", h.Delete) // Soft delete organization
 
-		// PATCH /v1/organizations/:id
-		// Update an organization's name
-		adminGroup.PATCH("/:id", h.Update)
-
-		// DELETE /v1/organizations/:id
-		// Soft delete an organization
-		adminGroup.DELETE("/:id", h.Delete)
+		// --- Member Management ---
+		adminGroup.GET("/:id/members", h.ListMembers)                 // List members
+		adminGroup.POST("/:id/members", h.AddMember)                  // Add new member
+		adminGroup.PATCH("/:id/members/:user_id", h.UpdateMemberRole) // Update member role
+		adminGroup.DELETE("/:id/members/:user_id", h.RemoveMember)    // Remove member
 	}
 }

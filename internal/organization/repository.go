@@ -5,7 +5,9 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/jackc/pgerrcode"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -13,11 +15,17 @@ var ErrNotFound = errors.New("organization not found")
 
 // Repository defines methods for accessing organization data.
 type Repository interface {
+	// Organization methods
 	Create(ctx context.Context, org *Organization) error
 	GetByID(ctx context.Context, id int64) (*Organization, error)
 	List(ctx context.Context, filter OrganizationFilter) ([]*Organization, int, error)
 	Update(ctx context.Context, org *Organization) error
 	Delete(ctx context.Context, id int64) error
+	// Member methods
+	AddMember(ctx context.Context, orgID int64, userID string, role string) error
+	RemoveMember(ctx context.Context, orgID int64, userID string) error
+	UpdateMemberRole(ctx context.Context, orgID int64, userID string, role string) error
+	ListMembers(ctx context.Context, orgID int64, filter MemberFilter) ([]*Member, int, error)
 }
 
 type pgxRepository struct {
@@ -28,6 +36,10 @@ type pgxRepository struct {
 func NewPgxRepository(pool *pgxpool.Pool) Repository {
 	return &pgxRepository{pool: pool}
 }
+
+// ------------------------
+//   Organization methods
+// ------------------------
 
 func (r *pgxRepository) Create(ctx context.Context, org *Organization) error {
 	const query = `
@@ -132,4 +144,112 @@ func (r *pgxRepository) Delete(ctx context.Context, id int64) error {
 		return ErrNotFound
 	}
 	return nil
+}
+
+// ------------------------
+//     Member methods
+// ------------------------
+
+// AddMember inserts a new record into organization_permissions.
+func (r *pgxRepository) AddMember(ctx context.Context, orgID int64, userID string, role string) error {
+	const query = `
+		INSERT INTO public.organization_permissions (organization_id, user_id, role)
+		VALUES ($1, $2, $3)
+	`
+	_, err := r.pool.Exec(ctx, query, orgID, userID, role)
+	if err != nil {
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) {
+			// Check for unique constraint violation (already a member)
+			if pgErr.Code == pgerrcode.UniqueViolation {
+				return ErrUserAlreadyMember
+			}
+			// Check for foreign key violation (user or org does not exist)
+			if pgErr.Code == pgerrcode.ForeignKeyViolation {
+				return ErrUserNotFound // Or generic bad request
+			}
+		}
+		return fmt.Errorf("AddMember failed: %w", err)
+	}
+	return nil
+}
+
+// RemoveMember deletes a record from organization_permissions.
+func (r *pgxRepository) RemoveMember(ctx context.Context, orgID int64, userID string) error {
+	const query = `
+		DELETE FROM public.organization_permissions
+		WHERE organization_id = $1 AND user_id = $2
+	`
+	ct, err := r.pool.Exec(ctx, query, orgID, userID)
+	if err != nil {
+		return fmt.Errorf("RemoveMember failed: %w", err)
+	}
+	if ct.RowsAffected() == 0 {
+		return ErrNotFound // Using the existing ErrNotFound
+	}
+	return nil
+}
+
+// UpdateMemberRole updates the role in organization_permissions.
+func (r *pgxRepository) UpdateMemberRole(ctx context.Context, orgID int64, userID string, role string) error {
+	const query = `
+		UPDATE public.organization_permissions
+		SET role = $3
+		WHERE organization_id = $1 AND user_id = $2
+	`
+	ct, err := r.pool.Exec(ctx, query, orgID, userID, role)
+	if err != nil {
+		return fmt.Errorf("UpdateMemberRole failed: %w", err)
+	}
+	if ct.RowsAffected() == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
+// ListMembers retrieves members with their user details.
+func (r *pgxRepository) ListMembers(ctx context.Context, orgID int64, filter MemberFilter) ([]*Member, int, error) {
+	// We count based on the organization_permissions table
+	const queryBase = `
+		SELECT
+			u.id,
+			u.email,
+			u.display_name,
+			op.role,
+			count(*) OVER() AS total_count
+		FROM public.organization_permissions op
+		JOIN public.users u ON op.user_id = u.id
+		WHERE op.organization_id = $1
+		ORDER BY op.id DESC
+	`
+
+	if filter.Page < 1 {
+		filter.Page = 1
+	}
+	if filter.PageSize < 1 {
+		filter.PageSize = 20
+	}
+	offset := (filter.Page - 1) * filter.PageSize
+
+	query := queryBase + " LIMIT $2 OFFSET $3"
+
+	rows, err := r.pool.Query(ctx, query, orgID, filter.PageSize, offset)
+	if err != nil {
+		return nil, 0, fmt.Errorf("ListMembers failed: %w", err)
+	}
+	defer rows.Close()
+
+	var members []*Member
+	var total int
+
+	for rows.Next() {
+		var m Member
+		// Scan total from the window function
+		if err := rows.Scan(&m.UserID, &m.Email, &m.DisplayName, &m.Role, &total); err != nil {
+			return nil, 0, fmt.Errorf("scan member failed: %w", err)
+		}
+		members = append(members, &m)
+	}
+
+	return members, total, nil
 }

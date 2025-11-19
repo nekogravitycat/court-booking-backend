@@ -143,3 +143,140 @@ func (h *OrganizationHandler) Delete(c *gin.Context) {
 
 	c.Status(http.StatusNoContent)
 }
+
+// ListMembers retrieves members of an organization.
+func (h *OrganizationHandler) ListMembers(c *gin.Context) {
+	orgID, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid organization id"})
+		return
+	}
+
+	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
+	pageSize, _ := strconv.Atoi(c.DefaultQuery("page_size", "20"))
+
+	filter := organization.MemberFilter{
+		Page:     page,
+		PageSize: pageSize,
+	}
+
+	members, total, err := h.service.ListMembers(c.Request.Context(), orgID, filter)
+	if err != nil {
+		if err == organization.ErrNotFound {
+			c.JSON(http.StatusNotFound, gin.H{"error": "organization not found"})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to list members"})
+		return
+	}
+
+	items := make([]MemberResponse, len(members))
+	for i, m := range members {
+		items[i] = NewMemberResponse(m)
+	}
+
+	resp := response.NewPageResponse(items, page, pageSize, total)
+	c.JSON(http.StatusOK, resp)
+}
+
+// AddMember adds a user to an organization.
+// Access Control: System Admin (for now).
+func (h *OrganizationHandler) AddMember(c *gin.Context) {
+	orgID, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid organization id"})
+		return
+	}
+
+	var body AddMemberRequest
+	if err := c.ShouldBindJSON(&body); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request body"})
+		return
+	}
+
+	req := organization.AddMemberRequest{
+		UserID: body.UserID,
+		Role:   body.Role,
+	}
+
+	if err := h.service.AddMember(c.Request.Context(), orgID, req); err != nil {
+		switch err {
+		case organization.ErrNotFound:
+			c.JSON(http.StatusNotFound, gin.H{"error": "organization not found"})
+		case organization.ErrUserAlreadyMember:
+			c.JSON(http.StatusConflict, gin.H{"error": "user is already a member"})
+		case organization.ErrUserNotFound:
+			c.JSON(http.StatusBadRequest, gin.H{"error": "user not found"})
+		default:
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to add member"})
+		}
+		return
+	}
+
+	c.Status(http.StatusCreated)
+}
+
+// UpdateMemberRole modifies a member's role.
+// Access Control: System Admin (for now).
+func (h *OrganizationHandler) UpdateMemberRole(c *gin.Context) {
+	orgID, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid organization id"})
+		return
+	}
+
+	userID := c.Param("user_id")
+	if userID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid user id"})
+		return
+	}
+
+	var body UpdateMemberRequest
+	if err := c.ShouldBindJSON(&body); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request body"})
+		return
+	}
+
+	req := organization.UpdateMemberRequest{
+		Role: body.Role,
+	}
+
+	if err := h.service.UpdateMemberRole(c.Request.Context(), orgID, userID, req); err != nil {
+		if err == organization.ErrNotFound {
+			// Could be org not found or user not member of org
+			c.JSON(http.StatusNotFound, gin.H{"error": "member or organization not found"})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to update member role"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"status": "updated"})
+}
+
+// RemoveMember removes a user from an organization.
+// Access Control: System Admin (for now).
+func (h *OrganizationHandler) RemoveMember(c *gin.Context) {
+	orgID, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid organization id"})
+		return
+	}
+
+	userID := c.Param("user_id")
+	if userID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid user id"})
+		return
+	}
+
+	if err := h.service.RemoveMember(c.Request.Context(), orgID, userID); err != nil {
+		if err == organization.ErrNotFound {
+			c.JSON(http.StatusNotFound, gin.H{"error": "member or organization not found"})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to remove member"})
+		return
+	}
+
+	c.Status(http.StatusNoContent)
+}

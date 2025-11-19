@@ -2,13 +2,13 @@
 
 這份文件旨在協助前端開發者快速理解後端 API 的架構、認證方式以及資料互動格式。
 
-## 1\. 基礎資訊 (General Info)
+## 1. 基礎資訊 (General Info)
 
   * **Base URL (Local):** `http://localhost:8080/v1`
   * **Content-Type:** `application/json`
   * **日期時間格式:** ISO 8601 (e.g., `2023-11-19T10:00:00Z`)
 
-## 2\. 認證機制 (Authentication)
+## 2. 認證機制 (Authentication)
 
 本系統使用 **JWT (JSON Web Token)** 進行身份驗證。
 
@@ -25,7 +25,7 @@ Authorization: Bearer <your_access_token>
 
 > **注意**: 如果 Token 過期或無效，API 將返回 `401 Unauthorized`。
 
-## 3\. 通用回應格式 (Response Format)
+## 3. 通用回應格式 (Response Format)
 
 ### 成功 (Success)
 
@@ -59,7 +59,7 @@ Authorization: Bearer <your_access_token>
   * `page`: 頁碼 (預設 1)
   * `page_size`: 每頁數量 (預設 20)
 
-## 4\. API 資源詳解
+## 4. API 資源詳解
 
 ### A. 認證與個人資訊 (Auth & Me)
 
@@ -135,7 +135,7 @@ Authorization: Bearer <your_access_token>
 
 ### G. 預約管理 (Bookings)
 
-核心功能。使用者預約場地，或管理員查詢預約狀況。
+使用者預約場地，或管理員查詢預約狀況。
 
 | Method | Path | 描述 | 關鍵參數 |
 | :--- | :--- | :--- | :--- |
@@ -151,12 +151,12 @@ Authorization: Bearer <your_access_token>
 
 | Method | Path | 描述 | 權限 |
 | :--- | :--- | :--- | :--- |
-| **GET** | `/announcements` | 公告列表 | 公開/登入 |
+| **GET** | `/announcements` | 公告列表 | 登入使用者 |
 | **POST** | `/announcements` | 發布公告 | System Admin |
 | **PATCH** | `/announcements/{id}` | 更新公告 | System Admin |
 | **DELETE** | `/announcements/{id}` | 刪除公告 | System Admin |
 
-## 5\. 常見 Status Code 對照表
+## 5. 常見 Status Code 對照表
 
   * `200 OK`: 請求成功。
   * `201 Created`: 資源建立成功 (如註冊、新增組織)。
