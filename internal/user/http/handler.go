@@ -22,7 +22,8 @@ func NewUserHandler(userService user.Service, jwtManager *auth.JWTManager) *User
 	}
 }
 
-// Register handles POST /v1/auth/register.
+// Register handles the user registration process.
+// It validates the payload and creates a new user if the email is unique.
 func (h *UserHandler) Register(c *gin.Context) {
 	var req RegisterRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -49,7 +50,8 @@ func (h *UserHandler) Register(c *gin.Context) {
 	c.JSON(http.StatusCreated, resp)
 }
 
-// Login handles POST /v1/auth/login.
+// Login authenticates a user using email and password.
+// On success, it returns a JWT access token and the user profile.
 func (h *UserHandler) Login(c *gin.Context) {
 	var req LoginRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -85,7 +87,8 @@ func (h *UserHandler) Login(c *gin.Context) {
 	c.JSON(http.StatusOK, resp)
 }
 
-// Me handles GET /v1/me.
+// Me retrieves the profile of the currently authenticated user.
+// It relies on the user ID extracted from the JWT context.
 func (h *UserHandler) Me(c *gin.Context) {
 	// Assuming auth.GetUserID extracts the ID from context
 	userID := auth.GetUserID(c)
@@ -109,8 +112,8 @@ func (h *UserHandler) Me(c *gin.Context) {
 	c.JSON(http.StatusOK, resp)
 }
 
-// GET /v1/users
-// Strict Access: Only System Admin can use this.
+// List retrieves a paginated list of users with optional filtering.
+// Access Control: System Admin only.
 func (h *UserHandler) List(c *gin.Context) {
 	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
 	pageSize, _ := strconv.Atoi(c.DefaultQuery("page_size", "20"))
@@ -153,8 +156,8 @@ func (h *UserHandler) List(c *gin.Context) {
 	c.JSON(http.StatusOK, resp)
 }
 
-// GET /v1/users/:id
-// Strict Access: Only System Admin can use this. Normal users should use /me.
+// Get retrieves a specific user by their ID.
+// Access Control: System Admin only.
 func (h *UserHandler) Get(c *gin.Context) {
 	id := c.Param("id")
 
@@ -175,8 +178,8 @@ func (h *UserHandler) Get(c *gin.Context) {
 	c.JSON(http.StatusOK, resp)
 }
 
-// PATCH /v1/users/:id
-// Strict Access: Only System Admin can use this. Normal users should use /me.
+// Update modifies specific attributes of a user.
+// Access Control: System Admin only.
 func (h *UserHandler) Update(c *gin.Context) {
 	id := c.Param("id")
 	var body UpdateUserBody

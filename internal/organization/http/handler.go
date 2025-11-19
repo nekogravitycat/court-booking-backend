@@ -17,7 +17,8 @@ func NewOrganizationHandler(service organization.Service) *OrganizationHandler {
 	return &OrganizationHandler{service: service}
 }
 
-// GET /v1/organizations
+// List retrieves a paginated list of active organizations.
+// It supports standard pagination parameters.
 func (h *OrganizationHandler) List(c *gin.Context) {
 	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
 	pageSize, _ := strconv.Atoi(c.DefaultQuery("page_size", "20"))
@@ -43,8 +44,8 @@ func (h *OrganizationHandler) List(c *gin.Context) {
 	c.JSON(http.StatusOK, resp)
 }
 
-// POST /v1/organizations
-// Auth: System Admin only
+// Create adds a new organization to the system.
+// Access Control: System Admin only.
 func (h *OrganizationHandler) Create(c *gin.Context) {
 	var req CreateOrganizationRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -61,7 +62,7 @@ func (h *OrganizationHandler) Create(c *gin.Context) {
 	c.JSON(http.StatusCreated, NewOrganizationResponse(org))
 }
 
-// GET /v1/organizations/:id
+// Get retrieves detailed information about a specific organization by its ID.
 func (h *OrganizationHandler) Get(c *gin.Context) {
 	idStr := c.Param("id")
 	id, err := strconv.ParseInt(idStr, 10, 64)
@@ -83,8 +84,9 @@ func (h *OrganizationHandler) Get(c *gin.Context) {
 	c.JSON(http.StatusOK, NewOrganizationResponse(org))
 }
 
-// PATCH /v1/organizations/:id
-// Auth: System Admin (initially)
+// Update modifies specific attributes of an organization.
+// It supports partial updates via a JSON body.
+// Access Control: System Admin only.
 func (h *OrganizationHandler) Update(c *gin.Context) {
 	idStr := c.Param("id")
 	id, err := strconv.ParseInt(idStr, 10, 64)
@@ -120,8 +122,8 @@ func (h *OrganizationHandler) Update(c *gin.Context) {
 	c.JSON(http.StatusOK, NewOrganizationResponse(org))
 }
 
-// DELETE /v1/organizations/:id
-// Auth: System Admin
+// Delete performs a soft delete on an organization, marking it as inactive.
+// Access Control: System Admin only.
 func (h *OrganizationHandler) Delete(c *gin.Context) {
 	idStr := c.Param("id")
 	id, err := strconv.ParseInt(idStr, 10, 64)
