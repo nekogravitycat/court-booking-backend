@@ -149,8 +149,7 @@
 本專案使用 OpenAPI (Swagger) 3.0 規範。
 
 1.  **瀏覽器預覽**：
-    啟動 Docker Compose 後，訪問：
-    [http://localhost:8081](https://www.google.com/search?q=http://localhost:8081)
+    啟動 Docker Compose 後，訪問 http://localhost:8081
 
 2.  **原始檔案**：
     位於 `docs/openapi.yml`。
@@ -160,7 +159,7 @@
 
 ## 🧪 測試
 
-專案包含整合測試 (Integration Tests)，位於 `tests/` 目錄下。測試會連接真實的 (Test) 資料庫以確保邏輯正確。
+專案包含整合測試，位於 `tests/` 目錄下。測試會連接測試用資料庫以確保邏輯正確且不影響實際資料庫。
 
 1.  **準備測試資料庫**：
     `compose.yml` 預設配置了 `POSTGRES_TEST_DB`，啟動容器時會自動建立測試庫。
