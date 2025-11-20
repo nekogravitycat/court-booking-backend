@@ -12,11 +12,10 @@ import (
 
 // Config holds all application configuration loaded from environment.
 type Config struct {
-	AppEnv   string
-	HTTPAddr string
-
-	DBDSN string
-
+	ProdOrigin        string
+	AppEnv            string
+	HTTPAddr          string
+	DBDSN             string
 	JWTSecret         string
 	JWTAccessTokenTTL time.Duration
 }
@@ -30,6 +29,9 @@ func Load() (*Config, error) {
 	}
 
 	cfg := &Config{}
+
+	// Production origin (default: example.com)
+	cfg.ProdOrigin = getEnvOrDefault("PROD_ORIGIN", "example.com")
 
 	// Application environment (default: local)
 	cfg.AppEnv = getEnvOrDefault("APP_ENV", "local")

@@ -1,6 +1,8 @@
 package api
 
 import (
+	"strings"
+
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
 
@@ -23,6 +25,8 @@ import (
 
 // Config holds all dependencies required to initialize the router.
 type Config struct {
+	AppEnv         string
+	ProdOrigin     string
 	UserService    user.Service
 	OrgService     organization.Service
 	LocService     location.Service
@@ -42,9 +46,32 @@ func NewRouter(cfg Config) *gin.Engine {
 
 	// CORS
 	config := cors.DefaultConfig()
-	config.AllowOrigins = []string{
-		"http://localhost:8081", // Swagger
+
+	if cfg.AppEnv == "prod" {
+		// Production: Strict mode, only allow exact domain match
+		config.AllowOrigins = []string{
+			cfg.ProdOrigin,
+		}
+	} else {
+		// Dev / Local: Use AllowOriginFunc to check dynamically
+		config.AllowOriginFunc = func(origin string) bool {
+			// Allow the Prod Origin (useful for debugging)
+			if origin == cfg.ProdOrigin {
+				return true
+			}
+			// Allow localhost with ANY port
+			if strings.HasPrefix(origin, "http://localhost") || strings.HasPrefix(origin, "https://localhost") {
+				return true
+			}
+			// Allow 127.0.0.1 with ANY port
+			if strings.HasPrefix(origin, "http://127.0.0.1") || strings.HasPrefix(origin, "https://127.0.0.1") {
+				return true
+			}
+
+			return false
+		}
 	}
+
 	config.AllowMethods = []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"}
 	config.AllowHeaders = []string{"Origin", "Content-Type", "Authorization"}
 	r.Use(cors.New(config))

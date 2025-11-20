@@ -27,6 +27,8 @@ func main() {
 		log.Fatalf("failed to load config: %v", err)
 	}
 
+	log.Printf("starting server in %s mode", cfg.AppEnv)
+
 	// Connect DB
 	pool, err := db.NewPool(ctx, cfg.DBDSN)
 	if err != nil {
@@ -36,6 +38,8 @@ func main() {
 
 	// Initialize App Container
 	appContainer := app.NewContainer(app.Config{
+		AppEnv:       cfg.AppEnv,
+		ProdOrigin:   cfg.ProdOrigin,
 		DBPool:       pool,
 		JWTSecret:    cfg.JWTSecret,
 		JWTTTL:       cfg.JWTAccessTokenTTL,

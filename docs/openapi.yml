@@ -1,11 +1,16 @@
 openapi: 3.0.3
+
 info:
   title: Court Booking Backend API
   version: "v1"
   description: Court Booking Backend — API v1
+
 servers:
+  - url: https://api-field.gravitycat.tw/v1
+    description: Production Server
   - url: http://localhost:8080/v1
     description: Local Server
+
 security:
   - bearerAuth: []
 
