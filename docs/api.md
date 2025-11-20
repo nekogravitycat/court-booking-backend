@@ -1,12 +1,13 @@
 # 球場預約系統 (Court Booking System) - API 整合指南
 
-這份文件旨在協助前端開發者快速理解後端 API 的架構、認證方式以及資料互動格式。
+這份文件旨在協助前端開發者快速理解後端 API 的架構、認證方式以及資料互動格式。詳細 Schema 請參考 `openapi.yml` 或 Swagger UI。
 
 ## 1. 基礎資訊 (General Info)
 
-  * **Base URL (Local):** `http://localhost:8080/v1`
-  * **Content-Type:** `application/json`
-  * **日期時間格式:** ISO 8601 (e.g., `2023-11-19T10:00:00Z`)
+* **Base URL (Local):** `http://localhost:8080/v1`
+* **Content-Type:** `application/json`
+* **日期時間格式:** ISO 8601 (e.g., `2023-11-19T10:00:00Z`)
+* **時間格式 (Time):** HH:MM:SS (e.g., `09:00:00`)
 
 ## 2. 認證機制 (Authentication)
 
@@ -30,6 +31,7 @@ Authorization: Bearer <your_access_token>
 ### 成功 (Success)
 
 通常直接回傳資料物件，或是包裝在特定結構中（如分頁）。
+部分單一資源回傳時會包裹在物件 key 中，例如 `{"user": {...}}`。
 
 ### 錯誤 (Error)
 
@@ -65,19 +67,19 @@ Authorization: Bearer <your_access_token>
 
 一般使用者登入與註冊的入口。
 
-| Method | Path | 描述 | 關鍵參數 /備註 |
+| Method | Path | 描述 | 關鍵參數 / 備註 |
 | :--- | :--- | :--- | :--- |
-| **POST** | `/auth/register` | 註冊新帳號 | Body: `{email, password, display_name}` |
+| **POST** | `/auth/register` | 註冊新帳號 | Body: `{email, password, display_name}` <br> Response: `{"user": {...}}` |
 | **POST** | `/auth/login` | 登入 | Body: `{email, password}` <br> Response: `{access_token, user}` |
-| **GET** | `/me` | 取得目前使用者資料 | 需帶 Token |
+| **GET** | `/me` | 取得目前使用者資料 | 需帶 Token <br> Response: `{"user": {...}}` |
 
 ### B. 使用者管理 (Users) - System Admin Only
 
 系統管理員用來查詢與管理平台所有使用者。
 
-| Method | Path | 描述 | 篩選參數 (Query) |
+| Method | Path | 描述 | 篩選參數 (Query) / Body |
 | :--- | :--- | :--- | :--- |
-| **GET** | `/users` | 使用者列表 | `email`, `display_name`, `is_active`, `sort` |
+| **GET** | `/users` | 使用者列表 | Query: `email`, `display_name`, `is_active`, `sort` |
 | **GET** | `/users/{id}` | 取得特定使用者 | - |
 | **PATCH** | `/users/{id}` | 更新使用者狀態 | Body: `{display_name, is_active, is_system_admin}` |
 
@@ -93,30 +95,30 @@ Authorization: Bearer <your_access_token>
 | **GET** | `/organizations` | 組織列表 | 僅列出 `is_active=true` 的組織 |
 | **POST** | `/organizations` | 建立組織 | Body: `{name}` |
 | **GET** | `/organizations/{id}` | 取得單一組織 | - |
-| **PATCH** | `/organizations/{id}` | 更新組織資訊 | Body: `{name}` |
+| **PATCH** | `/organizations/{id}` | 更新組織資訊 | Body: `{name, is_active}` |
 | **DELETE** | `/organizations/{id}` | 刪除組織 | 軟刪除 (Soft Delete) |
 
 ### D. 組織成員 (Members)
 
 管理特定組織底下的成員及其權限（Owner, Admin, Member）。
 
-| Method | Path | 描述 |
-| :--- | :--- | :--- |
-| **GET** | `/organizations/{org_id}/members` | 列出該組織成員 |
-| **POST** | `/organizations/{org_id}/members` | 邀請/加入成員 |
-| **PATCH** | `/organizations/{org_id}/members/{user_id}` | 修改成員權限 (Role) |
-| **DELETE** | `/organizations/{org_id}/members/{user_id}` | 移除成員 |
+| Method | Path | 描述 | Body 關鍵欄位 |
+| :--- | :--- | :--- | :--- |
+| **GET** | `/organizations/{org_id}/members` | 列出該組織成員 | - |
+| **POST** | `/organizations/{org_id}/members` | 邀請/加入成員 | `{user_id, role}` (role: owner, admin, member) |
+| **PATCH** | `/organizations/{org_id}/members/{user_id}` | 修改成員權限 | `{role}` |
+| **DELETE** | `/organizations/{org_id}/members/{user_id}` | 移除成員 | - |
 
 ### E. 場館據點 (Locations)
 
-組織旗下的實體場館（例如：台北分館、台中分館）。
+組織旗下的實體場館（例如：台北分館、台中分館）。權限：Org Owner/Admin 可寫入。
 
-| Method | Path | 描述 | 關鍵欄位 (Body) |
+| Method | Path | 描述 | 關鍵欄位 (Body) / Query |
 | :--- | :--- | :--- | :--- |
 | **GET** | `/locations` | 場館列表 | Query: `organization_id`, `q` (關鍵字搜尋) |
-| **POST** | `/locations` | 新增場館 | `organization_id`, `opening_hours`, `lat/long` |
+| **POST** | `/locations` | 新增場館 | Body: `{organization_id, name, capacity, opening_hours_start, opening_hours_end, latitude, longitude, ...}` |
 | **GET** | `/locations/{id}` | 場館詳情 | - |
-| **PATCH** | `/locations/{id}` | 更新場館 | - |
+| **PATCH** | `/locations/{id}` | 更新場館 | 支援部分更新 (Partial Update) |
 | **DELETE** | `/locations/{id}` | 刪除場館 | - |
 
 ### F. 場地資源 (Resources & Types)
@@ -126,10 +128,12 @@ Authorization: Bearer <your_access_token>
   * **Resource Types**: 場地類型定義（如：羽球場、籃球場）。
   * **Resources**: 實際的場地實體。
 
-| Method | Path | 描述 | 篩選參數 |
+| Method | Path | 描述 | 篩選參數 / Body |
 | :--- | :--- | :--- | :--- |
 | **GET** | `/resource-types` | 類型列表 | Query: `organization_id` |
-| **POST** | `/resource-types` | 建立類型 | - |
+| **POST** | `/resource-types` | 建立類型 | Body: `{organization_id, name, description}` |
+| **PATCH** | `/resource-types/{id}`| 更新類型 | Body: `{name, description}` |
+| **DELETE** | `/resource-types/{id}`| 刪除類型 | - |
 | **GET** | `/resources` | 場地列表 | Query: `location_id`, `resource_type_id` |
 | **POST** | `/resources` | 建立場地 | Body: `{resource_type_id, location_id}` |
 
@@ -139,10 +143,10 @@ Authorization: Bearer <your_access_token>
 
 | Method | Path | 描述 | 關鍵參數 |
 | :--- | :--- | :--- | :--- |
-| **GET** | `/bookings` | 查詢預約 | Query: `user_id`, `resource_id`, `status`, `start/end_time` |
+| **GET** | `/bookings` | 查詢預約 | Query: `user_id`, `resource_id`, `status`, `start_time_from`, `start_time_to` |
 | **POST** | `/bookings` | 建立預約 | Body: `{resource_id, start_time, end_time}` <br> **注意**: 系統會檢查時間重疊，若重疊回傳 409 |
 | **GET** | `/bookings/{id}` | 預約詳情 | - |
-| **PATCH** | `/bookings/{id}` | 修改預約 | 可更新時間或狀態 (`pending`, `confirmed`, `cancelled`) |
+| **PATCH** | `/bookings/{id}` | 修改預約 | Body: `{start_time, end_time, status}` |
 | **DELETE** | `/bookings/{id}` | 取消/刪除 | - |
 
 ### H. 系統公告 (Announcements)
@@ -161,9 +165,9 @@ Authorization: Bearer <your_access_token>
   * `200 OK`: 請求成功。
   * `201 Created`: 資源建立成功 (如註冊、新增組織)。
   * `204 No Content`: 刪除成功，無回傳內容。
-  * `400 Bad Request`: 參數錯誤 (如 JSON 格式不對、缺少必填欄位)。
+  * `400 Bad Request`: 參數錯誤 (如 JSON 格式不對、缺少必填欄位、UUID 格式錯誤)。
   * `401 Unauthorized`: 未登入或 Token 無效。
-  * `403 Forbidden`: 有登入但權限不足 (如一般使用者嘗試刪除組織)。
+  * `403 Forbidden`: 有登入但權限不足 (如一般使用者嘗試刪除組織、非該組織 Admin 嘗試修改場館)。
   * `404 Not Found`: 找不到資源 (ID 不存在)。
-  * `409 Conflict`: 資源衝突 (如 Email 已被註冊、預約時間重疊)。
+  * `409 Conflict`: 資源衝突 (如 Email 已被註冊、使用者已是成員、預約時間重疊)。
   * `500 Internal Server Error`: 伺服器內部錯誤。
