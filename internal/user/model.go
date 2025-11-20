@@ -1,6 +1,18 @@
 package user
 
-import "time"
+import (
+	"errors"
+	"time"
+)
+
+var (
+	ErrNotFound           = errors.New("user not found")
+	ErrEmailAlreadyUsed   = errors.New("email already used")
+	ErrInvalidCredentials = errors.New("invalid email or password")
+	ErrInactiveUser       = errors.New("user is inactive")
+	ErrEmailRequired      = errors.New("email is required")
+	ErrPasswordTooShort   = errors.New("password is too short")
+)
 
 // User represents a user in the system.
 type User struct {

@@ -2,6 +2,7 @@ package booking
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	"github.com/nekogravitycat/court-booking-backend/internal/location"
@@ -80,10 +81,12 @@ func (s *service) Create(ctx context.Context, req CreateRequest) (*Booking, erro
 
 	// 2. Validate Resource Exists
 	if _, err := s.resService.GetByID(ctx, req.ResourceID); err != nil {
-		if err == resource.ErrNotFound {
+		switch {
+		case errors.Is(err, resource.ErrNotFound):
 			return nil, ErrResourceNotFound
+		default:
+			return nil, err
 		}
-		return nil, err
 	}
 
 	// 3. Check for Overlaps

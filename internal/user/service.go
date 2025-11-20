@@ -26,13 +26,6 @@ type Service interface {
 	Update(ctx context.Context, id string, req UpdateUserRequest) (*User, error)
 }
 
-// Service errors used to communicate business logic failures.
-var (
-	ErrEmailAlreadyUsed   = errors.New("email already used")
-	ErrInvalidCredentials = errors.New("invalid email or password")
-	ErrInactiveUser       = errors.New("user is inactive")
-)
-
 type service struct {
 	repo   Repository
 	hasher auth.PasswordHasher
@@ -52,11 +45,11 @@ func NewService(repo Repository, hasher auth.PasswordHasher) Service {
 func (s *service) Register(ctx context.Context, email, password, displayName string) (*User, error) {
 	cleanEmail := normalizeEmail(email)
 	if cleanEmail == "" {
-		return nil, fmt.Errorf("email is required")
+		return nil, ErrEmailRequired
 	}
 
 	if len(password) < s.minPasswordLength {
-		return nil, fmt.Errorf("password must be at least %d characters", s.minPasswordLength)
+		return nil, ErrPasswordTooShort
 	}
 
 	// Check if email is already used.

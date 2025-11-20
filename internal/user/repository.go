@@ -24,9 +24,6 @@ type Repository interface {
 	Update(ctx context.Context, u *User) error
 }
 
-// ErrNotFound is returned when a user is not found in the repository.
-var ErrNotFound = errors.New("user not found")
-
 type pgxUserRepository struct {
 	pool *pgxpool.Pool
 }

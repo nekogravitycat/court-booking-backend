@@ -1,6 +1,7 @@
 package http
 
 import (
+	"errors"
 	"net/http"
 	"strconv"
 
@@ -56,7 +57,12 @@ func (h *OrganizationHandler) Create(c *gin.Context) {
 
 	org, err := h.service.Create(c.Request.Context(), req.Name)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to create organization"})
+		switch {
+		case errors.Is(err, organization.ErrNameRequired):
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		default:
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to create organization"})
+		}
 		return
 	}
 
@@ -75,12 +81,14 @@ func (h *OrganizationHandler) Get(c *gin.Context) {
 
 	org, err := h.service.GetByID(c.Request.Context(), id)
 	if err != nil {
-		if err == organization.ErrNotFound {
+		switch {
+		case errors.Is(err, organization.ErrOrgNotFound):
 			c.JSON(http.StatusNotFound, gin.H{"error": "organization not found"})
 			return
+		default:
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to get organization"})
+			return
 		}
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to get organization"})
-		return
 	}
 
 	c.JSON(http.StatusOK, NewOrganizationResponse(org))
@@ -113,12 +121,14 @@ func (h *OrganizationHandler) Update(c *gin.Context) {
 
 	org, err := h.service.Update(c.Request.Context(), id, req)
 	if err != nil {
-		if err == organization.ErrNotFound {
-			c.JSON(http.StatusNotFound, gin.H{"error": "organization not found"})
-			return
+		switch {
+		case errors.Is(err, organization.ErrOrgNotFound):
+			c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+		case errors.Is(err, organization.ErrNameRequired):
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		default:
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to update organization"})
 		}
-		// Handle validation error (e.g. empty name)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 
@@ -137,11 +147,12 @@ func (h *OrganizationHandler) Delete(c *gin.Context) {
 	}
 
 	if err := h.service.Delete(c.Request.Context(), id); err != nil {
-		if err == organization.ErrNotFound {
+		switch {
+		case errors.Is(err, organization.ErrOrgNotFound):
 			c.JSON(http.StatusNotFound, gin.H{"error": "organization not found"})
-			return
+		default:
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to delete organization"})
 		}
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to delete organization"})
 		return
 	}
 
@@ -168,12 +179,14 @@ func (h *OrganizationHandler) ListMembers(c *gin.Context) {
 
 	members, total, err := h.service.ListMembers(c.Request.Context(), orgID, filter)
 	if err != nil {
-		if err == organization.ErrNotFound {
+		switch {
+		case errors.Is(err, organization.ErrOrgNotFound):
 			c.JSON(http.StatusNotFound, gin.H{"error": "organization not found"})
 			return
+		default:
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to list members"})
+			return
 		}
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to list members"})
-		return
 	}
 
 	items := make([]MemberResponse, len(members))
@@ -214,13 +227,16 @@ func (h *OrganizationHandler) AddMember(c *gin.Context) {
 	}
 
 	if err := h.service.AddMember(c.Request.Context(), orgID, req); err != nil {
-		switch err {
-		case organization.ErrNotFound:
-			c.JSON(http.StatusNotFound, gin.H{"error": "organization not found"})
-		case organization.ErrUserAlreadyMember:
-			c.JSON(http.StatusConflict, gin.H{"error": "user is already a member"})
-		case organization.ErrUserNotFound:
-			c.JSON(http.StatusBadRequest, gin.H{"error": "user not found"})
+		switch {
+		case errors.Is(err, organization.ErrOrgNotFound):
+			c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+		case errors.Is(err, organization.ErrUserNotFound):
+			c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+		case errors.Is(err, organization.ErrUserAlreadyMember):
+			c.JSON(http.StatusConflict, gin.H{"error": err.Error()})
+		case errors.Is(err, organization.ErrUserIDRequired),
+			errors.Is(err, organization.ErrInvalidRole):
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		default:
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to add member"})
 		}
@@ -264,13 +280,17 @@ func (h *OrganizationHandler) UpdateMemberRole(c *gin.Context) {
 	}
 
 	if err := h.service.UpdateMemberRole(c.Request.Context(), orgID, userID, req); err != nil {
-		if err == organization.ErrNotFound {
-			// Could be org not found or user not member of org
-			c.JSON(http.StatusNotFound, gin.H{"error": "member or organization not found"})
+		switch {
+		case errors.Is(err, organization.ErrOrgNotFound):
+			c.JSON(http.StatusNotFound, gin.H{"error": "organization not found"})
+			return
+		case errors.Is(err, organization.ErrUserNotMember):
+			c.JSON(http.StatusNotFound, gin.H{"error": "user is not a member of the organization"})
+			return
+		default:
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to update member role"})
 			return
 		}
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to update member role"})
-		return
 	}
 
 	c.JSON(http.StatusOK, gin.H{"status": "updated"})
@@ -300,11 +320,14 @@ func (h *OrganizationHandler) RemoveMember(c *gin.Context) {
 	}
 
 	if err := h.service.RemoveMember(c.Request.Context(), orgID, userID); err != nil {
-		if err == organization.ErrNotFound {
-			c.JSON(http.StatusNotFound, gin.H{"error": "member or organization not found"})
-			return
+		switch {
+		case errors.Is(err, organization.ErrOrgNotFound):
+			c.JSON(http.StatusNotFound, gin.H{"error": "organization not found"})
+		case errors.Is(err, organization.ErrUserNotMember):
+			c.JSON(http.StatusNotFound, gin.H{"error": "user is not a member of the organization"})
+		default:
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to remove member"})
 		}
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to remove member"})
 		return
 	}
 

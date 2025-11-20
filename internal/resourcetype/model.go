@@ -6,7 +6,9 @@ import (
 )
 
 var (
-	ErrNotFound = errors.New("resource type not found")
+	ErrNotFound      = errors.New("resource type not found")
+	ErrOrgIDRequired = errors.New("organization_id is required")
+	ErrNameRequired  = errors.New("name is required")
 )
 
 // ResourceType represents a category of resources (e.g., Badminton Court).

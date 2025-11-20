@@ -1,6 +1,7 @@
 package http
 
 import (
+	"errors"
 	"net/http"
 	"strconv"
 
@@ -36,11 +37,14 @@ func (h *UserHandler) Register(c *gin.Context) {
 
 	u, err := h.userService.Register(ctx, req.Email, req.Password, req.DisplayName)
 	if err != nil {
-		if err == user.ErrEmailAlreadyUsed {
-			c.JSON(http.StatusConflict, gin.H{"error": "email already used"})
-			return
+		switch {
+		case errors.Is(err, user.ErrEmailAlreadyUsed):
+			c.JSON(http.StatusConflict, gin.H{"error": err.Error()})
+		case errors.Is(err, user.ErrEmailRequired), errors.Is(err, user.ErrPasswordTooShort):
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		default:
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to create user"})
 		}
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
@@ -64,10 +68,15 @@ func (h *UserHandler) Login(c *gin.Context) {
 
 	u, err := h.userService.Login(ctx, req.Email, req.Password)
 	if err != nil {
-		// Generic error message for security
-		c.JSON(http.StatusUnauthorized, gin.H{
-			"error": "invalid email or password",
-		})
+		switch {
+		case errors.Is(err, user.ErrInvalidCredentials),
+			errors.Is(err, user.ErrNotFound),
+			errors.Is(err, user.ErrInactiveUser):
+			// For security reasons, do not reveal which condition failed
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid email or password"})
+		default:
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "login failed"})
+		}
 		return
 	}
 
@@ -176,12 +185,14 @@ func (h *UserHandler) Get(c *gin.Context) {
 
 	targetUser, err := h.userService.GetByID(c.Request.Context(), id)
 	if err != nil {
-		if err == user.ErrNotFound {
+		switch {
+		case errors.Is(err, user.ErrNotFound):
 			c.JSON(http.StatusNotFound, gin.H{"error": "user not found"})
 			return
+		default:
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to get user"})
+			return
 		}
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to get user"})
-		return
 	}
 
 	resp := MeResponse{
@@ -216,11 +227,12 @@ func (h *UserHandler) Update(c *gin.Context) {
 
 	updatedUser, err := h.userService.Update(c.Request.Context(), id, req)
 	if err != nil {
-		if err == user.ErrNotFound {
-			c.JSON(http.StatusNotFound, gin.H{"error": "user not found"})
-			return
+		switch {
+		case errors.Is(err, user.ErrNotFound):
+			c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+		default:
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to update user"})
 		}
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to update user"})
 		return
 	}
 

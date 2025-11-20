@@ -7,7 +7,12 @@ import (
 
 var (
 	ErrUserAlreadyMember = errors.New("user is already a member of this organization")
-	ErrUserNotFound      = errors.New("user not found") // context specific
+	ErrUserNotFound      = errors.New("user not found")
+	ErrUserNotMember     = errors.New("user is not a member of the organization")
+	ErrOrgNotFound       = errors.New("organization not found")
+	ErrNameRequired      = errors.New("organization name is required")
+	ErrUserIDRequired    = errors.New("user_id is required")
+	ErrInvalidRole       = errors.New("invalid role")
 )
 
 // Organization represents a venue owner or brand entity.

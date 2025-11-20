@@ -70,7 +70,7 @@ func (r *pgxRepository) GetByID(ctx context.Context, id string) (*Location, erro
 	)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, ErrNotFound
+			return nil, ErrLocNotFound
 		}
 		return nil, fmt.Errorf("get location failed: %w", err)
 	}
@@ -159,7 +159,7 @@ func (r *pgxRepository) Update(ctx context.Context, loc *Location) error {
 		return fmt.Errorf("update location failed: %w", err)
 	}
 	if ct.RowsAffected() == 0 {
-		return ErrNotFound
+		return ErrLocNotFound
 	}
 	return nil
 }
@@ -171,7 +171,7 @@ func (r *pgxRepository) Delete(ctx context.Context, id string) error {
 		return fmt.Errorf("delete location failed: %w", err)
 	}
 	if ct.RowsAffected() == 0 {
-		return ErrNotFound
+		return ErrLocNotFound
 	}
 	return nil
 }

@@ -6,7 +6,13 @@ import (
 )
 
 var (
-	ErrNotFound = errors.New("location not found")
+	ErrOrgNotFound         = errors.New("organization not found")
+	ErrLocNotFound         = errors.New("location not found")
+	ErrOrgIDRequired       = errors.New("organization_id is required")
+	ErrNameRequired        = errors.New("name is required")
+	ErrInvalidGeo          = errors.New("invalid latitude or longitude")
+	ErrInvalidOpeningHours = errors.New("opening hours start must be before end")
+	ErrCapacityInvalid     = errors.New("capacity must be greater than zero")
 )
 
 // Location represents a physical venue under an organization.

@@ -2,7 +2,6 @@ package organization
 
 import (
 	"context"
-	"errors"
 	"strings"
 )
 
@@ -55,7 +54,7 @@ func NewService(repo Repository) Service {
 func (s *service) Create(ctx context.Context, name string) (*Organization, error) {
 	name = strings.TrimSpace(name)
 	if name == "" {
-		return nil, errors.New("organization name is required")
+		return nil, ErrNameRequired
 	}
 
 	org := &Organization{
@@ -81,7 +80,7 @@ func (s *service) Update(ctx context.Context, id string, req UpdateOrganizationR
 	if req.Name != nil {
 		*req.Name = strings.TrimSpace(*req.Name)
 		if *req.Name == "" {
-			return nil, errors.New("organization name cannot be empty")
+			return nil, ErrNameRequired
 		}
 	}
 
@@ -95,7 +94,7 @@ func (s *service) Update(ctx context.Context, id string, req UpdateOrganizationR
 	if req.Name != nil {
 		newName := strings.TrimSpace(*req.Name)
 		if newName == "" {
-			return nil, errors.New("organization name cannot be empty")
+			return nil, ErrNameRequired
 		}
 		org.Name = newName
 	}
@@ -130,12 +129,12 @@ func (s *service) GetMember(ctx context.Context, orgID string, userID string) (*
 
 func (s *service) AddMember(ctx context.Context, orgID string, req AddMemberRequest) error {
 	if req.UserID == "" {
-		return errors.New("user_id is required")
+		return ErrUserIDRequired
 	}
 
 	req.Role = strings.ToLower(strings.TrimSpace(req.Role))
 	if !isValidRole(req.Role) {
-		return errors.New("invalid role")
+		return ErrInvalidRole
 	}
 
 	// Verify organization exists first
@@ -157,7 +156,7 @@ func (s *service) RemoveMember(ctx context.Context, orgID string, userID string)
 func (s *service) UpdateMemberRole(ctx context.Context, orgID string, userID string, req UpdateMemberRequest) error {
 	req.Role = strings.ToLower(strings.TrimSpace(req.Role))
 	if !isValidRole(req.Role) {
-		return errors.New("invalid role")
+		return ErrInvalidRole
 	}
 
 	// Verify organization exists

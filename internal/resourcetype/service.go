@@ -2,7 +2,6 @@ package resourcetype
 
 import (
 	"context"
-	"errors"
 	"strings"
 )
 
@@ -35,10 +34,10 @@ func NewService(repo Repository) Service {
 
 func (s *service) Create(ctx context.Context, req CreateRequest) (*ResourceType, error) {
 	if req.OrganizationID == "" {
-		return nil, errors.New("organization_id is required")
+		return nil, ErrOrgIDRequired
 	}
 	if strings.TrimSpace(req.Name) == "" {
-		return nil, errors.New("name is required")
+		return nil, ErrNameRequired
 	}
 
 	rt := &ResourceType{
@@ -69,7 +68,7 @@ func (s *service) Update(ctx context.Context, id string, req UpdateRequest) (*Re
 
 	if req.Name != nil {
 		if strings.TrimSpace(*req.Name) == "" {
-			return nil, errors.New("name cannot be empty")
+			return nil, ErrNameRequired
 		}
 		rt.Name = *req.Name
 	}

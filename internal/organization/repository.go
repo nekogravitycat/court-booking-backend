@@ -11,8 +11,6 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-var ErrNotFound = errors.New("organization not found")
-
 // Repository defines methods for accessing organization data.
 type Repository interface {
 	// Organization methods
@@ -65,7 +63,7 @@ func (r *pgxRepository) GetByID(ctx context.Context, id string) (*Organization, 
 	var org Organization
 	if err := row.Scan(&org.ID, &org.Name, &org.CreatedAt, &org.IsActive); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, ErrNotFound
+			return nil, ErrOrgNotFound
 		}
 		return nil, fmt.Errorf("GetByID failed: %w", err)
 	}
@@ -125,7 +123,7 @@ func (r *pgxRepository) Update(ctx context.Context, org *Organization) error {
 		return fmt.Errorf("Update failed: %w", err)
 	}
 	if ct.RowsAffected() == 0 {
-		return ErrNotFound
+		return ErrOrgNotFound
 	}
 	return nil
 }
@@ -142,7 +140,7 @@ func (r *pgxRepository) Delete(ctx context.Context, id string) error {
 		return fmt.Errorf("Delete (soft) failed: %w", err)
 	}
 	if ct.RowsAffected() == 0 {
-		return ErrNotFound
+		return ErrOrgNotFound
 	}
 	return nil
 }
@@ -170,7 +168,7 @@ func (r *pgxRepository) GetMember(ctx context.Context, orgID string, userID stri
 	var m Member
 	if err := row.Scan(&m.UserID, &m.Email, &m.DisplayName, &m.Role); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, ErrNotFound // User is not a member of the organization
+			return nil, ErrUserNotMember // User is not a member of the organization
 		}
 		return nil, fmt.Errorf("GetMember failed: %w", err)
 	}
@@ -213,7 +211,7 @@ func (r *pgxRepository) RemoveMember(ctx context.Context, orgID string, userID s
 		return fmt.Errorf("RemoveMember failed: %w", err)
 	}
 	if ct.RowsAffected() == 0 {
-		return ErrNotFound // Using the existing ErrNotFound
+		return ErrUserNotMember
 	}
 	return nil
 }
@@ -230,7 +228,7 @@ func (r *pgxRepository) UpdateMemberRole(ctx context.Context, orgID string, user
 		return fmt.Errorf("UpdateMemberRole failed: %w", err)
 	}
 	if ct.RowsAffected() == 0 {
-		return ErrNotFound
+		return ErrUserNotMember
 	}
 	return nil
 }

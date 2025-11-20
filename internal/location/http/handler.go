@@ -1,6 +1,7 @@
 package http
 
 import (
+	"errors"
 	"net/http"
 	"strconv"
 
@@ -105,7 +106,17 @@ func (h *LocationHandler) Create(c *gin.Context) {
 
 	loc, err := h.service.Create(c.Request.Context(), req)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to create location"})
+		switch {
+		case errors.Is(err, location.ErrOrgIDRequired),
+			errors.Is(err, location.ErrNameRequired),
+			errors.Is(err, location.ErrOrgNotFound),
+			errors.Is(err, location.ErrInvalidGeo),
+			errors.Is(err, location.ErrInvalidOpeningHours),
+			errors.Is(err, location.ErrCapacityInvalid):
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		default:
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to create location"})
+		}
 		return
 	}
 
@@ -124,11 +135,12 @@ func (h *LocationHandler) Get(c *gin.Context) {
 
 	loc, err := h.service.GetByID(c.Request.Context(), id)
 	if err != nil {
-		if err == location.ErrNotFound {
+		switch {
+		case errors.Is(err, location.ErrLocNotFound):
 			c.JSON(http.StatusNotFound, gin.H{"error": "location not found"})
-			return
+		default:
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to get location"})
 		}
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to get location"})
 		return
 	}
 
@@ -149,12 +161,14 @@ func (h *LocationHandler) Update(c *gin.Context) {
 	// Fetch the existing location to determine which organization it belongs to.
 	existingLoc, err := h.service.GetByID(c.Request.Context(), id)
 	if err != nil {
-		if err == location.ErrNotFound {
+		switch {
+		case errors.Is(err, location.ErrLocNotFound):
 			c.JSON(http.StatusNotFound, gin.H{"error": "location not found"})
 			return
+		default:
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to fetch location for permission check"})
+			return
 		}
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to fetch location for permission check"})
-		return
 	}
 
 	// Permission check: The user must be an Admin or Owner of that organization.
@@ -208,12 +222,14 @@ func (h *LocationHandler) Delete(c *gin.Context) {
 	// Fetch the existing location to determine which organization it belongs to.
 	existingLoc, err := h.service.GetByID(c.Request.Context(), id)
 	if err != nil {
-		if err == location.ErrNotFound {
+		switch {
+		case errors.Is(err, location.ErrLocNotFound):
 			c.JSON(http.StatusNotFound, gin.H{"error": "location not found"})
 			return
+		default:
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to fetch location for permission check"})
+			return
 		}
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to fetch location for permission check"})
-		return
 	}
 
 	// Permission check: The user must be an Admin or Owner of that organization.
