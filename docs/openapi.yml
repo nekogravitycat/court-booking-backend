@@ -11,25 +11,25 @@ security:
 
 tags:
   - name: Auth
-    description: 認證 / 註冊 / 登入
+    description: 身份認證 (註冊 / 登入)
   - name: Me
-    description: 目前使用者資訊
+    description: 目前登入者資訊
   - name: Users
-    description: System Admin 管理 Users
+    description: 使用者管理 (System Admin Only)
   - name: Organizations
-    description: 組織管理
+    description: 組織/場館主管理
   - name: Members
-    description: 組織成員與權限
+    description: 組織成員權限管理
   - name: Locations
-    description: 實體場館
+    description: 實體場館據點
   - name: ResourceTypes
-    description: 場地類型
+    description: 場地類型 (如：羽球場、會議室)
   - name: Resources
-    description: 實際場地
+    description: 實際可預約資源
   - name: Bookings
-    description: 預約相關
+    description: 預約交易
   - name: Announcements
-    description: 公告
+    description: 系統公告
 
 components:
   securitySchemes:
@@ -46,7 +46,7 @@ components:
         type: integer
         minimum: 1
         default: 1
-      description: Page number (start from 1)
+      description: 頁碼 (從 1 開始)
     page_size:
       name: page_size
       in: query
@@ -55,21 +55,24 @@ components:
         minimum: 1
         maximum: 100
         default: 20
-      description: Items per page
+      description: 每頁顯示筆數
     sort:
       name: sort
       in: query
       schema:
         type: string
-      description: Sort fields (e.g. created_at, -created_at, email)
+      description: 排序欄位 (例如：created_at, -created_at, email)
 
   schemas:
+    # --------------------------
+    # Common Responses
+    # --------------------------
     ErrorResponse:
       type: object
       properties:
         error:
           type: string
-          description: Error message
+          description: 錯誤訊息描述
       example:
         error: "invalid request"
 
@@ -87,7 +90,10 @@ components:
         total:
           type: integer
 
-    User:
+    # --------------------------
+    # User Models
+    # --------------------------
+    UserResponse:
       type: object
       properties:
         id:
@@ -95,6 +101,7 @@ components:
           format: uuid
         email:
           type: string
+          format: email
         display_name:
           type: string
           nullable: true
@@ -118,29 +125,34 @@ components:
 
     UserWrapperResponse:
       type: object
+      description: 包裝 User 物件的回應格式
       properties:
         user:
-          $ref: "#/components/schemas/User"
+          $ref: "#/components/schemas/UserResponse"
+      required:
+        - user
 
     RegisterRequest:
       type: object
       properties:
         email:
           type: string
+          format: email
         password:
           type: string
+          minLength: 8
         display_name:
           type: string
       required:
         - email
         - password
-        - display_name
 
     LoginRequest:
       type: object
       properties:
         email:
           type: string
+          format: email
         password:
           type: string
       required:
@@ -153,12 +165,25 @@ components:
         access_token:
           type: string
         user:
-          $ref: "#/components/schemas/User"
+          $ref: "#/components/schemas/UserResponse"
       required:
         - access_token
         - user
 
-    Organization:
+    UpdateUserBody:
+      type: object
+      properties:
+        display_name:
+          type: string
+        is_active:
+          type: boolean
+        is_system_admin:
+          type: boolean
+
+    # --------------------------
+    # Organization Models
+    # --------------------------
+    OrganizationResponse:
       type: object
       properties:
         id:
@@ -174,7 +199,7 @@ components:
         - name
         - created_at
 
-    OrganizationCreate:
+    CreateOrganizationRequest:
       type: object
       properties:
         name:
@@ -182,30 +207,37 @@ components:
       required:
         - name
 
-    OrganizationUpdate:
+    UpdateOrganizationRequest:
       type: object
       properties:
         name:
           type: string
-      required:
-        - name
+        is_active:
+          type: boolean
 
-    OrganizationMember:
+    # --------------------------
+    # Member Models
+    # --------------------------
+    MemberResponse:
       type: object
       properties:
         user_id:
           type: string
           format: uuid
-        role:
-          type: string
-          enum: [owner, admin, member]
         email:
           type: string
         display_name:
           type: string
           nullable: true
+        role:
+          type: string
+          enum: [owner, admin, member]
+      required:
+        - user_id
+        - email
+        - role
 
-    OrganizationMemberAdd:
+    AddMemberRequest:
       type: object
       properties:
         user_id:
@@ -218,7 +250,7 @@ components:
         - user_id
         - role
 
-    OrganizationMemberUpdate:
+    UpdateMemberRequest:
       type: object
       properties:
         role:
@@ -227,29 +259,117 @@ components:
       required:
         - role
 
-    Location:
+    # --------------------------
+    # Location Models
+    # --------------------------
+    LocationResponse:
       type: object
       properties:
         id:
           type: string
           format: uuid
-        created_at:
-          type: string
-          format: date-time
         organization_id:
           type: string
           format: uuid
+        name:
+          type: string
+        created_at:
+          type: string
+          format: date-time
         capacity:
           type: integer
           format: int64
         opening_hours_start:
           type: string
-          description: "time (HH:MM:SS)"
+          description: "Format: HH:MM:SS"
           example: "09:00:00"
         opening_hours_end:
           type: string
-          description: "time (HH:MM:SS)"
+          description: "Format: HH:MM:SS"
           example: "22:00:00"
+        location_info:
+          type: string
+        opening:
+          type: boolean
+        rule:
+          type: string
+        facility:
+          type: string
+        description:
+          type: string
+        longitude:
+          type: number
+          format: double
+        latitude:
+          type: number
+          format: double
+      required:
+        - id
+        - organization_id
+        - name
+        - opening_hours_start
+        - opening_hours_end
+        - longitude
+        - latitude
+
+    CreateLocationBody:
+      type: object
+      properties:
+        organization_id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        capacity:
+          type: integer
+          format: int64
+        opening_hours_start:
+          type: string
+          pattern: "^([0-1]?[0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9]$"
+          example: "09:00:00"
+        opening_hours_end:
+          type: string
+          pattern: "^([0-1]?[0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9]$"
+          example: "22:00:00"
+        location_info:
+          type: string
+        opening:
+          type: boolean
+        rule:
+          type: string
+        facility:
+          type: string
+        description:
+          type: string
+        longitude:
+          type: number
+          minimum: -180
+          maximum: 180
+        latitude:
+          type: number
+          minimum: -90
+          maximum: 90
+      required:
+        - organization_id
+        - name
+        - capacity
+        - opening_hours_start
+        - opening_hours_end
+        - location_info
+        - longitude
+        - latitude
+
+    UpdateLocationBody:
+      type: object
+      properties:
+        name:
+          type: string
+        capacity:
+          type: integer
+        opening_hours_start:
+          type: string
+        opening_hours_end:
+          type: string
         location_info:
           type: string
         opening:
@@ -264,26 +384,56 @@ components:
           type: number
         latitude:
           type: number
-      required:
-        - organization_id
-        - location_info
-        - opening
 
-    ResourceType:
+    # --------------------------
+    # ResourceType Models
+    # --------------------------
+    ResourceTypeResponse:
       type: object
       properties:
         id:
           type: string
           format: uuid
-        created_at:
-          type: string
-          format: date-time
         organization_id:
           type: string
           format: uuid
+        name:
+          type: string
+        description:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+      required:
+        - id
+        - organization_id
+        - name
+
+    CreateResourceTypeBody:
+      type: object
+      properties:
+        organization_id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        description:
+          type: string
       required:
         - organization_id
+        - name
 
+    UpdateResourceTypeBody:
+      type: object
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+
+    # --------------------------
+    # Unimplemented Models (Future)
+    # --------------------------
     Resource:
       type: object
       properties:
@@ -371,6 +521,7 @@ paths:
       tags:
         - Auth
       summary: "使用者註冊"
+      operationId: registerUser
       requestBody:
         required: true
         content:
@@ -379,7 +530,7 @@ paths:
               $ref: "#/components/schemas/RegisterRequest"
       responses:
         "201":
-          description: Created
+          description: Created - 回傳新建立的使用者資訊
           content:
             application/json:
               schema:
@@ -401,7 +552,8 @@ paths:
     post:
       tags:
         - Auth
-      summary: "登入"
+      summary: "使用者登入"
+      operationId: loginUser
       requestBody:
         required: true
         content:
@@ -410,7 +562,7 @@ paths:
               $ref: "#/components/schemas/LoginRequest"
       responses:
         "200":
-          description: Auth success
+          description: Success - 回傳 Access Token 與使用者資訊
           content:
             application/json:
               schema:
@@ -432,17 +584,18 @@ paths:
       tags:
         - Me
       summary: "取得目前使用者資訊"
+      operationId: getCurrentUser
       security:
         - bearerAuth: []
       responses:
         "200":
-          description: Current user
+          description: Current user profile
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/UserWrapperResponse"
         "401":
-          description: Unauthorized
+          description: Unauthorized - Token 無效或過期
 
   # ============================
   # Users (System Admin)
@@ -451,7 +604,7 @@ paths:
     get:
       tags:
         - Users
-      summary: "列出使用者（System Admin）"
+      summary: "列出所有使用者 (System Admin)"
       security:
         - bearerAuth: []
       parameters:
@@ -462,17 +615,20 @@ paths:
           in: query
           schema:
             type: string
+          description: 依 Email 搜尋
         - name: display_name
           in: query
           schema:
             type: string
+          description: 依顯示名稱搜尋
         - name: is_active
           in: query
           schema:
             type: boolean
+          description: 依啟用狀態篩選
       responses:
         "200":
-          description: paged users
+          description: User list
           content:
             application/json:
               schema:
@@ -482,13 +638,13 @@ paths:
                       items:
                         type: array
                         items:
-                          $ref: "#/components/schemas/User"
+                          $ref: "#/components/schemas/UserResponse"
         "403":
-          description: Forbidden
+          description: Forbidden - 非系統管理員
 
-  /users/{user_id}:
+  /users/{id}:
     parameters:
-      - name: user_id
+      - name: id
         in: path
         required: true
         schema:
@@ -497,12 +653,12 @@ paths:
     get:
       tags:
         - Users
-      summary: "取得單一使用者（System Admin）"
+      summary: "取得單一使用者詳情 (System Admin)"
       security:
         - bearerAuth: []
       responses:
         "200":
-          description: user
+          description: User details
           content:
             application/json:
               schema:
@@ -510,11 +666,11 @@ paths:
         "403":
           description: Forbidden
         "404":
-          description: Not found
+          description: User Not found
     patch:
       tags:
         - Users
-      summary: "更新使用者（System Admin）"
+      summary: "更新使用者狀態/權限 (System Admin)"
       security:
         - bearerAuth: []
       requestBody:
@@ -522,17 +678,10 @@ paths:
         content:
           application/json:
             schema:
-              type: object
-              properties:
-                display_name:
-                  type: string
-                is_active:
-                  type: boolean
-                is_system_admin:
-                  type: boolean
+              $ref: "#/components/schemas/UpdateUserBody"
       responses:
         "200":
-          description: updated
+          description: Updated user
           content:
             application/json:
               schema:
@@ -540,7 +689,7 @@ paths:
         "403":
           description: Forbidden
         "404":
-          description: Not found
+          description: User Not found
 
   # ============================
   # Organizations
@@ -549,7 +698,7 @@ paths:
     get:
       tags:
         - Organizations
-      summary: "列出 organizations (Active only)"
+      summary: "列出所有組織 (Active Only)"
       security:
         - bearerAuth: []
       parameters:
@@ -557,7 +706,7 @@ paths:
         - $ref: "#/components/parameters/page_size"
       responses:
         "200":
-          description: paged organizations
+          description: Organization list
           content:
             application/json:
               schema:
@@ -567,11 +716,11 @@ paths:
                       items:
                         type: array
                         items:
-                          $ref: "#/components/schemas/Organization"
+                          $ref: "#/components/schemas/OrganizationResponse"
     post:
       tags:
         - Organizations
-      summary: "建立 organization (System Admin)"
+      summary: "建立新組織 (System Admin)"
       security:
         - bearerAuth: []
       requestBody:
@@ -579,20 +728,20 @@ paths:
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/OrganizationCreate"
+              $ref: "#/components/schemas/CreateOrganizationRequest"
       responses:
         "201":
-          description: created
+          description: Organization created
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/Organization"
+                $ref: "#/components/schemas/OrganizationResponse"
         "403":
           description: Forbidden
 
-  /organizations/{org_id}:
+  /organizations/{id}:
     parameters:
-      - name: org_id
+      - name: id
         in: path
         required: true
         schema:
@@ -601,22 +750,22 @@ paths:
     get:
       tags:
         - Organizations
-      summary: "取得單一 organization"
+      summary: "取得組織詳情"
       security:
         - bearerAuth: []
       responses:
         "200":
-          description: organization
+          description: Organization details
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/Organization"
+                $ref: "#/components/schemas/OrganizationResponse"
         "404":
-          description: Not found
+          description: Organization Not found
     patch:
       tags:
         - Organizations
-      summary: "更新 organization (System Admin)"
+      summary: "更新組織資訊 (System Admin)"
       security:
         - bearerAuth: []
       requestBody:
@@ -624,41 +773,42 @@ paths:
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/OrganizationUpdate"
+              $ref: "#/components/schemas/UpdateOrganizationRequest"
       responses:
         "200":
-          description: updated
+          description: Updated organization
           content:
-             application/json:
+            application/json:
               schema:
-                $ref: "#/components/schemas/Organization"
+                $ref: "#/components/schemas/OrganizationResponse"
         "404":
-          description: Not found
+          description: Organization Not found
     delete:
       tags:
         - Organizations
-      summary: "刪除 organization (Soft Delete)"
+      summary: "刪除組織 (Soft Delete - System Admin)"
       security:
         - bearerAuth: []
       responses:
         "204":
-          description: deleted
+          description: Organization deleted (No Content)
 
   # ============================
   # Members
   # ============================
-  /organizations/{org_id}/members:
+  /organizations/{id}/members:
     parameters:
-      - name: org_id
+      - name: id
         in: path
         required: true
+        description: Organization ID
         schema:
           type: string
           format: uuid
     get:
       tags:
         - Members
-      summary: "列出 organization 成員"
+      summary: "列出組織成員"
       security:
         - bearerAuth: []
       parameters:
@@ -666,7 +816,7 @@ paths:
         - $ref: "#/components/parameters/page_size"
       responses:
         "200":
-          description: paged members
+          description: Member list
           content:
             application/json:
               schema:
@@ -676,11 +826,11 @@ paths:
                       items:
                         type: array
                         items:
-                          $ref: "#/components/schemas/OrganizationMember"
+                          $ref: "#/components/schemas/MemberResponse"
     post:
       tags:
         - Members
-      summary: "加入成員"
+      summary: "邀請/加入成員 (System Admin)"
       security:
         - bearerAuth: []
       requestBody:
@@ -688,33 +838,35 @@ paths:
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/OrganizationMemberAdd"
+              $ref: "#/components/schemas/AddMemberRequest"
       responses:
         "201":
-          description: Member added
+          description: Member added successfully
         "404":
           description: Organization or User not found
         "409":
-          description: User already member
+          description: User is already a member
 
-  /organizations/{org_id}/members/{user_id}:
+  /organizations/{id}/members/{user_id}:
     parameters:
-      - name: org_id
+      - name: id
         in: path
         required: true
+        description: Organization ID
         schema:
           type: string
           format: uuid
       - name: user_id
         in: path
         required: true
+        description: User ID
         schema:
           type: string
           format: uuid
     patch:
       tags:
         - Members
-      summary: "調整成員角色"
+      summary: "修改成員角色 (System Admin)"
       security:
         - bearerAuth: []
       requestBody:
@@ -722,23 +874,31 @@ paths:
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/OrganizationMemberUpdate"
+              $ref: "#/components/schemas/UpdateMemberRequest"
       responses:
         "200":
           description: Role updated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: "updated"
         "404":
-          description: Member not found
+          description: Member or Organization not found
     delete:
       tags:
         - Members
-      summary: "移除成員"
+      summary: "移除成員 (System Admin)"
       security:
         - bearerAuth: []
       responses:
         "204":
           description: Member removed
         "404":
-          description: Member not found
+          description: Member or Organization not found
 
   # ============================
   # Locations
@@ -747,7 +907,9 @@ paths:
     get:
       tags:
         - Locations
-      summary: "列出 locations"
+      summary: "列出 Locations (支援篩選)"
+      security:
+        - bearerAuth: []
       parameters:
         - $ref: "#/components/parameters/page"
         - $ref: "#/components/parameters/page_size"
@@ -760,10 +922,10 @@ paths:
           in: query
           schema:
             type: string
-            description: keyword search
+            description: 關鍵字搜尋 (Name or Info)
       responses:
         "200":
-          description: paged locations
+          description: Location list
           content:
             application/json:
               schema:
@@ -773,11 +935,11 @@ paths:
                       items:
                         type: array
                         items:
-                          $ref: "#/components/schemas/Location"
+                          $ref: "#/components/schemas/LocationResponse"
     post:
       tags:
         - Locations
-      summary: "建立 location (org owner/admin)"
+      summary: "建立 Location (Organization Owner/Admin)"
       security:
         - bearerAuth: []
       requestBody:
@@ -785,18 +947,22 @@ paths:
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/Location"
+              $ref: "#/components/schemas/CreateLocationBody"
       responses:
         "201":
-          description: created
+          description: Location created
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/Location"
+                $ref: "#/components/schemas/LocationResponse"
+        "400":
+          description: Validation error
+        "403":
+          description: Permission denied
 
-  /locations/{location_id}:
+  /locations/{id}:
     parameters:
-      - name: location_id
+      - name: id
         in: path
         required: true
         schema:
@@ -805,43 +971,53 @@ paths:
     get:
       tags:
         - Locations
-      summary: "取得單一 location"
+      summary: "取得單一 Location 詳情"
+      security:
+        - bearerAuth: []
       responses:
         "200":
-          description: location
+          description: Location details
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/Location"
+                $ref: "#/components/schemas/LocationResponse"
         "404":
-          description: Not found
+          description: Location not found
     patch:
       tags:
         - Locations
-      summary: "更新 location"
+      summary: "更新 Location (Organization Owner/Admin)"
       security:
         - bearerAuth: []
       requestBody:
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/Location"
+              $ref: "#/components/schemas/UpdateLocationBody"
       responses:
         "200":
-          description: updated
+          description: Updated location
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/Location"
+                $ref: "#/components/schemas/LocationResponse"
+        "403":
+          description: Permission denied
+        "404":
+          description: Location not found
     delete:
       tags:
         - Locations
-      summary: "刪除或停用 location"
+      summary: "刪除 Location (Organization Owner/Admin)"
       security:
         - bearerAuth: []
       responses:
         "204":
-          description: deleted
+          description: Location deleted
+        "403":
+          description: Permission denied
+        "404":
+          description: Location not found
 
   # ============================
   # Resource Types
@@ -850,7 +1026,9 @@ paths:
     get:
       tags:
         - ResourceTypes
-      summary: "列出 resource types"
+      summary: "列出 Resource Types"
+      security:
+        - bearerAuth: []
       parameters:
         - $ref: "#/components/parameters/page"
         - $ref: "#/components/parameters/page_size"
@@ -861,7 +1039,7 @@ paths:
             format: uuid
       responses:
         "200":
-          description: paged resource types
+          description: Resource Type list
           content:
             application/json:
               schema:
@@ -871,11 +1049,11 @@ paths:
                       items:
                         type: array
                         items:
-                          $ref: "#/components/schemas/ResourceType"
+                          $ref: "#/components/schemas/ResourceTypeResponse"
     post:
       tags:
         - ResourceTypes
-      summary: "建立 resource type"
+      summary: "建立 Resource Type (Organization Owner/Admin)"
       security:
         - bearerAuth: []
       requestBody:
@@ -883,18 +1061,20 @@ paths:
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/ResourceType"
+              $ref: "#/components/schemas/CreateResourceTypeBody"
       responses:
         "201":
-          description: created
+          description: Resource Type created
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/ResourceType"
+                $ref: "#/components/schemas/ResourceTypeResponse"
+        "403":
+          description: Permission denied
 
-  /resource-types/{type_id}:
+  /resource-types/{id}:
     parameters:
-      - name: type_id
+      - name: id
         in: path
         required: true
         schema:
@@ -903,44 +1083,56 @@ paths:
     get:
       tags:
         - ResourceTypes
-      summary: "取得 resource type"
+      summary: "取得 Resource Type 詳情"
+      security:
+        - bearerAuth: []
       responses:
         "200":
-          description: resource type
+          description: Resource Type details
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/ResourceType"
+                $ref: "#/components/schemas/ResourceTypeResponse"
+        "404":
+          description: Not found
     patch:
       tags:
         - ResourceTypes
-      summary: "更新 resource type"
+      summary: "更新 Resource Type (Organization Owner/Admin)"
       security:
         - bearerAuth: []
       requestBody:
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/ResourceType"
+              $ref: "#/components/schemas/UpdateResourceTypeBody"
       responses:
         "200":
-          description: updated
+          description: Updated
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/ResourceType"
+                $ref: "#/components/schemas/ResourceTypeResponse"
+        "403":
+          description: Permission denied
+        "404":
+          description: Not found
     delete:
       tags:
         - ResourceTypes
-      summary: "刪除 resource type"
+      summary: "刪除 Resource Type (Organization Owner/Admin)"
       security:
         - bearerAuth: []
       responses:
         "204":
-          description: deleted
+          description: Deleted
+        "403":
+          description: Permission denied
+        "404":
+          description: Not found
 
   # ============================
-  # Resources
+  # Resources (Pending Implementation)
   # ============================
   /resources:
     get:
@@ -1041,7 +1233,7 @@ paths:
           description: deleted
 
   # ============================
-  # Bookings
+  # Bookings (Pending Implementation)
   # ============================
   /bookings:
     get:
@@ -1188,7 +1380,7 @@ paths:
           description: deleted
 
   # ============================
-  # Announcements
+  # Announcements (Pending Implementation)
   # ============================
   /announcements:
     get:
