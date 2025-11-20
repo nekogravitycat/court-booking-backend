@@ -171,7 +171,27 @@
     go test ./tests/... -v
     ```
 
-### 開發規範
+## 🤖 LLM Context 打包 (Repomix)
+
+為了方便讓 LLM 快速理解專案全貌與架構，本專案配置了 [Repomix](https://github.com/yamadashy/repomix) 工具。它可以將整個 codebase 打包成單一的 XML 檔案，並自動過濾掉 `.gitignore` 中的檔案與敏感資訊。
+
+### 如何使用
+
+確保你已安裝 Node.js 環境，然後在專案根目錄執行：
+
+```bash
+npx repomix
+```
+
+### 輸出結果
+
+執行完畢後，會在根目錄產生 `codebase-for-llm.xml`。
+你可以直接將此檔案上傳給 LLM，讓其進行程式碼審查、重構建議或是功能開發輔助。
+
+  - **設定檔**：`repomix.config.json`
+  - **安全檢查**：Repomix 會自動掃描並排除潛在的敏感資訊 (Secret/API Key)。
+
+## 📋 開發規範
 
 - **Git Commit**：請使用英文撰寫 Commit Message。
 - **程式碼風格**：符合 Go 標準 (`go fmt`)。註解使用英文撰寫，不得使用 Emoji。
