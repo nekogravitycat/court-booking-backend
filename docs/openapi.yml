@@ -25,7 +25,7 @@ tags:
   - name: ResourceTypes
     description: 場地類型 (如：羽球場、會議室)
   - name: Resources
-    description: 實際可預約資源
+    description: 實際可預約資源 (如：A球場、B會議室)
   - name: Bookings
     description: 預約交易
   - name: Announcements
@@ -73,6 +73,9 @@ components:
         error:
           type: string
           description: 錯誤訊息描述
+        details:
+          type: string
+          description: 詳細錯誤資訊 (Optional)
       example:
         error: "invalid request"
 
@@ -432,39 +435,63 @@ components:
           type: string
 
     # --------------------------
-    # Unimplemented Models (Future)
+    # Resource Models
     # --------------------------
-    Resource:
+    ResourceResponse:
       type: object
       properties:
         id:
           type: string
           format: uuid
-        created_at:
+        name:
           type: string
-          format: date-time
         resource_type_id:
           type: string
           format: uuid
         location_id:
           type: string
           format: uuid
+        created_at:
+          type: string
+          format: date-time
       required:
+        - id
+        - name
         - resource_type_id
         - location_id
+        - created_at
 
-    Booking:
+    CreateResourceRequest:
+      type: object
+      properties:
+        name:
+          type: string
+        location_id:
+          type: string
+          format: uuid
+        resource_type_id:
+          type: string
+          format: uuid
+      required:
+        - name
+        - location_id
+        - resource_type_id
+
+    UpdateResourceRequest:
+      type: object
+      properties:
+        name:
+          type: string
+
+    # --------------------------
+    # Booking Models
+    # --------------------------
+    BookingResponse:
       type: object
       properties:
         id:
           type: string
           format: uuid
-        created_at:
-          type: string
-          format: date-time
-        updated_at:
-          type: string
-          format: date-time
         resource_id:
           type: string
           format: uuid
@@ -480,8 +507,21 @@ components:
         status:
           type: string
           enum: [pending, confirmed, cancelled]
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+      required:
+        - id
+        - resource_id
+        - user_id
+        - start_time
+        - end_time
+        - status
 
-    BookingCreate:
+    CreateBookingRequest:
       type: object
       properties:
         resource_id:
@@ -498,15 +538,58 @@ components:
         - start_time
         - end_time
 
-    Announcement:
+    UpdateBookingRequest:
+      type: object
+      properties:
+        start_time:
+          type: string
+          format: date-time
+        end_time:
+          type: string
+          format: date-time
+        status:
+          type: string
+          enum: [pending, confirmed, cancelled]
+
+    # --------------------------
+    # Announcement Models
+    # --------------------------
+    AnnouncementResponse:
       type: object
       properties:
         id:
           type: string
           format: uuid
+        title:
+          type: string
+        content:
+          type: string
         created_at:
           type: string
           format: date-time
+        updated_at:
+          type: string
+          format: date-time
+      required:
+        - id
+        - title
+        - content
+        - created_at
+
+    CreateAnnouncementRequest:
+      type: object
+      properties:
+        title:
+          type: string
+        content:
+          type: string
+      required:
+        - title
+        - content
+
+    UpdateAnnouncementRequest:
+      type: object
+      properties:
         title:
           type: string
         content:
@@ -534,9 +617,9 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/UserWrapperResponse"
+                $ref: "#/components/schemas/MeResponse"
         "400":
-          description: Validation error
+          description: Validation error (email required, password too short)
           content:
             application/json:
               schema:
@@ -593,7 +676,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/UserWrapperResponse"
+                $ref: "#/components/schemas/MeResponse"
         "401":
           description: Unauthorized - Token 無效或過期
 
@@ -662,7 +745,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/UserWrapperResponse"
+                $ref: "#/components/schemas/MeResponse"
         "403":
           description: Forbidden
         "404":
@@ -685,7 +768,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/UserWrapperResponse"
+                $ref: "#/components/schemas/MeResponse"
         "403":
           description: Forbidden
         "404":
@@ -1132,13 +1215,15 @@ paths:
           description: Not found
 
   # ============================
-  # Resources (Pending Implementation)
+  # Resources
   # ============================
   /resources:
     get:
       tags:
         - Resources
-      summary: "列出 resources (fields/courts)"
+      summary: "列出資源 (如：球場、會議室)"
+      security:
+        - bearerAuth: []
       parameters:
         - $ref: "#/components/parameters/page"
         - $ref: "#/components/parameters/page_size"
@@ -1164,11 +1249,11 @@ paths:
                       items:
                         type: array
                         items:
-                          $ref: "#/components/schemas/Resource"
+                          $ref: "#/components/schemas/ResourceResponse"
     post:
       tags:
         - Resources
-      summary: "建立 resource"
+      summary: "建立資源 (Organization Owner/Admin)"
       security:
         - bearerAuth: []
       requestBody:
@@ -1176,18 +1261,22 @@ paths:
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/Resource"
+              $ref: "#/components/schemas/CreateResourceRequest"
       responses:
         "201":
           description: created
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/Resource"
+                $ref: "#/components/schemas/ResourceResponse"
+        "400":
+          description: Invalid request body (e.g., bad location)
+        "403":
+          description: Forbidden
 
-  /resources/{resource_id}:
+  /resources/{id}:
     parameters:
-      - name: resource_id
+      - name: id
         in: path
         required: true
         schema:
@@ -1196,50 +1285,62 @@ paths:
     get:
       tags:
         - Resources
-      summary: "取得 resource"
+      summary: "取得資源詳情"
+      security:
+        - bearerAuth: []
       responses:
         "200":
-          description: resource
+          description: resource details
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/Resource"
+                $ref: "#/components/schemas/ResourceResponse"
+        "404":
+          description: Resource not found
     patch:
       tags:
         - Resources
-      summary: "更新 resource"
+      summary: "更新資源 (Organization Owner/Admin)"
       security:
         - bearerAuth: []
       requestBody:
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/Resource"
+              $ref: "#/components/schemas/UpdateResourceRequest"
       responses:
         "200":
           description: updated
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/Resource"
+                $ref: "#/components/schemas/ResourceResponse"
+        "403":
+          description: Forbidden
+        "404":
+          description: Resource not found
     delete:
       tags:
         - Resources
-      summary: "刪除 resource"
+      summary: "刪除資源 (Organization Owner/Admin)"
       security:
         - bearerAuth: []
       responses:
         "204":
           description: deleted
+        "403":
+          description: Forbidden
+        "404":
+          description: Resource not found
 
   # ============================
-  # Bookings (Pending Implementation)
+  # Bookings
   # ============================
   /bookings:
     get:
       tags:
         - Bookings
-      summary: "列出 bookings"
+      summary: "列出預約記錄"
       security:
         - bearerAuth: []
       parameters:
@@ -1250,6 +1351,7 @@ paths:
           schema:
             type: string
             format: uuid
+          description: "Filter by user (Admin only, or self)"
         - name: resource_id
           in: query
           schema:
@@ -1282,11 +1384,11 @@ paths:
                       items:
                         type: array
                         items:
-                          $ref: "#/components/schemas/Booking"
+                          $ref: "#/components/schemas/BookingResponse"
     post:
       tags:
         - Bookings
-      summary: "建立 booking (user)"
+      summary: "建立預約 (User)"
       security:
         - bearerAuth: []
       requestBody:
@@ -1294,30 +1396,30 @@ paths:
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/BookingCreate"
+              $ref: "#/components/schemas/CreateBookingRequest"
       responses:
         "201":
           description: created
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/Booking"
+                $ref: "#/components/schemas/BookingResponse"
         "400":
-          description: Validation error
+          description: Validation error or time invalid
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
         "409":
-          description: Conflict (overlap)
+          description: Conflict (time overlap)
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
-  /bookings/{booking_id}:
+  /bookings/{id}:
     parameters:
-      - name: booking_id
+      - name: id
         in: path
         required: true
         schema:
@@ -1326,24 +1428,24 @@ paths:
     get:
       tags:
         - Bookings
-      summary: "取得 booking"
+      summary: "取得預約詳情"
       security:
         - bearerAuth: []
       responses:
         "200":
-          description: booking
+          description: booking details
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/Booking"
+                $ref: "#/components/schemas/BookingResponse"
         "403":
-          description: Forbidden
+          description: Forbidden (Not owner or admin)
         "404":
           description: Not found
     patch:
       tags:
         - Bookings
-      summary: "更新 booking"
+      summary: "更新預約 (時間或狀態)"
       security:
         - bearerAuth: []
       requestBody:
@@ -1351,45 +1453,52 @@ paths:
         content:
           application/json:
             schema:
-              type: object
-              properties:
-                start_time:
-                  type: string
-                  format: date-time
-                end_time:
-                  type: string
-                  format: date-time
-                status:
-                  type: string
-                  enum: [pending, confirmed, cancelled]
+              $ref: "#/components/schemas/UpdateBookingRequest"
       responses:
         "200":
           description: updated
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/Booking"
+                $ref: "#/components/schemas/BookingResponse"
+        "400":
+          description: Invalid status or time range
+        "403":
+          description: Permission denied
+        "409":
+          description: Time conflict
     delete:
       tags:
         - Bookings
-      summary: "刪除 / 取消 booking"
+      summary: "刪除 / 取消預約"
       security:
         - bearerAuth: []
       responses:
         "204":
           description: deleted
+        "403":
+          description: Permission denied
+        "404":
+          description: Not found
 
   # ============================
-  # Announcements (Pending Implementation)
+  # Announcements
   # ============================
   /announcements:
     get:
       tags:
         - Announcements
       summary: "列出公告"
+      security:
+        - bearerAuth: []
       parameters:
         - $ref: "#/components/parameters/page"
         - $ref: "#/components/parameters/page_size"
+        - name: q
+          in: query
+          schema:
+            type: string
+          description: "Keyword search"
       responses:
         "200":
           description: paged announcements
@@ -1402,7 +1511,7 @@ paths:
                       items:
                         type: array
                         items:
-                          $ref: "#/components/schemas/Announcement"
+                          $ref: "#/components/schemas/AnnouncementResponse"
     post:
       tags:
         - Announcements
@@ -1414,14 +1523,16 @@ paths:
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/Announcement"
+              $ref: "#/components/schemas/CreateAnnouncementRequest"
       responses:
         "201":
           description: created
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/Announcement"
+                $ref: "#/components/schemas/AnnouncementResponse"
+        "400":
+          description: Missing title or content
 
   /announcements/{id}:
     parameters:
@@ -1434,40 +1545,51 @@ paths:
     get:
       tags:
         - Announcements
-      summary: "取得公告"
+      summary: "取得公告詳情"
+      security:
+        - bearerAuth: []
       responses:
         "200":
-          description: announcement
+          description: announcement details
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/Announcement"
+                $ref: "#/components/schemas/AnnouncementResponse"
         "404":
           description: Not found
     patch:
       tags:
         - Announcements
-      summary: "更新公告 (System Admin 或 owner)"
+      summary: "更新公告 (System Admin)"
       security:
         - bearerAuth: []
       requestBody:
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/Announcement"
+              $ref: "#/components/schemas/UpdateAnnouncementRequest"
       responses:
         "200":
           description: updated
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/Announcement"
+                $ref: "#/components/schemas/AnnouncementResponse"
+        "404":
+          description: Not found
     delete:
       tags:
         - Announcements
-      summary: "刪除公告"
+      summary: "刪除公告 (System Admin)"
       security:
         - bearerAuth: []
       responses:
         "204":
           description: deleted
+        "404":
+          description: Not found
+
+  # ============================
+  # Shared / Common Schemas for Reference
+  # ============================
+  # (The models defined under components/schemas are referenced above)
