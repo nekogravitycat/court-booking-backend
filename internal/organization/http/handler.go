@@ -5,6 +5,7 @@ import (
 	"strconv"
 
 	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
 	"github.com/nekogravitycat/court-booking-backend/internal/organization"
 	"github.com/nekogravitycat/court-booking-backend/internal/pkg/response"
 )
@@ -13,7 +14,7 @@ type OrganizationHandler struct {
 	service organization.Service
 }
 
-func NewOrganizationHandler(service organization.Service) *OrganizationHandler {
+func NewHandler(service organization.Service) *OrganizationHandler {
 	return &OrganizationHandler{service: service}
 }
 
@@ -66,6 +67,12 @@ func (h *OrganizationHandler) Create(c *gin.Context) {
 func (h *OrganizationHandler) Get(c *gin.Context) {
 	id := c.Param("id")
 
+	// Validate UUID format
+	if _, err := uuid.Parse(id); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid organization UUID"})
+		return
+	}
+
 	org, err := h.service.GetByID(c.Request.Context(), id)
 	if err != nil {
 		if err == organization.ErrNotFound {
@@ -84,6 +91,12 @@ func (h *OrganizationHandler) Get(c *gin.Context) {
 // Access Control: System Admin only.
 func (h *OrganizationHandler) Update(c *gin.Context) {
 	id := c.Param("id")
+
+	// Validate UUID format
+	if _, err := uuid.Parse(id); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid organization UUID"})
+		return
+	}
 
 	// Bind to HTTP DTO
 	var body UpdateOrganizationRequest
@@ -117,6 +130,12 @@ func (h *OrganizationHandler) Update(c *gin.Context) {
 func (h *OrganizationHandler) Delete(c *gin.Context) {
 	id := c.Param("id")
 
+	// Validate UUID format
+	if _, err := uuid.Parse(id); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid organization UUID"})
+		return
+	}
+
 	if err := h.service.Delete(c.Request.Context(), id); err != nil {
 		if err == organization.ErrNotFound {
 			c.JSON(http.StatusNotFound, gin.H{"error": "organization not found"})
@@ -132,6 +151,12 @@ func (h *OrganizationHandler) Delete(c *gin.Context) {
 // ListMembers retrieves members of an organization.
 func (h *OrganizationHandler) ListMembers(c *gin.Context) {
 	orgID := c.Param("id")
+
+	// Validate UUID format
+	if _, err := uuid.Parse(orgID); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid organization UUID"})
+		return
+	}
 
 	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
 	pageSize, _ := strconv.Atoi(c.DefaultQuery("page_size", "20"))
@@ -165,9 +190,21 @@ func (h *OrganizationHandler) ListMembers(c *gin.Context) {
 func (h *OrganizationHandler) AddMember(c *gin.Context) {
 	orgID := c.Param("id")
 
+	// Validate UUID format
+	if _, err := uuid.Parse(orgID); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid organization UUID"})
+		return
+	}
+
 	var body AddMemberRequest
 	if err := c.ShouldBindJSON(&body); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request body"})
+		return
+	}
+
+	// Validate UUID format
+	if _, err := uuid.Parse(body.UserID); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid user UUID"})
 		return
 	}
 
@@ -198,9 +235,21 @@ func (h *OrganizationHandler) AddMember(c *gin.Context) {
 func (h *OrganizationHandler) UpdateMemberRole(c *gin.Context) {
 	orgID := c.Param("id")
 
+	// Validate UUID format
+	if _, err := uuid.Parse(orgID); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid organization UUID"})
+		return
+	}
+
 	userID := c.Param("user_id")
 	if userID == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid user id"})
+		return
+	}
+
+	// Validate UUID format
+	if _, err := uuid.Parse(userID); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid user UUID"})
 		return
 	}
 
@@ -232,9 +281,21 @@ func (h *OrganizationHandler) UpdateMemberRole(c *gin.Context) {
 func (h *OrganizationHandler) RemoveMember(c *gin.Context) {
 	orgID := c.Param("id")
 
+	// Validate UUID format
+	if _, err := uuid.Parse(orgID); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid organization UUID"})
+		return
+	}
+
 	userID := c.Param("user_id")
 	if userID == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid user id"})
+		return
+	}
+
+	// Validate UUID format
+	if _, err := uuid.Parse(userID); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid user UUID"})
 		return
 	}
 

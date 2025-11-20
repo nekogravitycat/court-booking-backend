@@ -5,6 +5,7 @@ import (
 	"strconv"
 
 	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
 	"github.com/nekogravitycat/court-booking-backend/internal/auth"
 	"github.com/nekogravitycat/court-booking-backend/internal/location"
 	"github.com/nekogravitycat/court-booking-backend/internal/organization"
@@ -16,7 +17,7 @@ type LocationHandler struct {
 	orgService organization.Service
 }
 
-func NewLocationHandler(service location.Service, orgService organization.Service) *LocationHandler {
+func NewHandler(service location.Service, orgService organization.Service) *LocationHandler {
 	return &LocationHandler{
 		service:    service,
 		orgService: orgService,
@@ -115,6 +116,12 @@ func (h *LocationHandler) Create(c *gin.Context) {
 func (h *LocationHandler) Get(c *gin.Context) {
 	id := c.Param("id")
 
+	// Validate UUID format
+	if _, err := uuid.Parse(id); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid UUID"})
+		return
+	}
+
 	loc, err := h.service.GetByID(c.Request.Context(), id)
 	if err != nil {
 		if err == location.ErrNotFound {
@@ -132,6 +139,12 @@ func (h *LocationHandler) Get(c *gin.Context) {
 // It enforces strict permission checks: only Organization Admins or Owners can update locations.
 func (h *LocationHandler) Update(c *gin.Context) {
 	id := c.Param("id")
+
+	// Validate UUID format
+	if _, err := uuid.Parse(id); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid UUID"})
+		return
+	}
 
 	// Fetch the existing location to determine which organization it belongs to.
 	existingLoc, err := h.service.GetByID(c.Request.Context(), id)
@@ -185,6 +198,12 @@ func (h *LocationHandler) Update(c *gin.Context) {
 // It enforces strict permission checks: only Organization Admins or Owners can delete locations.
 func (h *LocationHandler) Delete(c *gin.Context) {
 	id := c.Param("id")
+
+	// Validate UUID format
+	if _, err := uuid.Parse(id); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid UUID"})
+		return
+	}
 
 	// Fetch the existing location to determine which organization it belongs to.
 	existingLoc, err := h.service.GetByID(c.Request.Context(), id)

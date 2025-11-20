@@ -119,6 +119,24 @@ func TestOrganizationCRUD(t *testing.T) {
 		w := executeRequest("PATCH", "/v1/organizations/"+fakeID, payload, adminToken)
 		assert.Equal(t, http.StatusNotFound, w.Code)
 	})
+
+	t.Run("Interact with Invalid UUID Path Parameter", func(t *testing.T) {
+		invalidPath := "/v1/organizations/not-a-uuid"
+
+		// 1. GET
+		wGet := executeRequest("GET", invalidPath, nil, userToken)
+		assert.Equal(t, http.StatusBadRequest, wGet.Code, "Should return 400 for invalid UUID in GET")
+
+		// 2. PATCH
+		newName := "Should Not Update"
+		payload := orgHttp.UpdateOrganizationRequest{Name: &newName}
+		wPatch := executeRequest("PATCH", invalidPath, payload, adminToken)
+		assert.Equal(t, http.StatusBadRequest, wPatch.Code, "Should return 400 for invalid UUID in PATCH")
+
+		// 3. DELETE
+		wDelete := executeRequest("DELETE", invalidPath, nil, adminToken)
+		assert.Equal(t, http.StatusBadRequest, wDelete.Code, "Should return 400 for invalid UUID in DELETE")
+	})
 }
 
 func TestOrganizationMembers(t *testing.T) {
@@ -216,5 +234,31 @@ func TestOrganizationMembers(t *testing.T) {
 		}
 		w := executeRequest("POST", membersPath, payload, adminToken)
 		assert.Equal(t, http.StatusBadRequest, w.Code, "Should validate role enum")
+	})
+
+	t.Run("Interact with Invalid UUID in Member Routes", func(t *testing.T) {
+		// Case 1: Invalid Organization ID
+		invalidOrgPath := "/v1/organizations/not-a-uuid/members"
+
+		// GET Members
+		wList := executeRequest("GET", invalidOrgPath, nil, adminToken)
+		assert.Equal(t, http.StatusBadRequest, wList.Code, "Should return 400 for invalid Org ID in List Members")
+
+		// POST Member
+		addPayload := orgHttp.AddMemberRequest{UserID: memberUser.ID, Role: "member"}
+		wAdd := executeRequest("POST", invalidOrgPath, addPayload, adminToken)
+		assert.Equal(t, http.StatusBadRequest, wAdd.Code, "Should return 400 for invalid Org ID in Add Member")
+
+		// Case 2: Valid Organization ID but Invalid User ID (for PATCH/DELETE)
+		invalidUserPath := fmt.Sprintf("/v1/organizations/%s/members/not-a-uuid", orgID)
+
+		// PATCH Member
+		updatePayload := orgHttp.UpdateMemberRequest{Role: "admin"}
+		wPatch := executeRequest("PATCH", invalidUserPath, updatePayload, adminToken)
+		assert.Equal(t, http.StatusBadRequest, wPatch.Code, "Should return 400 for invalid User ID in Update Member")
+
+		// DELETE Member
+		wDelete := executeRequest("DELETE", invalidUserPath, nil, adminToken)
+		assert.Equal(t, http.StatusBadRequest, wDelete.Code, "Should return 400 for invalid User ID in Remove Member")
 	})
 }

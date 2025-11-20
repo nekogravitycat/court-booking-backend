@@ -16,7 +16,7 @@ type UserHandler struct {
 	jwtManager  *auth.JWTManager
 }
 
-func NewUserHandler(userService user.Service, jwtManager *auth.JWTManager) *UserHandler {
+func NewHandler(userService user.Service, jwtManager *auth.JWTManager) *UserHandler {
 	return &UserHandler{
 		userService: userService,
 		jwtManager:  jwtManager,
@@ -95,6 +95,12 @@ func (h *UserHandler) Me(c *gin.Context) {
 	userID := auth.GetUserID(c)
 	if userID == "" {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+		return
+	}
+
+	// Validate UUID format
+	if _, err := uuid.Parse(userID); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid UUID"})
 		return
 	}
 

@@ -8,14 +8,11 @@ import (
 func RegisterRoutes(g *gin.RouterGroup, h *OrganizationHandler, authMiddleware, adminMiddleware gin.HandlerFunc) {
 	orgGroup := g.Group("/organizations")
 
-	// === General Routes (Authenticated Users) ===
+	// === Authenticated Routes ===
 	orgGroup.Use(authMiddleware)
 	{
-		// List active organizations
-		orgGroup.GET("", h.List)
-
-		// Get organization details
-		orgGroup.GET("/:id", h.Get)
+		orgGroup.GET("", h.List)    // List active organizations
+		orgGroup.GET("/:id", h.Get) // Get organization details
 	}
 
 	// === Administration Routes (System Admin Only) ===

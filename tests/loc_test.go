@@ -243,4 +243,22 @@ func TestLocationCRUDAndPermissions(t *testing.T) {
 		wDelete := executeRequest("DELETE", path, nil, ownerAToken)
 		assert.Equal(t, http.StatusNotFound, wDelete.Code)
 	})
+
+	t.Run("Interact with Invalid UUID Path Parameter", func(t *testing.T) {
+		invalidPath := "/v1/locations/not-a-uuid"
+
+		// 1. GET
+		wGet := executeRequest("GET", invalidPath, nil, strangerToken)
+		assert.Equal(t, http.StatusBadRequest, wGet.Code, "Should return 400 for invalid UUID in GET")
+
+		// 2. PATCH
+		newName := "Should Not Update"
+		payload := locHttp.UpdateLocationBody{Name: &newName}
+		wPatch := executeRequest("PATCH", invalidPath, payload, ownerAToken)
+		assert.Equal(t, http.StatusBadRequest, wPatch.Code, "Should return 400 for invalid UUID in PATCH")
+
+		// 3. DELETE
+		wDelete := executeRequest("DELETE", invalidPath, nil, adminAToken)
+		assert.Equal(t, http.StatusBadRequest, wDelete.Code, "Should return 400 for invalid UUID in DELETE")
+	})
 }

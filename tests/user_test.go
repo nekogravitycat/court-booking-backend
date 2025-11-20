@@ -159,8 +159,17 @@ func TestUserNotFoundAndInvalidInput(t *testing.T) {
 		assert.Equal(t, http.StatusNotFound, w.Code, "Should return 404 for non-existent user")
 	})
 
-	t.Run("Get Invalid UUID", func(t *testing.T) {
-		wInvalid := executeRequest("GET", "/v1/users/not-a-uuid", nil, token)
-		assert.Equal(t, http.StatusBadRequest, wInvalid.Code, "Should return 400 for invalid UUID")
+	t.Run("Interact with Invalid UUID", func(t *testing.T) {
+		invalidPath := "/v1/users/not-a-uuid"
+
+		// 1. GET
+		wGet := executeRequest("GET", invalidPath, nil, token)
+		assert.Equal(t, http.StatusBadRequest, wGet.Code, "Should return 400 for invalid UUID in GET")
+
+		// 2. PATCH
+		isActive := false
+		payload := userHttp.UpdateUserBody{IsActive: &isActive}
+		wPatch := executeRequest("PATCH", invalidPath, payload, token)
+		assert.Equal(t, http.StatusBadRequest, wPatch.Code, "Should return 400 for invalid UUID in PATCH")
 	})
 }
