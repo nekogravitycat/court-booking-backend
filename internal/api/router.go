@@ -1,6 +1,7 @@
 package api
 
 import (
+	"slices"
 	"strings"
 
 	"github.com/gin-contrib/cors"
@@ -26,7 +27,7 @@ import (
 // Config holds all dependencies required to initialize the router.
 type Config struct {
 	AppEnv         string
-	ProdOrigin     string
+	ProdOrigins    string
 	UserService    user.Service
 	OrgService     organization.Service
 	LocService     location.Service
@@ -47,16 +48,20 @@ func NewRouter(cfg Config) *gin.Engine {
 	// CORS
 	config := cors.DefaultConfig()
 
+	// Parse allowed origins from config
+	allowedOrigins := strings.Split(cfg.ProdOrigins, ",")
+	for i, o := range allowedOrigins {
+		allowedOrigins[i] = strings.TrimSpace(o)
+	}
+
 	if cfg.AppEnv == "prod" {
 		// Production: Strict mode, only allow exact domain match
-		config.AllowOrigins = []string{
-			cfg.ProdOrigin,
-		}
+		config.AllowOrigins = allowedOrigins
 	} else {
 		// Dev / Local: Use AllowOriginFunc to check dynamically
 		config.AllowOriginFunc = func(origin string) bool {
-			// Allow the Prod Origin (useful for debugging)
-			if origin == cfg.ProdOrigin {
+			// Allow Prod Origins
+			if slices.Contains(allowedOrigins, origin) {
 				return true
 			}
 			// Allow localhost with ANY port

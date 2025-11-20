@@ -39,7 +39,7 @@ func main() {
 	// Initialize App Container
 	appContainer := app.NewContainer(app.Config{
 		AppEnv:       cfg.AppEnv,
-		ProdOrigin:   cfg.ProdOrigin,
+		ProdOrigins:  cfg.ProdOrigins,
 		DBPool:       pool,
 		JWTSecret:    cfg.JWTSecret,
 		JWTTTL:       cfg.JWTAccessTokenTTL,
