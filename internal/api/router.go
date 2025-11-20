@@ -4,6 +4,8 @@ import (
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
 
+	"github.com/nekogravitycat/court-booking-backend/internal/announcement"
+	annHttp "github.com/nekogravitycat/court-booking-backend/internal/announcement/http"
 	"github.com/nekogravitycat/court-booking-backend/internal/auth"
 	"github.com/nekogravitycat/court-booking-backend/internal/booking"
 	bookingHttp "github.com/nekogravitycat/court-booking-backend/internal/booking/http"
@@ -27,6 +29,7 @@ type Config struct {
 	RTService      resourcetype.Service
 	ResService     resource.Service
 	BookingService booking.Service
+	AnnService     announcement.Service
 	JWTManager     *auth.JWTManager
 }
 
@@ -57,6 +60,7 @@ func NewRouter(cfg Config) *gin.Engine {
 	rtHandler := rtHttp.NewHandler(cfg.RTService, cfg.OrgService)
 	resHandler := resHttp.NewHandler(cfg.ResService, cfg.LocService, cfg.OrgService)
 	bookingHandler := bookingHttp.NewHandler(cfg.BookingService, cfg.UserService, cfg.ResService, cfg.LocService, cfg.OrgService)
+	annHandler := annHttp.NewHandler(cfg.AnnService)
 
 	// Register Routes
 	v1 := r.Group("/v1")
@@ -67,6 +71,7 @@ func NewRouter(cfg Config) *gin.Engine {
 		rtHttp.RegisterRoutes(v1, rtHandler, authMiddleware)
 		resHttp.RegisterRoutes(v1, resHandler, authMiddleware)
 		bookingHttp.RegisterRoutes(v1, bookingHandler, authMiddleware)
+		annHttp.RegisterRoutes(v1, annHandler, authMiddleware, sysAdminMiddleware)
 	}
 
 	return r

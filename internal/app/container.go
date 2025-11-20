@@ -5,6 +5,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/nekogravitycat/court-booking-backend/internal/announcement"
 	"github.com/nekogravitycat/court-booking-backend/internal/api"
 	"github.com/nekogravitycat/court-booking-backend/internal/auth"
 	"github.com/nekogravitycat/court-booking-backend/internal/booking"
@@ -59,6 +60,10 @@ func NewContainer(cfg Config) *Container {
 	bookingRepo := booking.NewPgxRepository(cfg.DBPool)
 	bookingService := booking.NewService(bookingRepo, resService, locService, orgService)
 
+	// Announcement Module
+	annRepo := announcement.NewPgxRepository(cfg.DBPool)
+	annService := announcement.NewService(annRepo)
+
 	// API Router Config
 	routerParams := api.Config{
 		UserService:    userService,
@@ -67,6 +72,7 @@ func NewContainer(cfg Config) *Container {
 		RTService:      rtService,
 		ResService:     resService,
 		BookingService: bookingService,
+		AnnService:     annService,
 		JWTManager:     jwtManager,
 	}
 

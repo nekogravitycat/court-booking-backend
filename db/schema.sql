@@ -46,6 +46,7 @@ CREATE TABLE IF NOT EXISTS public.organizations (
 CREATE TABLE IF NOT EXISTS public.announcements (
   id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),      -- Announcement ID (UUID)
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),              -- Creation timestamp
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),              -- Last update timestamp (New)
   title      TEXT NOT NULL,                                   -- Announcement title
   content    TEXT NOT NULL                                    -- Announcement body/content
 );
