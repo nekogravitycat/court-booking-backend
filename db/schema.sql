@@ -105,6 +105,8 @@ CREATE TABLE IF NOT EXISTS public.resource_types (
   id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),      -- Resource type ID (UUID)
   created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),              -- Creation timestamp
   organization_id UUID NOT NULL,                                   -- Owning organization
+  name            TEXT NOT NULL,                                   -- Type name (e.g. "Badminton Court")
+  description     TEXT NOT NULL DEFAULT '',                        -- Description
   CONSTRAINT resource_types_organization_id_fkey
     FOREIGN KEY (organization_id) REFERENCES public.organizations(id)
 );

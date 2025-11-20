@@ -9,27 +9,29 @@ import (
 	locHttp "github.com/nekogravitycat/court-booking-backend/internal/location/http"
 	"github.com/nekogravitycat/court-booking-backend/internal/organization"
 	orgHttp "github.com/nekogravitycat/court-booking-backend/internal/organization/http"
+	"github.com/nekogravitycat/court-booking-backend/internal/resourcetype"
+	rtHttp "github.com/nekogravitycat/court-booking-backend/internal/resourcetype/http"
 	"github.com/nekogravitycat/court-booking-backend/internal/user"
 	userHttp "github.com/nekogravitycat/court-booking-backend/internal/user/http"
 )
 
-// NewRouter initializes the HTTP router engine.
-// It is responsible for assembling middleware (CORS, Logger, Auth) and registering routes for various modules.
-func NewRouter(
-	userService user.Service,
-	orgService organization.Service,
-	locService location.Service,
-	jwtManager *auth.JWTManager,
-) *gin.Engine {
+// Config holds all dependencies required to initialize the router.
+type Config struct {
+	UserService user.Service
+	OrgService  organization.Service
+	LocService  location.Service
+	RTService   resourcetype.Service
+	JWTManager  *auth.JWTManager
+}
 
+// NewRouter initializes the HTTP router engine using the provided config.
+func NewRouter(cfg Config) *gin.Engine {
 	r := gin.New()
 
-	// Global Middleware:
-	// - Logger: Logs request information to the console.
-	// - Recovery: Captures panics to prevent server crashes and returns a 500 error.
+	// Global Middleware
 	r.Use(gin.Logger(), gin.Recovery())
 
-	// Configure CORS (Cross-Origin Resource Sharing).
+	// CORS
 	config := cors.DefaultConfig()
 	config.AllowOrigins = []string{
 		"http://localhost:8081", // Swagger
@@ -38,22 +40,23 @@ func NewRouter(
 	config.AllowHeaders = []string{"Origin", "Content-Type", "Authorization"}
 	r.Use(cors.New(config))
 
-	// authMiddleware: Validates if the request contains a valid JWT.
-	authMiddleware := auth.AuthRequired(jwtManager)
-	// sysAdminMiddleware: Further checks if the authenticated user has System Admin privileges.
-	sysAdminMiddleware := RequireSystemAdmin(userService)
+	// Auth Middleware
+	authMiddleware := auth.AuthRequired(cfg.JWTManager)
+	sysAdminMiddleware := RequireSystemAdmin(cfg.UserService)
 
-	// Initialize HTTP Handlers for each module (injecting Service dependencies).
-	userHandler := userHttp.NewUserHandler(userService, jwtManager)
-	orgHandler := orgHttp.NewOrganizationHandler(orgService)
-	locHandler := locHttp.NewLocationHandler(locService, orgService)
+	// Initialize Handlers (Injecting Services from cfg)
+	userHandler := userHttp.NewHandler(cfg.UserService, cfg.JWTManager)
+	orgHandler := orgHttp.NewHandler(cfg.OrgService)
+	locHandler := locHttp.NewHandler(cfg.LocService, cfg.OrgService)
+	rtHandler := rtHttp.NewHandler(cfg.RTService, cfg.OrgService)
 
-	// Register API routes under /v1
+	// Register Routes
 	v1 := r.Group("/v1")
 	{
 		userHttp.RegisterRoutes(v1, userHandler, authMiddleware, sysAdminMiddleware)
 		orgHttp.RegisterRoutes(v1, orgHandler, authMiddleware, sysAdminMiddleware)
 		locHttp.RegisterRoutes(v1, locHandler, authMiddleware)
+		rtHttp.RegisterRoutes(v1, rtHandler, authMiddleware)
 	}
 
 	return r
