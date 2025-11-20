@@ -193,6 +193,89 @@ npx repomix
 
 ## 📋 開發規範
 
-- **Git Commit**：請使用英文撰寫 Commit Message。
-- **程式碼風格**：符合 Go 標準 (`go fmt`)。註解使用英文撰寫，不得使用 Emoji。
-- **錯誤處理**：盡量在 Service 層回傳具體的 `error` 變數 (如 `ErrNotFound`)，由 Handler 層決定 HTTP Status Code。
+### 1. 程式碼風格
+
+  * **格式化**：嚴格遵守 Go 標準格式 (`go fmt`)。
+  * **註解**：所有註解必須使用**英文**撰寫。
+  * **禁止 Emojis**：程式碼與註解中不得出現 Emoji。
+
+### 2. 錯誤處理架構
+
+為確保系統穩定性並避免非預期的 500 Internal Server Error，本專案實施嚴格的錯誤處理分層策略。
+
+#### A. Model 層 (`internal/*/model.go`)
+
+  * **定義來源**：所有的「業務邏輯錯誤」必須在此層預先定義。
+  * **範例**:
+    ```go
+    var (
+      ErrNotFound      = errors.New("resource not found")
+      ErrNameRequired  = errors.New("name is required")
+      ErrOrgIDRequired = errors.New("organization_id is required")
+    )
+    ```
+
+#### B. Service 層 (`internal/*/service.go`)
+
+  * **禁止動態錯誤**：嚴禁在業務邏輯判斷中使用 `errors.New()` 或 `fmt.Errorf()` 憑空創造錯誤。必須回傳 Model 層定義好的 `Err` 變數。
+  * **系統錯誤例外**：僅有底層系統錯誤（如 Password Hashing 失敗、DB 連線斷裂）才允許使用 `fmt.Errorf` 進行 wrap，這類錯誤最終應導致 HTTP 500。
+  * **預先檢查 (Pre-checks)**:
+      * 若操作涉及關聯資料（Foreign Key），**必須**透過 Dependency Injection 注入對應的 Service 進行存在性檢查。
+      * **禁止**依賴資料庫層級拋出的 Foreign Key Violation Error，這會導致錯誤代碼模糊不清。
+      * 範例：建立 `Location` 前，Service 需先呼叫 `orgService.GetByID` 確認組織存在，若不存在則回傳 `organization.ErrOrgNotFound`。
+
+#### C. Handler 層 (`internal/*/http/handler.go`)
+
+  * **統一判斷式**：嚴格禁止使用 `if err == model.ErrX`。必須統一使用 `switch` 搭配 `errors.Is`。
+  * **Default 500**：`switch` 的 `default` 分支必須處理所有未預期的錯誤，並回傳 `500 Internal Server Error`。
+  * **範例**:
+    ```go
+    if err := h.service.Delete(ctx, id); err != nil {
+      switch {
+      case errors.Is(err, location.ErrNotFound):
+        c.JSON(http.StatusNotFound, gin.H{"error": "location not found"})
+      case errors.Is(err, organization.ErrPermissionDenied):
+        c.JSON(http.StatusForbidden, gin.H{"error": "permission denied"})
+      default:
+        // 捕捉所有未列舉的錯誤 (包含 DB 連線錯誤、Hashing 錯誤等)
+        c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to delete location"})
+      }
+      return
+    }
+    ```
+
+### 3. 架構分層職責
+
+  * **Handler Layer (`http`)**:
+      * 負責解析 HTTP Request (Body, Query, Param)。
+      * 負責權限檢查 (Middleware 或 Service 輔助)。
+      * **不包含業務邏輯**。
+      * 負責將 Service 回傳的 Go error 映射為 HTTP Status Code。
+  * **Service Layer**:
+      * 核心業務邏輯中心。
+      * 負責跨模組的邏輯串接 (e.g., Booking Service 呼叫 Location Service)。
+      * **不包含 HTTP 相關依賴** (如 `gin.Context`)。
+  * **Repository Layer**:
+      * 負責 Raw SQL 執行與資料庫互動。
+      * 負責將 SQL Row Scan 轉為 Go Struct。
+      * 使用 `pgx` driver。
+
+### 4. 資料庫規範
+
+  * **Raw SQL**：本專案不使用 ORM，請撰寫乾淨的 SQL 語句。
+  * **Soft Delete**：對於主要實體（Organization, User 等），優先採用 `is_active` 機制，避免實體資料刪除。
+  * **Schema**：變更需同步更新 `db/schema.sql`。
+
+### 5. API 回應格式
+
+  * **成功**：回傳 JSON 物件。
+  * **列表**：必須包含分頁資訊。
+    ```json
+    {
+      "items": [],
+      "page": 1,
+      "page_size": 20,
+      "total": 100
+    }
+    ```
+  * **錯誤**：必須回傳 `{"error": "description"}` 格式。

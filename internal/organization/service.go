@@ -2,7 +2,10 @@ package organization
 
 import (
 	"context"
+	"errors"
 	"strings"
+
+	"github.com/nekogravitycat/court-booking-backend/internal/user"
 )
 
 // UpdateOrganizationRequest defines the fields that can be updated.
@@ -39,12 +42,13 @@ type Service interface {
 }
 
 type service struct {
-	repo Repository
+	repo        Repository
+	userService user.Service
 }
 
 // NewService creates a new organization service.
-func NewService(repo Repository) Service {
-	return &service{repo: repo}
+func NewService(repo Repository, userService user.Service) Service {
+	return &service{repo: repo, userService: userService}
 }
 
 // ------------------------
@@ -137,9 +141,19 @@ func (s *service) AddMember(ctx context.Context, orgID string, req AddMemberRequ
 		return ErrInvalidRole
 	}
 
-	// Verify organization exists first
+	// Verify organization exists
 	if _, err := s.repo.GetByID(ctx, orgID); err != nil {
 		return err
+	}
+
+	// Verify user exists
+	if _, err := s.userService.GetByID(ctx, req.UserID); err != nil {
+		switch {
+		case errors.Is(err, user.ErrNotFound):
+			return ErrUserNotFound
+		default:
+			return err
+		}
 	}
 
 	return s.repo.AddMember(ctx, orgID, req.UserID, req.Role)

@@ -190,10 +190,6 @@ func (r *pgxRepository) AddMember(ctx context.Context, orgID string, userID stri
 			if pgErr.Code == pgerrcode.UniqueViolation {
 				return ErrUserAlreadyMember
 			}
-			// Check for foreign key violation (user or org does not exist)
-			if pgErr.Code == pgerrcode.ForeignKeyViolation {
-				return ErrUserNotFound // Or generic bad request
-			}
 		}
 		return fmt.Errorf("AddMember failed: %w", err)
 	}

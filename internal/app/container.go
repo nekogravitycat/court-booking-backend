@@ -41,7 +41,7 @@ func NewContainer(cfg Config) *Container {
 
 	// Organization Module
 	orgRepo := organization.NewPgxRepository(cfg.DBPool)
-	orgService := organization.NewService(orgRepo)
+	orgService := organization.NewService(orgRepo, userService)
 
 	// Location Module
 	locRepo := location.NewPgxRepository(cfg.DBPool)
