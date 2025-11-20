@@ -22,6 +22,7 @@ type Repository interface {
 	Update(ctx context.Context, org *Organization) error
 	Delete(ctx context.Context, id string) error
 	// Member methods
+	GetMember(ctx context.Context, orgID string, userID string) (*Member, error)
 	AddMember(ctx context.Context, orgID string, userID string, role string) error
 	RemoveMember(ctx context.Context, orgID string, userID string) error
 	UpdateMemberRole(ctx context.Context, orgID string, userID string, role string) error
@@ -149,6 +150,33 @@ func (r *pgxRepository) Delete(ctx context.Context, id string) error {
 // ------------------------
 //     Member methods
 // ------------------------
+
+// GetMember retrieves a member's details from organization_permissions.
+// Returns ErrNotFound if the user is not a member of the organization.
+func (r *pgxRepository) GetMember(ctx context.Context, orgID string, userID string) (*Member, error) {
+	const query = `
+		SELECT
+				u.id,
+				u.email,
+				u.display_name,
+				op.role
+		FROM public.organization_permissions op
+		JOIN public.users u ON op.user_id = u.id
+		WHERE op.organization_id = $1 AND op.user_id = $2
+	`
+
+	row := r.pool.QueryRow(ctx, query, orgID, userID)
+
+	var m Member
+	if err := row.Scan(&m.UserID, &m.Email, &m.DisplayName, &m.Role); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, ErrNotFound // User is not a member of the organization
+		}
+		return nil, fmt.Errorf("GetMember failed: %w", err)
+	}
+
+	return &m, nil
+}
 
 // AddMember inserts a new record into organization_permissions.
 func (r *pgxRepository) AddMember(ctx context.Context, orgID string, userID string, role string) error {

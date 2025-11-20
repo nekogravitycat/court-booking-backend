@@ -32,6 +32,7 @@ type Service interface {
 	Update(ctx context.Context, id string, req UpdateOrganizationRequest) (*Organization, error)
 	Delete(ctx context.Context, id string) error
 	// Member methods
+	GetMember(ctx context.Context, orgID string, userID string) (*Member, error)
 	AddMember(ctx context.Context, orgID string, req AddMemberRequest) error
 	RemoveMember(ctx context.Context, orgID string, userID string) error
 	UpdateMemberRole(ctx context.Context, orgID string, userID string, req UpdateMemberRequest) error
@@ -122,6 +123,10 @@ func (s *service) Delete(ctx context.Context, id string) error {
 // ------------------------
 //     Member methods
 // ------------------------
+
+func (s *service) GetMember(ctx context.Context, orgID string, userID string) (*Member, error) {
+	return s.repo.GetMember(ctx, orgID, userID)
+}
 
 func (s *service) AddMember(ctx context.Context, orgID string, req AddMemberRequest) error {
 	if req.UserID == "" {

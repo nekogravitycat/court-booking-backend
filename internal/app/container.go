@@ -7,6 +7,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/nekogravitycat/court-booking-backend/internal/api"
 	"github.com/nekogravitycat/court-booking-backend/internal/auth"
+	"github.com/nekogravitycat/court-booking-backend/internal/location"
 	"github.com/nekogravitycat/court-booking-backend/internal/organization"
 	"github.com/nekogravitycat/court-booking-backend/internal/user"
 )
@@ -39,8 +40,12 @@ func NewContainer(cfg Config) *Container {
 	orgRepo := organization.NewPgxRepository(cfg.DBPool)
 	orgService := organization.NewService(orgRepo)
 
+	// Location Module
+	locRepo := location.NewPgxRepository(cfg.DBPool)
+	locService := location.NewService(locRepo)
+
 	// Router
-	router := api.NewRouter(userService, orgService, jwtManager)
+	router := api.NewRouter(userService, orgService, locService, jwtManager)
 
 	return &Container{
 		Router:     router,

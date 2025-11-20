@@ -5,6 +5,8 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"github.com/nekogravitycat/court-booking-backend/internal/auth"
+	"github.com/nekogravitycat/court-booking-backend/internal/location"
+	locHttp "github.com/nekogravitycat/court-booking-backend/internal/location/http"
 	"github.com/nekogravitycat/court-booking-backend/internal/organization"
 	orgHttp "github.com/nekogravitycat/court-booking-backend/internal/organization/http"
 	"github.com/nekogravitycat/court-booking-backend/internal/user"
@@ -16,6 +18,7 @@ import (
 func NewRouter(
 	userService user.Service,
 	orgService organization.Service,
+	locService location.Service,
 	jwtManager *auth.JWTManager,
 ) *gin.Engine {
 
@@ -43,12 +46,14 @@ func NewRouter(
 	// Initialize HTTP Handlers for each module (injecting Service dependencies).
 	userHandler := userHttp.NewUserHandler(userService, jwtManager)
 	orgHandler := orgHttp.NewOrganizationHandler(orgService)
+	locHandler := locHttp.NewLocationHandler(locService, orgService)
 
 	// Register API routes under /v1
 	v1 := r.Group("/v1")
 	{
 		userHttp.RegisterRoutes(v1, userHandler, authMiddleware, sysAdminMiddleware)
 		orgHttp.RegisterRoutes(v1, orgHandler, authMiddleware, sysAdminMiddleware)
+		locHttp.RegisterRoutes(v1, locHandler, authMiddleware)
 	}
 
 	return r

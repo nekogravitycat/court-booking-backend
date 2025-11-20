@@ -75,6 +75,7 @@ CREATE TABLE IF NOT EXISTS public.locations (
   id                   UUID PRIMARY KEY DEFAULT gen_random_uuid(),      -- Location ID (UUID)
   created_at           TIMESTAMPTZ NOT NULL DEFAULT now(),              -- Creation timestamp
   organization_id      UUID NOT NULL,                                   -- Owning organization
+  name                 TEXT NOT NULL,                                   -- Display name (e.g. "Xinyi Branch")
   capacity             BIGINT NOT NULL,                                 -- Max capacity (e.g. people)
   opening_hours_start  TIME WITHOUT TIME ZONE NOT NULL,                 -- Daily opening time
   opening_hours_end    TIME WITHOUT TIME ZONE NOT NULL,                 -- Daily closing time
