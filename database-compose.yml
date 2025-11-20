@@ -1,0 +1,18 @@
+services:
+  db:
+    image: postgres:latest
+    container_name: court-booking-db
+    restart: always
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    ports:
+      - "5432:5432"
+    volumes:
+      - db-data:/var/lib/postgresql/data
+      - ./db:/docker-entrypoint-initdb.d
+    shm_size: 128mb
+
+volumes:
+  db-data:

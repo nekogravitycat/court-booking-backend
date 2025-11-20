@@ -1,19 +1,43 @@
 services:
   db:
-    image: postgres:18
+    image: postgres:latest
     container_name: court-booking-db
     restart: always
     environment:
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       POSTGRES_DB: ${POSTGRES_DB}
-      POSTGRES_TEST_DB: ${POSTGRES_TEST_DB}
-    ports:
-      - "5432:5432"
     volumes:
       - db-data:/var/lib/postgresql
       - ./db:/docker-entrypoint-initdb.d
     shm_size: 128mb
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: court-booking-api
+    restart: always
+    ports:
+      - "8080:8080"
+    environment:
+      APP_ENV: ${APP_ENV}
+      HTTP_ADDR: :8080
+      DB_DSN: postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}?sslmode=disable
+      TEST_DB_DSN: postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_TEST_DB}?sslmode=disable
+      JWT_SECRET: ${JWT_SECRET}
+      TEST_JWT_SECRET: ${TEST_JWT_SECRET}
+      JWT_ACCESS_TOKEN_TTL: ${JWT_ACCESS_TOKEN_TTL}
+      TZ: Asia/Taipei
+    depends_on:
+      db:
+        condition: service_healthy
+
   swagger-ui:
     image: docker.swagger.io/swaggerapi/swagger-ui
     container_name: court-booking-swagger

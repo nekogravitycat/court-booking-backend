@@ -126,7 +126,7 @@ components:
         - is_active
         - is_system_admin
 
-    UserWrapperResponse:
+    MeResponse:
       type: object
       description: 包裝 User 物件的回應格式
       properties:
