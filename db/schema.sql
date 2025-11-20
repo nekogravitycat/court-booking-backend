@@ -119,6 +119,7 @@ CREATE TABLE IF NOT EXISTS public.resource_types (
 -- =========================================================
 CREATE TABLE IF NOT EXISTS public.resources (
   id               UUID PRIMARY KEY DEFAULT gen_random_uuid(),      -- Resource ID (UUID)
+  name             TEXT NOT NULL,                                   -- Resource name
   created_at       TIMESTAMPTZ NOT NULL DEFAULT now(),              -- Creation timestamp
   resource_type_id UUID NOT NULL,                                   -- Type of this resource
   location_id      UUID NOT NULL,                                   -- Physical location
@@ -201,3 +202,4 @@ CREATE INDEX IF NOT EXISTS idx_bookings_resource_time
 -- Index for querying bookings by user (user booking history)
 CREATE INDEX IF NOT EXISTS idx_bookings_user_time
   ON public.bookings (user_id, start_time);
+

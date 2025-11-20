@@ -5,10 +5,14 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"github.com/nekogravitycat/court-booking-backend/internal/auth"
+	"github.com/nekogravitycat/court-booking-backend/internal/booking"
+	bookingHttp "github.com/nekogravitycat/court-booking-backend/internal/booking/http"
 	"github.com/nekogravitycat/court-booking-backend/internal/location"
 	locHttp "github.com/nekogravitycat/court-booking-backend/internal/location/http"
 	"github.com/nekogravitycat/court-booking-backend/internal/organization"
 	orgHttp "github.com/nekogravitycat/court-booking-backend/internal/organization/http"
+	"github.com/nekogravitycat/court-booking-backend/internal/resource"
+	resHttp "github.com/nekogravitycat/court-booking-backend/internal/resource/http"
 	"github.com/nekogravitycat/court-booking-backend/internal/resourcetype"
 	rtHttp "github.com/nekogravitycat/court-booking-backend/internal/resourcetype/http"
 	"github.com/nekogravitycat/court-booking-backend/internal/user"
@@ -17,11 +21,13 @@ import (
 
 // Config holds all dependencies required to initialize the router.
 type Config struct {
-	UserService user.Service
-	OrgService  organization.Service
-	LocService  location.Service
-	RTService   resourcetype.Service
-	JWTManager  *auth.JWTManager
+	UserService    user.Service
+	OrgService     organization.Service
+	LocService     location.Service
+	RTService      resourcetype.Service
+	ResService     resource.Service
+	BookingService booking.Service
+	JWTManager     *auth.JWTManager
 }
 
 // NewRouter initializes the HTTP router engine using the provided config.
@@ -49,6 +55,8 @@ func NewRouter(cfg Config) *gin.Engine {
 	orgHandler := orgHttp.NewHandler(cfg.OrgService)
 	locHandler := locHttp.NewHandler(cfg.LocService, cfg.OrgService)
 	rtHandler := rtHttp.NewHandler(cfg.RTService, cfg.OrgService)
+	resHandler := resHttp.NewHandler(cfg.ResService, cfg.LocService, cfg.OrgService)
+	bookingHandler := bookingHttp.NewHandler(cfg.BookingService, cfg.UserService, cfg.ResService, cfg.LocService, cfg.OrgService)
 
 	// Register Routes
 	v1 := r.Group("/v1")
@@ -57,6 +65,8 @@ func NewRouter(cfg Config) *gin.Engine {
 		orgHttp.RegisterRoutes(v1, orgHandler, authMiddleware, sysAdminMiddleware)
 		locHttp.RegisterRoutes(v1, locHandler, authMiddleware)
 		rtHttp.RegisterRoutes(v1, rtHandler, authMiddleware)
+		resHttp.RegisterRoutes(v1, resHandler, authMiddleware)
+		bookingHttp.RegisterRoutes(v1, bookingHandler, authMiddleware)
 	}
 
 	return r

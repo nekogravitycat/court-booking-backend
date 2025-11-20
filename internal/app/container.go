@@ -7,8 +7,10 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/nekogravitycat/court-booking-backend/internal/api"
 	"github.com/nekogravitycat/court-booking-backend/internal/auth"
+	"github.com/nekogravitycat/court-booking-backend/internal/booking"
 	"github.com/nekogravitycat/court-booking-backend/internal/location"
 	"github.com/nekogravitycat/court-booking-backend/internal/organization"
+	"github.com/nekogravitycat/court-booking-backend/internal/resource"
 	"github.com/nekogravitycat/court-booking-backend/internal/resourcetype"
 	"github.com/nekogravitycat/court-booking-backend/internal/user"
 )
@@ -49,13 +51,23 @@ func NewContainer(cfg Config) *Container {
 	rtRepo := resourcetype.NewPgxRepository(cfg.DBPool)
 	rtService := resourcetype.NewService(rtRepo)
 
+	// Resource Module
+	resRepo := resource.NewPgxRepository(cfg.DBPool)
+	resService := resource.NewService(resRepo, locService, rtService)
+
+	// Booking Module
+	bookingRepo := booking.NewPgxRepository(cfg.DBPool)
+	bookingService := booking.NewService(bookingRepo, resService, locService, orgService)
+
 	// API Router Config
 	routerParams := api.Config{
-		UserService: userService,
-		OrgService:  orgService,
-		LocService:  locService,
-		RTService:   rtService,
-		JWTManager:  jwtManager,
+		UserService:    userService,
+		OrgService:     orgService,
+		LocService:     locService,
+		RTService:      rtService,
+		ResService:     resService,
+		BookingService: bookingService,
+		JWTManager:     jwtManager,
 	}
 
 	// Router
