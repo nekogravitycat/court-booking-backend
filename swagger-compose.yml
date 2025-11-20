@@ -8,4 +8,4 @@ services:
     environment:
       - SWAGGER_JSON=/docs/openapi.yml
     volumes:
-      - ./docs/openapi.yml:/docs/openapi.yml
+      - ./docs:/docs

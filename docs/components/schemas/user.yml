@@ -1,0 +1,86 @@
+UserResponse:
+  type: object
+  properties:
+    id:
+      type: string
+      format: uuid
+    email:
+      type: string
+      format: email
+    display_name:
+      type: string
+      nullable: true
+    created_at:
+      type: string
+      format: date-time
+    last_login_at:
+      type: string
+      format: date-time
+      nullable: true
+    is_active:
+      type: boolean
+    is_system_admin:
+      type: boolean
+  required:
+    - id
+    - email
+    - created_at
+    - is_active
+    - is_system_admin
+
+MeResponse:
+  type: object
+  description: 包裝 User 物件的回應格式
+  properties:
+    user:
+      $ref: "#/UserResponse"
+  required:
+    - user
+
+RegisterRequest:
+  type: object
+  properties:
+    email:
+      type: string
+      format: email
+    password:
+      type: string
+      minLength: 8
+    display_name:
+      type: string
+  required:
+    - email
+    - password
+
+LoginRequest:
+  type: object
+  properties:
+    email:
+      type: string
+      format: email
+    password:
+      type: string
+  required:
+    - email
+    - password
+
+LoginResponse:
+  type: object
+  properties:
+    access_token:
+      type: string
+    user:
+      $ref: "#/UserResponse"
+  required:
+    - access_token
+    - user
+
+UpdateUserBody:
+  type: object
+  properties:
+    display_name:
+      type: string
+    is_active:
+      type: boolean
+    is_system_admin:
+      type: boolean

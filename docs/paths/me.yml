@@ -1,0 +1,17 @@
+me:
+  get:
+    tags:
+      - Me
+    summary: "取得目前使用者資訊"
+    operationId: getCurrentUser
+    security:
+      - bearerAuth: []
+    responses:
+      "200":
+        description: Current user profile
+        content:
+          application/json:
+            schema:
+              $ref: "../components/schemas/user.yml#/MeResponse"
+      "401":
+        description: Unauthorized - Token 無效或過期

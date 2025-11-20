@@ -1,0 +1,103 @@
+listMembers:
+  parameters:
+    - name: id
+      in: path
+      required: true
+      description: Organization ID
+      schema:
+        type: string
+        format: uuid
+  get:
+    tags:
+      - Members
+    summary: "列出組織成員"
+    security:
+      - bearerAuth: []
+    parameters:
+      - $ref: "../components/parameters.yml#/page"
+      - $ref: "../components/parameters.yml#/page_size"
+    responses:
+      "200":
+        description: Member list
+        content:
+          application/json:
+            schema:
+              allOf:
+                - $ref: "../components/schemas/common.yml#/PageResponse"
+                - properties:
+                    items:
+                      type: array
+                      items:
+                        $ref: "../components/schemas/member.yml#/MemberResponse"
+  post:
+    tags:
+      - Members
+    summary: "邀請/加入成員 (System Admin)"
+    security:
+      - bearerAuth: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: "../components/schemas/member.yml#/AddMemberRequest"
+    responses:
+      "201":
+        description: Member added successfully
+      "404":
+        description: Organization or User not found
+      "409":
+        description: User is already a member
+
+memberDetail:
+  parameters:
+    - name: id
+      in: path
+      required: true
+      description: Organization ID
+      schema:
+        type: string
+        format: uuid
+    - name: user_id
+      in: path
+      required: true
+      description: User ID
+      schema:
+        type: string
+        format: uuid
+  patch:
+    tags:
+      - Members
+    summary: "修改成員角色 (System Admin)"
+    security:
+      - bearerAuth: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: "../components/schemas/member.yml#/UpdateMemberRequest"
+    responses:
+      "200":
+        description: Role updated
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                status:
+                  type: string
+                  example: "updated"
+      "404":
+        description: Member or Organization not found
+  delete:
+    tags:
+      - Members
+    summary: "移除成員 (System Admin)"
+    security:
+      - bearerAuth: []
+    responses:
+      "204":
+        description: Member removed
+      "404":
+        description: Member or Organization not found

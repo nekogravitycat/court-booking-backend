@@ -1,0 +1,40 @@
+AnnouncementResponse:
+  type: object
+  properties:
+    id:
+      type: string
+      format: uuid
+    title:
+      type: string
+    content:
+      type: string
+    created_at:
+      type: string
+      format: date-time
+    updated_at:
+      type: string
+      format: date-time
+  required:
+    - id
+    - title
+    - content
+    - created_at
+
+CreateAnnouncementRequest:
+  type: object
+  properties:
+    title:
+      type: string
+    content:
+      type: string
+  required:
+    - title
+    - content
+
+UpdateAnnouncementRequest:
+  type: object
+  properties:
+    title:
+      type: string
+    content:
+      type: string

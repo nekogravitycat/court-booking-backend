@@ -1,0 +1,45 @@
+ResourceResponse:
+  type: object
+  properties:
+    id:
+      type: string
+      format: uuid
+    name:
+      type: string
+    resource_type_id:
+      type: string
+      format: uuid
+    location_id:
+      type: string
+      format: uuid
+    created_at:
+      type: string
+      format: date-time
+  required:
+    - id
+    - name
+    - resource_type_id
+    - location_id
+    - created_at
+
+CreateResourceRequest:
+  type: object
+  properties:
+    name:
+      type: string
+    location_id:
+      type: string
+      format: uuid
+    resource_type_id:
+      type: string
+      format: uuid
+  required:
+    - name
+    - location_id
+    - resource_type_id
+
+UpdateResourceRequest:
+  type: object
+  properties:
+    name:
+      type: string

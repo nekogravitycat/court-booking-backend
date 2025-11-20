@@ -1,0 +1,90 @@
+listUsers:
+  get:
+    tags:
+      - Users
+    summary: "列出所有使用者 (System Admin)"
+    security:
+      - bearerAuth: []
+    parameters:
+      - $ref: "../components/parameters.yml#/page"
+      - $ref: "../components/parameters.yml#/page_size"
+      - $ref: "../components/parameters.yml#/sort"
+      - name: email
+        in: query
+        schema:
+          type: string
+        description: 依 Email 搜尋
+      - name: display_name
+        in: query
+        schema:
+          type: string
+        description: 依顯示名稱搜尋
+      - name: is_active
+        in: query
+        schema:
+          type: boolean
+        description: 依啟用狀態篩選
+    responses:
+      "200":
+        description: User list
+        content:
+          application/json:
+            schema:
+              allOf:
+                - $ref: "../components/schemas/common.yml#/PageResponse"
+                - properties:
+                    items:
+                      type: array
+                      items:
+                        $ref: "../components/schemas/user.yml#/UserResponse"
+      "403":
+        description: Forbidden - 非系統管理員
+
+userDetail:
+  parameters:
+    - name: id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+  get:
+    tags:
+      - Users
+    summary: "取得單一使用者詳情 (System Admin)"
+    security:
+      - bearerAuth: []
+    responses:
+      "200":
+        description: User details
+        content:
+          application/json:
+            schema:
+              $ref: "../components/schemas/user.yml#/MeResponse"
+      "403":
+        description: Forbidden
+      "404":
+        description: User Not found
+  patch:
+    tags:
+      - Users
+    summary: "更新使用者狀態/權限 (System Admin)"
+    security:
+      - bearerAuth: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: "../components/schemas/user.yml#/UpdateUserBody"
+    responses:
+      "200":
+        description: Updated user
+        content:
+          application/json:
+            schema:
+              $ref: "../components/schemas/user.yml#/MeResponse"
+      "403":
+        description: Forbidden
+      "404":
+        description: User Not found

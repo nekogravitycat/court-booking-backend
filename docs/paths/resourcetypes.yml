@@ -1,0 +1,108 @@
+listResourceTypes:
+  get:
+    tags:
+      - ResourceTypes
+    summary: "列出 Resource Types"
+    security:
+      - bearerAuth: []
+    parameters:
+      - $ref: "../components/parameters.yml#/page"
+      - $ref: "../components/parameters.yml#/page_size"
+      - name: organization_id
+        in: query
+        schema:
+          type: string
+          format: uuid
+    responses:
+      "200":
+        description: Resource Type list
+        content:
+          application/json:
+            schema:
+              allOf:
+                - $ref: "../components/schemas/common.yml#/PageResponse"
+                - properties:
+                    items:
+                      type: array
+                      items:
+                        $ref: "../components/schemas/resourcetype.yml#/ResourceTypeResponse"
+  post:
+    tags:
+      - ResourceTypes
+    summary: "建立 Resource Type (Organization Owner/Admin)"
+    security:
+      - bearerAuth: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: "../components/schemas/resourcetype.yml#/CreateResourceTypeBody"
+    responses:
+      "201":
+        description: Resource Type created
+        content:
+          application/json:
+            schema:
+              $ref: "../components/schemas/resourcetype.yml#/ResourceTypeResponse"
+      "403":
+        description: Permission denied
+
+resourceTypeDetail:
+  parameters:
+    - name: id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+  get:
+    tags:
+      - ResourceTypes
+    summary: "取得 Resource Type 詳情"
+    security:
+      - bearerAuth: []
+    responses:
+      "200":
+        description: Resource Type details
+        content:
+          application/json:
+            schema:
+              $ref: "../components/schemas/resourcetype.yml#/ResourceTypeResponse"
+      "404":
+        description: Not found
+  patch:
+    tags:
+      - ResourceTypes
+    summary: "更新 Resource Type (Organization Owner/Admin)"
+    security:
+      - bearerAuth: []
+    requestBody:
+      content:
+        application/json:
+          schema:
+            $ref: "../components/schemas/resourcetype.yml#/UpdateResourceTypeBody"
+    responses:
+      "200":
+        description: Updated
+        content:
+          application/json:
+            schema:
+              $ref: "../components/schemas/resourcetype.yml#/ResourceTypeResponse"
+      "403":
+        description: Permission denied
+      "404":
+        description: Not found
+  delete:
+    tags:
+      - ResourceTypes
+    summary: "刪除 Resource Type (Organization Owner/Admin)"
+    security:
+      - bearerAuth: []
+    responses:
+      "204":
+        description: Deleted
+      "403":
+        description: Permission denied
+      "404":
+        description: Not found

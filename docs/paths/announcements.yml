@@ -1,0 +1,104 @@
+listAnnouncements:
+  get:
+    tags:
+      - Announcements
+    summary: "列出公告"
+    security:
+      - bearerAuth: []
+    parameters:
+      - $ref: "../components/parameters.yml#/page"
+      - $ref: "../components/parameters.yml#/page_size"
+      - name: q
+        in: query
+        schema:
+          type: string
+        description: "Keyword search"
+    responses:
+      "200":
+        description: paged announcements
+        content:
+          application/json:
+            schema:
+              allOf:
+                - $ref: "../components/schemas/common.yml#/PageResponse"
+                - properties:
+                    items:
+                      type: array
+                      items:
+                        $ref: "../components/schemas/announcement.yml#/AnnouncementResponse"
+  post:
+    tags:
+      - Announcements
+    summary: "建立公告 (System Admin)"
+    security:
+      - bearerAuth: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: "../components/schemas/announcement.yml#/CreateAnnouncementRequest"
+    responses:
+      "201":
+        description: created
+        content:
+          application/json:
+            schema:
+              $ref: "../components/schemas/announcement.yml#/AnnouncementResponse"
+      "400":
+        description: Missing title or content
+
+announcementDetail:
+  parameters:
+    - name: id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+  get:
+    tags:
+      - Announcements
+    summary: "取得公告詳情"
+    security:
+      - bearerAuth: []
+    responses:
+      "200":
+        description: announcement details
+        content:
+          application/json:
+            schema:
+              $ref: "../components/schemas/announcement.yml#/AnnouncementResponse"
+      "404":
+        description: Not found
+  patch:
+    tags:
+      - Announcements
+    summary: "更新公告 (System Admin)"
+    security:
+      - bearerAuth: []
+    requestBody:
+      content:
+        application/json:
+          schema:
+            $ref: "../components/schemas/announcement.yml#/UpdateAnnouncementRequest"
+    responses:
+      "200":
+        description: updated
+        content:
+          application/json:
+            schema:
+              $ref: "../components/schemas/announcement.yml#/AnnouncementResponse"
+      "404":
+        description: Not found
+  delete:
+    tags:
+      - Announcements
+    summary: "刪除公告 (System Admin)"
+    security:
+      - bearerAuth: []
+    responses:
+      "204":
+        description: deleted
+      "404":
+        description: Not found

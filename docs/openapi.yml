@@ -45,1554 +45,208 @@ components:
 
   parameters:
     page:
-      name: page
-      in: query
-      schema:
-        type: integer
-        minimum: 1
-        default: 1
-      description: 頁碼 (從 1 開始)
+      $ref: "./components/parameters.yml#/page"
     page_size:
-      name: page_size
-      in: query
-      schema:
-        type: integer
-        minimum: 1
-        maximum: 100
-        default: 20
-      description: 每頁顯示筆數
+      $ref: "./components/parameters.yml#/page_size"
     sort:
-      name: sort
-      in: query
-      schema:
-        type: string
-      description: 排序欄位 (例如：created_at, -created_at, email)
+      $ref: "./components/parameters.yml#/sort"
 
   schemas:
     # --------------------------
     # Common Responses
     # --------------------------
     ErrorResponse:
-      type: object
-      properties:
-        error:
-          type: string
-          description: 錯誤訊息描述
-        details:
-          type: string
-          description: 詳細錯誤資訊 (Optional)
-      example:
-        error: "invalid request"
+      $ref: "./components/schemas/common.yml#/ErrorResponse"
 
     PageResponse:
-      type: object
-      properties:
-        items:
-          type: array
-          items:
-            type: object
-        page:
-          type: integer
-        page_size:
-          type: integer
-        total:
-          type: integer
+      $ref: "./components/schemas/common.yml#/PageResponse"
 
     # --------------------------
     # User Models
     # --------------------------
     UserResponse:
-      type: object
-      properties:
-        id:
-          type: string
-          format: uuid
-        email:
-          type: string
-          format: email
-        display_name:
-          type: string
-          nullable: true
-        created_at:
-          type: string
-          format: date-time
-        last_login_at:
-          type: string
-          format: date-time
-          nullable: true
-        is_active:
-          type: boolean
-        is_system_admin:
-          type: boolean
-      required:
-        - id
-        - email
-        - created_at
-        - is_active
-        - is_system_admin
+      $ref: "./components/schemas/user.yml#/UserResponse"
 
     MeResponse:
-      type: object
-      description: 包裝 User 物件的回應格式
-      properties:
-        user:
-          $ref: "#/components/schemas/UserResponse"
-      required:
-        - user
+      $ref: "./components/schemas/user.yml#/MeResponse"
 
     RegisterRequest:
-      type: object
-      properties:
-        email:
-          type: string
-          format: email
-        password:
-          type: string
-          minLength: 8
-        display_name:
-          type: string
-      required:
-        - email
-        - password
+      $ref: "./components/schemas/user.yml#/RegisterRequest"
 
     LoginRequest:
-      type: object
-      properties:
-        email:
-          type: string
-          format: email
-        password:
-          type: string
-      required:
-        - email
-        - password
+      $ref: "./components/schemas/user.yml#/LoginRequest"
 
     LoginResponse:
-      type: object
-      properties:
-        access_token:
-          type: string
-        user:
-          $ref: "#/components/schemas/UserResponse"
-      required:
-        - access_token
-        - user
+      $ref: "./components/schemas/user.yml#/LoginResponse"
 
     UpdateUserBody:
-      type: object
-      properties:
-        display_name:
-          type: string
-        is_active:
-          type: boolean
-        is_system_admin:
-          type: boolean
+      $ref: "./components/schemas/user.yml#/UpdateUserBody"
 
     # --------------------------
     # Organization Models
     # --------------------------
     OrganizationResponse:
-      type: object
-      properties:
-        id:
-          type: string
-          format: uuid
-        name:
-          type: string
-        created_at:
-          type: string
-          format: date-time
-      required:
-        - id
-        - name
-        - created_at
+      $ref: "./components/schemas/organization.yml#/OrganizationResponse"
 
     CreateOrganizationRequest:
-      type: object
-      properties:
-        name:
-          type: string
-      required:
-        - name
-
-    UpdateOrganizationRequest:
-      type: object
-      properties:
-        name:
-          type: string
-        is_active:
-          type: boolean
+      $ref: "./components/schemas/organization.yml#/CreateOrganizationRequest"
 
     # --------------------------
     # Member Models
     # --------------------------
     MemberResponse:
-      type: object
-      properties:
-        user_id:
-          type: string
-          format: uuid
-        email:
-          type: string
-        display_name:
-          type: string
-          nullable: true
-        role:
-          type: string
-          enum: [owner, admin, member]
-      required:
-        - user_id
-        - email
-        - role
+      $ref: "./components/schemas/member.yml#/MemberResponse"
 
     AddMemberRequest:
-      type: object
-      properties:
-        user_id:
-          type: string
-          format: uuid
-        role:
-          type: string
-          enum: [owner, admin, member]
-      required:
-        - user_id
-        - role
+      $ref: "./components/schemas/member.yml#/AddMemberRequest"
 
     UpdateMemberRequest:
-      type: object
-      properties:
-        role:
-          type: string
-          enum: [owner, admin, member]
-      required:
-        - role
+      $ref: "./components/schemas/member.yml#/UpdateMemberRequest"
 
     # --------------------------
     # Location Models
     # --------------------------
     LocationResponse:
-      type: object
-      properties:
-        id:
-          type: string
-          format: uuid
-        organization_id:
-          type: string
-          format: uuid
-        name:
-          type: string
-        created_at:
-          type: string
-          format: date-time
-        capacity:
-          type: integer
-          format: int64
-        opening_hours_start:
-          type: string
-          description: "Format: HH:MM:SS"
-          example: "09:00:00"
-        opening_hours_end:
-          type: string
-          description: "Format: HH:MM:SS"
-          example: "22:00:00"
-        location_info:
-          type: string
-        opening:
-          type: boolean
-        rule:
-          type: string
-        facility:
-          type: string
-        description:
-          type: string
-        longitude:
-          type: number
-          format: double
-        latitude:
-          type: number
-          format: double
-      required:
-        - id
-        - organization_id
-        - name
-        - opening_hours_start
-        - opening_hours_end
-        - longitude
-        - latitude
+      $ref: "./components/schemas/location.yml#/LocationResponse"
 
     CreateLocationBody:
-      type: object
-      properties:
-        organization_id:
-          type: string
-          format: uuid
-        name:
-          type: string
-        capacity:
-          type: integer
-          format: int64
-        opening_hours_start:
-          type: string
-          pattern: "^([0-1]?[0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9]$"
-          example: "09:00:00"
-        opening_hours_end:
-          type: string
-          pattern: "^([0-1]?[0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9]$"
-          example: "22:00:00"
-        location_info:
-          type: string
-        opening:
-          type: boolean
-        rule:
-          type: string
-        facility:
-          type: string
-        description:
-          type: string
-        longitude:
-          type: number
-          minimum: -180
-          maximum: 180
-        latitude:
-          type: number
-          minimum: -90
-          maximum: 90
-      required:
-        - organization_id
-        - name
-        - capacity
-        - opening_hours_start
-        - opening_hours_end
-        - location_info
-        - longitude
-        - latitude
+      $ref: "./components/schemas/location.yml#/CreateLocationBody"
 
     UpdateLocationBody:
-      type: object
-      properties:
-        name:
-          type: string
-        capacity:
-          type: integer
-        opening_hours_start:
-          type: string
-        opening_hours_end:
-          type: string
-        location_info:
-          type: string
-        opening:
-          type: boolean
-        rule:
-          type: string
-        facility:
-          type: string
-        description:
-          type: string
-        longitude:
-          type: number
-        latitude:
-          type: number
+      $ref: "./components/schemas/location.yml#/UpdateLocationBody"
 
     # --------------------------
     # ResourceType Models
     # --------------------------
     ResourceTypeResponse:
-      type: object
-      properties:
-        id:
-          type: string
-          format: uuid
-        organization_id:
-          type: string
-          format: uuid
-        name:
-          type: string
-        description:
-          type: string
-        created_at:
-          type: string
-          format: date-time
-      required:
-        - id
-        - organization_id
-        - name
+      $ref: "./components/schemas/resourcetype.yml#/ResourceTypeResponse"
 
     CreateResourceTypeBody:
-      type: object
-      properties:
-        organization_id:
-          type: string
-          format: uuid
-        name:
-          type: string
-        description:
-          type: string
-      required:
-        - organization_id
-        - name
-
-    UpdateResourceTypeBody:
-      type: object
-      properties:
-        name:
-          type: string
-        description:
-          type: string
+      $ref: "./components/schemas/resourcetype.yml#/CreateResourceTypeBody"
 
     # --------------------------
     # Resource Models
     # --------------------------
     ResourceResponse:
-      type: object
-      properties:
-        id:
-          type: string
-          format: uuid
-        name:
-          type: string
-        resource_type_id:
-          type: string
-          format: uuid
-        location_id:
-          type: string
-          format: uuid
-        created_at:
-          type: string
-          format: date-time
-      required:
-        - id
-        - name
-        - resource_type_id
-        - location_id
-        - created_at
+      $ref: "./components/schemas/resource.yml#/ResourceResponse"
 
     CreateResourceRequest:
-      type: object
-      properties:
-        name:
-          type: string
-        location_id:
-          type: string
-          format: uuid
-        resource_type_id:
-          type: string
-          format: uuid
-      required:
-        - name
-        - location_id
-        - resource_type_id
+      $ref: "./components/schemas/resource.yml.yml#/CreateResourceRequest"
 
     UpdateResourceRequest:
-      type: object
-      properties:
-        name:
-          type: string
+      $ref: "./components/schemas/resource.yml#/UpdateResourceRequest"
 
     # --------------------------
     # Booking Models
     # --------------------------
     BookingResponse:
-      type: object
-      properties:
-        id:
-          type: string
-          format: uuid
-        resource_id:
-          type: string
-          format: uuid
-        user_id:
-          type: string
-          format: uuid
-        start_time:
-          type: string
-          format: date-time
-        end_time:
-          type: string
-          format: date-time
-        status:
-          type: string
-          enum: [pending, confirmed, cancelled]
-        created_at:
-          type: string
-          format: date-time
-        updated_at:
-          type: string
-          format: date-time
-      required:
-        - id
-        - resource_id
-        - user_id
-        - start_time
-        - end_time
-        - status
+      $ref: "./components/schemas/booking.yml#/BookingResponse"
 
     CreateBookingRequest:
-      type: object
-      properties:
-        resource_id:
-          type: string
-          format: uuid
-        start_time:
-          type: string
-          format: date-time
-        end_time:
-          type: string
-          format: date-time
-      required:
-        - resource_id
-        - start_time
-        - end_time
+      $ref: "./components/schemas/booking.yml#/CreateBookingRequest"
 
     UpdateBookingRequest:
-      type: object
-      properties:
-        start_time:
-          type: string
-          format: date-time
-        end_time:
-          type: string
-          format: date-time
-        status:
-          type: string
-          enum: [pending, confirmed, cancelled]
+      $ref: "./components/schemas/booking.yml#/UpdateBookingRequest"
 
     # --------------------------
     # Announcement Models
     # --------------------------
     AnnouncementResponse:
-      type: object
-      properties:
-        id:
-          type: string
-          format: uuid
-        title:
-          type: string
-        content:
-          type: string
-        created_at:
-          type: string
-          format: date-time
-        updated_at:
-          type: string
-          format: date-time
-      required:
-        - id
-        - title
-        - content
-        - created_at
+      $ref: "./components/schemas/announcement.yml#/AnnouncementResponse"
 
     CreateAnnouncementRequest:
-      type: object
-      properties:
-        title:
-          type: string
-        content:
-          type: string
-      required:
-        - title
-        - content
+      $ref: "./components/schemas/announcement.yml#/CreateAnnouncementRequest"
 
     UpdateAnnouncementRequest:
-      type: object
-      properties:
-        title:
-          type: string
-        content:
-          type: string
+      $ref: "./components/schemas/announcement.yml#/UpdateAnnouncementRequest"
 
 paths:
   # ============================
   # Auth
   # ============================
   /auth/register:
-    post:
-      tags:
-        - Auth
-      summary: "使用者註冊"
-      operationId: registerUser
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/RegisterRequest"
-      responses:
-        "201":
-          description: Created - 回傳新建立的使用者資訊
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/MeResponse"
-        "400":
-          description: Validation error (email required, password too short)
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
-        "409":
-          description: Email already used
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
+    $ref: "./paths/auth.yml#/register"
 
   /auth/login:
-    post:
-      tags:
-        - Auth
-      summary: "使用者登入"
-      operationId: loginUser
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/LoginRequest"
-      responses:
-        "200":
-          description: Success - 回傳 Access Token 與使用者資訊
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/LoginResponse"
-        "400":
-          description: Invalid Request
-        "401":
-          description: Invalid credentials
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
+    $ref: "./paths/auth.yml#/login"
 
   # ============================
   # Me
   # ============================
   /me:
-    get:
-      tags:
-        - Me
-      summary: "取得目前使用者資訊"
-      operationId: getCurrentUser
-      security:
-        - bearerAuth: []
-      responses:
-        "200":
-          description: Current user profile
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/MeResponse"
-        "401":
-          description: Unauthorized - Token 無效或過期
+    $ref: "./paths/me.yml#/me"
 
   # ============================
   # Users (System Admin)
   # ============================
   /users:
-    get:
-      tags:
-        - Users
-      summary: "列出所有使用者 (System Admin)"
-      security:
-        - bearerAuth: []
-      parameters:
-        - $ref: "#/components/parameters/page"
-        - $ref: "#/components/parameters/page_size"
-        - $ref: "#/components/parameters/sort"
-        - name: email
-          in: query
-          schema:
-            type: string
-          description: 依 Email 搜尋
-        - name: display_name
-          in: query
-          schema:
-            type: string
-          description: 依顯示名稱搜尋
-        - name: is_active
-          in: query
-          schema:
-            type: boolean
-          description: 依啟用狀態篩選
-      responses:
-        "200":
-          description: User list
-          content:
-            application/json:
-              schema:
-                allOf:
-                  - $ref: "#/components/schemas/PageResponse"
-                  - properties:
-                      items:
-                        type: array
-                        items:
-                          $ref: "#/components/schemas/UserResponse"
-        "403":
-          description: Forbidden - 非系統管理員
+    $ref: "./paths/users.yml#/listUsers"
 
   /users/{id}:
-    parameters:
-      - name: id
-        in: path
-        required: true
-        schema:
-          type: string
-          format: uuid
-    get:
-      tags:
-        - Users
-      summary: "取得單一使用者詳情 (System Admin)"
-      security:
-        - bearerAuth: []
-      responses:
-        "200":
-          description: User details
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/MeResponse"
-        "403":
-          description: Forbidden
-        "404":
-          description: User Not found
-    patch:
-      tags:
-        - Users
-      summary: "更新使用者狀態/權限 (System Admin)"
-      security:
-        - bearerAuth: []
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/UpdateUserBody"
-      responses:
-        "200":
-          description: Updated user
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/MeResponse"
-        "403":
-          description: Forbidden
-        "404":
-          description: User Not found
+    $ref: "./paths/users.yml#/userDetail"
 
   # ============================
   # Organizations
   # ============================
   /organizations:
-    get:
-      tags:
-        - Organizations
-      summary: "列出所有組織 (Active Only)"
-      security:
-        - bearerAuth: []
-      parameters:
-        - $ref: "#/components/parameters/page"
-        - $ref: "#/components/parameters/page_size"
-      responses:
-        "200":
-          description: Organization list
-          content:
-            application/json:
-              schema:
-                allOf:
-                  - $ref: "#/components/schemas/PageResponse"
-                  - properties:
-                      items:
-                        type: array
-                        items:
-                          $ref: "#/components/schemas/OrganizationResponse"
-    post:
-      tags:
-        - Organizations
-      summary: "建立新組織 (System Admin)"
-      security:
-        - bearerAuth: []
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/CreateOrganizationRequest"
-      responses:
-        "201":
-          description: Organization created
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/OrganizationResponse"
-        "403":
-          description: Forbidden
+    $ref: "./paths/organizations.yml#/listOrganizations"
 
   /organizations/{id}:
-    parameters:
-      - name: id
-        in: path
-        required: true
-        schema:
-          type: string
-          format: uuid
-    get:
-      tags:
-        - Organizations
-      summary: "取得組織詳情"
-      security:
-        - bearerAuth: []
-      responses:
-        "200":
-          description: Organization details
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/OrganizationResponse"
-        "404":
-          description: Organization Not found
-    patch:
-      tags:
-        - Organizations
-      summary: "更新組織資訊 (System Admin)"
-      security:
-        - bearerAuth: []
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/UpdateOrganizationRequest"
-      responses:
-        "200":
-          description: Updated organization
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/OrganizationResponse"
-        "404":
-          description: Organization Not found
-    delete:
-      tags:
-        - Organizations
-      summary: "刪除組織 (Soft Delete - System Admin)"
-      security:
-        - bearerAuth: []
-      responses:
-        "204":
-          description: Organization deleted (No Content)
+    $ref: "./paths/organizations.yml#/organizationDetail"
 
   # ============================
   # Members
   # ============================
   /organizations/{id}/members:
-    parameters:
-      - name: id
-        in: path
-        required: true
-        description: Organization ID
-        schema:
-          type: string
-          format: uuid
-    get:
-      tags:
-        - Members
-      summary: "列出組織成員"
-      security:
-        - bearerAuth: []
-      parameters:
-        - $ref: "#/components/parameters/page"
-        - $ref: "#/components/parameters/page_size"
-      responses:
-        "200":
-          description: Member list
-          content:
-            application/json:
-              schema:
-                allOf:
-                  - $ref: "#/components/schemas/PageResponse"
-                  - properties:
-                      items:
-                        type: array
-                        items:
-                          $ref: "#/components/schemas/MemberResponse"
-    post:
-      tags:
-        - Members
-      summary: "邀請/加入成員 (System Admin)"
-      security:
-        - bearerAuth: []
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/AddMemberRequest"
-      responses:
-        "201":
-          description: Member added successfully
-        "404":
-          description: Organization or User not found
-        "409":
-          description: User is already a member
+    $ref: "./paths/members.yml#/listMembers"
 
   /organizations/{id}/members/{user_id}:
-    parameters:
-      - name: id
-        in: path
-        required: true
-        description: Organization ID
-        schema:
-          type: string
-          format: uuid
-      - name: user_id
-        in: path
-        required: true
-        description: User ID
-        schema:
-          type: string
-          format: uuid
-    patch:
-      tags:
-        - Members
-      summary: "修改成員角色 (System Admin)"
-      security:
-        - bearerAuth: []
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/UpdateMemberRequest"
-      responses:
-        "200":
-          description: Role updated
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  status:
-                    type: string
-                    example: "updated"
-        "404":
-          description: Member or Organization not found
-    delete:
-      tags:
-        - Members
-      summary: "移除成員 (System Admin)"
-      security:
-        - bearerAuth: []
-      responses:
-        "204":
-          description: Member removed
-        "404":
-          description: Member or Organization not found
+    $ref: "./paths/members.yml#/memberDetail"
 
   # ============================
   # Locations
   # ============================
   /locations:
-    get:
-      tags:
-        - Locations
-      summary: "列出 Locations (支援篩選)"
-      security:
-        - bearerAuth: []
-      parameters:
-        - $ref: "#/components/parameters/page"
-        - $ref: "#/components/parameters/page_size"
-        - name: organization_id
-          in: query
-          schema:
-            type: string
-            format: uuid
-        - name: q
-          in: query
-          schema:
-            type: string
-            description: 關鍵字搜尋 (Name or Info)
-      responses:
-        "200":
-          description: Location list
-          content:
-            application/json:
-              schema:
-                allOf:
-                  - $ref: "#/components/schemas/PageResponse"
-                  - properties:
-                      items:
-                        type: array
-                        items:
-                          $ref: "#/components/schemas/LocationResponse"
-    post:
-      tags:
-        - Locations
-      summary: "建立 Location (Organization Owner/Admin)"
-      security:
-        - bearerAuth: []
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/CreateLocationBody"
-      responses:
-        "201":
-          description: Location created
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/LocationResponse"
-        "400":
-          description: Validation error
-        "403":
-          description: Permission denied
+    $ref: "./paths/locations.yml#/listLocations"
 
   /locations/{id}:
-    parameters:
-      - name: id
-        in: path
-        required: true
-        schema:
-          type: string
-          format: uuid
-    get:
-      tags:
-        - Locations
-      summary: "取得單一 Location 詳情"
-      security:
-        - bearerAuth: []
-      responses:
-        "200":
-          description: Location details
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/LocationResponse"
-        "404":
-          description: Location not found
-    patch:
-      tags:
-        - Locations
-      summary: "更新 Location (Organization Owner/Admin)"
-      security:
-        - bearerAuth: []
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/UpdateLocationBody"
-      responses:
-        "200":
-          description: Updated location
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/LocationResponse"
-        "403":
-          description: Permission denied
-        "404":
-          description: Location not found
-    delete:
-      tags:
-        - Locations
-      summary: "刪除 Location (Organization Owner/Admin)"
-      security:
-        - bearerAuth: []
-      responses:
-        "204":
-          description: Location deleted
-        "403":
-          description: Permission denied
-        "404":
-          description: Location not found
+    $ref: "./paths/locations.yml#/locationDetail"
 
   # ============================
   # Resource Types
   # ============================
   /resource-types:
-    get:
-      tags:
-        - ResourceTypes
-      summary: "列出 Resource Types"
-      security:
-        - bearerAuth: []
-      parameters:
-        - $ref: "#/components/parameters/page"
-        - $ref: "#/components/parameters/page_size"
-        - name: organization_id
-          in: query
-          schema:
-            type: string
-            format: uuid
-      responses:
-        "200":
-          description: Resource Type list
-          content:
-            application/json:
-              schema:
-                allOf:
-                  - $ref: "#/components/schemas/PageResponse"
-                  - properties:
-                      items:
-                        type: array
-                        items:
-                          $ref: "#/components/schemas/ResourceTypeResponse"
-    post:
-      tags:
-        - ResourceTypes
-      summary: "建立 Resource Type (Organization Owner/Admin)"
-      security:
-        - bearerAuth: []
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/CreateResourceTypeBody"
-      responses:
-        "201":
-          description: Resource Type created
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ResourceTypeResponse"
-        "403":
-          description: Permission denied
+    $ref: "./paths/resourcetypes.yml#/listResourceTypes"
 
   /resource-types/{id}:
-    parameters:
-      - name: id
-        in: path
-        required: true
-        schema:
-          type: string
-          format: uuid
-    get:
-      tags:
-        - ResourceTypes
-      summary: "取得 Resource Type 詳情"
-      security:
-        - bearerAuth: []
-      responses:
-        "200":
-          description: Resource Type details
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ResourceTypeResponse"
-        "404":
-          description: Not found
-    patch:
-      tags:
-        - ResourceTypes
-      summary: "更新 Resource Type (Organization Owner/Admin)"
-      security:
-        - bearerAuth: []
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/UpdateResourceTypeBody"
-      responses:
-        "200":
-          description: Updated
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ResourceTypeResponse"
-        "403":
-          description: Permission denied
-        "404":
-          description: Not found
-    delete:
-      tags:
-        - ResourceTypes
-      summary: "刪除 Resource Type (Organization Owner/Admin)"
-      security:
-        - bearerAuth: []
-      responses:
-        "204":
-          description: Deleted
-        "403":
-          description: Permission denied
-        "404":
-          description: Not found
+    $ref: "./paths/resourcetypes.yml#/resourceTypeDetail"
 
   # ============================
   # Resources
   # ============================
   /resources:
-    get:
-      tags:
-        - Resources
-      summary: "列出資源 (如：球場、會議室)"
-      security:
-        - bearerAuth: []
-      parameters:
-        - $ref: "#/components/parameters/page"
-        - $ref: "#/components/parameters/page_size"
-        - name: resource_type_id
-          in: query
-          schema:
-            type: string
-            format: uuid
-        - name: location_id
-          in: query
-          schema:
-            type: string
-            format: uuid
-      responses:
-        "200":
-          description: paged resources
-          content:
-            application/json:
-              schema:
-                allOf:
-                  - $ref: "#/components/schemas/PageResponse"
-                  - properties:
-                      items:
-                        type: array
-                        items:
-                          $ref: "#/components/schemas/ResourceResponse"
-    post:
-      tags:
-        - Resources
-      summary: "建立資源 (Organization Owner/Admin)"
-      security:
-        - bearerAuth: []
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/CreateResourceRequest"
-      responses:
-        "201":
-          description: created
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ResourceResponse"
-        "400":
-          description: Invalid request body (e.g., bad location)
-        "403":
-          description: Forbidden
+    $ref: "./paths/resources.yml#/listResources"
 
   /resources/{id}:
-    parameters:
-      - name: id
-        in: path
-        required: true
-        schema:
-          type: string
-          format: uuid
-    get:
-      tags:
-        - Resources
-      summary: "取得資源詳情"
-      security:
-        - bearerAuth: []
-      responses:
-        "200":
-          description: resource details
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ResourceResponse"
-        "404":
-          description: Resource not found
-    patch:
-      tags:
-        - Resources
-      summary: "更新資源 (Organization Owner/Admin)"
-      security:
-        - bearerAuth: []
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/UpdateResourceRequest"
-      responses:
-        "200":
-          description: updated
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ResourceResponse"
-        "403":
-          description: Forbidden
-        "404":
-          description: Resource not found
-    delete:
-      tags:
-        - Resources
-      summary: "刪除資源 (Organization Owner/Admin)"
-      security:
-        - bearerAuth: []
-      responses:
-        "204":
-          description: deleted
-        "403":
-          description: Forbidden
-        "404":
-          description: Resource not found
+    $ref: "./paths/resources.yml#/resourceDetail"
 
   # ============================
   # Bookings
   # ============================
   /bookings:
-    get:
-      tags:
-        - Bookings
-      summary: "列出預約記錄"
-      security:
-        - bearerAuth: []
-      parameters:
-        - $ref: "#/components/parameters/page"
-        - $ref: "#/components/parameters/page_size"
-        - name: user_id
-          in: query
-          schema:
-            type: string
-            format: uuid
-          description: "Filter by user (Admin only, or self)"
-        - name: resource_id
-          in: query
-          schema:
-            type: string
-            format: uuid
-        - name: status
-          in: query
-          schema:
-            type: string
-            enum: [pending, confirmed, cancelled]
-        - name: start_time_from
-          in: query
-          schema:
-            type: string
-            format: date-time
-        - name: start_time_to
-          in: query
-          schema:
-            type: string
-            format: date-time
-      responses:
-        "200":
-          description: paged bookings
-          content:
-            application/json:
-              schema:
-                allOf:
-                  - $ref: "#/components/schemas/PageResponse"
-                  - properties:
-                      items:
-                        type: array
-                        items:
-                          $ref: "#/components/schemas/BookingResponse"
-    post:
-      tags:
-        - Bookings
-      summary: "建立預約 (User)"
-      security:
-        - bearerAuth: []
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/CreateBookingRequest"
-      responses:
-        "201":
-          description: created
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/BookingResponse"
-        "400":
-          description: Validation error or time invalid
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
-        "409":
-          description: Conflict (time overlap)
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
+    $ref: "./paths/bookings.yml#/listBookings"
 
   /bookings/{id}:
-    parameters:
-      - name: id
-        in: path
-        required: true
-        schema:
-          type: string
-          format: uuid
-    get:
-      tags:
-        - Bookings
-      summary: "取得預約詳情"
-      security:
-        - bearerAuth: []
-      responses:
-        "200":
-          description: booking details
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/BookingResponse"
-        "403":
-          description: Forbidden (Not owner or admin)
-        "404":
-          description: Not found
-    patch:
-      tags:
-        - Bookings
-      summary: "更新預約 (時間或狀態)"
-      security:
-        - bearerAuth: []
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/UpdateBookingRequest"
-      responses:
-        "200":
-          description: updated
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/BookingResponse"
-        "400":
-          description: Invalid status or time range
-        "403":
-          description: Permission denied
-        "409":
-          description: Time conflict
-    delete:
-      tags:
-        - Bookings
-      summary: "刪除 / 取消預約"
-      security:
-        - bearerAuth: []
-      responses:
-        "204":
-          description: deleted
-        "403":
-          description: Permission denied
-        "404":
-          description: Not found
+    $ref: "./paths/bookings.yml#/bookingDetail"
 
   # ============================
   # Announcements
   # ============================
   /announcements:
-    get:
-      tags:
-        - Announcements
-      summary: "列出公告"
-      security:
-        - bearerAuth: []
-      parameters:
-        - $ref: "#/components/parameters/page"
-        - $ref: "#/components/parameters/page_size"
-        - name: q
-          in: query
-          schema:
-            type: string
-          description: "Keyword search"
-      responses:
-        "200":
-          description: paged announcements
-          content:
-            application/json:
-              schema:
-                allOf:
-                  - $ref: "#/components/schemas/PageResponse"
-                  - properties:
-                      items:
-                        type: array
-                        items:
-                          $ref: "#/components/schemas/AnnouncementResponse"
-    post:
-      tags:
-        - Announcements
-      summary: "建立公告 (System Admin)"
-      security:
-        - bearerAuth: []
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/CreateAnnouncementRequest"
-      responses:
-        "201":
-          description: created
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/AnnouncementResponse"
-        "400":
-          description: Missing title or content
+    $ref: "./paths/announcements.yml#/listAnnouncements"
 
   /announcements/{id}:
-    parameters:
-      - name: id
-        in: path
-        required: true
-        schema:
-          type: string
-          format: uuid
-    get:
-      tags:
-        - Announcements
-      summary: "取得公告詳情"
-      security:
-        - bearerAuth: []
-      responses:
-        "200":
-          description: announcement details
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/AnnouncementResponse"
-        "404":
-          description: Not found
-    patch:
-      tags:
-        - Announcements
-      summary: "更新公告 (System Admin)"
-      security:
-        - bearerAuth: []
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/UpdateAnnouncementRequest"
-      responses:
-        "200":
-          description: updated
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/AnnouncementResponse"
-        "404":
-          description: Not found
-    delete:
-      tags:
-        - Announcements
-      summary: "刪除公告 (System Admin)"
-      security:
-        - bearerAuth: []
-      responses:
-        "204":
-          description: deleted
-        "404":
-          description: Not found
+    $ref: "./paths/announcements.yml#/announcementDetail"
 
   # ============================
   # Shared / Common Schemas for Reference

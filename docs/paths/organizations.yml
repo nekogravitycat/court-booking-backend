@@ -1,0 +1,98 @@
+listOrganizations:
+  get:
+    tags:
+      - Organizations
+    summary: "列出所有組織 (Active Only)"
+    security:
+      - bearerAuth: []
+    parameters:
+      - $ref: "../components/parameters.yml#/page"
+      - $ref: "../components/parameters.yml#/page_size"
+    responses:
+      "200":
+        description: Organization list
+        content:
+          application/json:
+            schema:
+              allOf:
+                - $ref: "../components/schemas/common.yml#/PageResponse"
+                - properties:
+                    items:
+                      type: array
+                      items:
+                        $ref: "../components/schemas/organization.yml#/OrganizationResponse"
+  post:
+    tags:
+      - Organizations
+    summary: "建立新組織 (System Admin)"
+    security:
+      - bearerAuth: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: "../components/schemas/organization.yml#/CreateOrganizationRequest"
+    responses:
+      "201":
+        description: Organization created
+        content:
+          application/json:
+            schema:
+              $ref: "../components/schemas/organization.yml#/OrganizationResponse"
+      "403":
+        description: Forbidden
+
+organizationDetail:
+  parameters:
+    - name: id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+  get:
+    tags:
+      - Organizations
+    summary: "取得組織詳情"
+    security:
+      - bearerAuth: []
+    responses:
+      "200":
+        description: Organization details
+        content:
+          application/json:
+            schema:
+              $ref: "../components/schemas/organization.yml#/OrganizationResponse"
+      "404":
+        description: Organization Not found
+  patch:
+    tags:
+      - Organizations
+    summary: "更新組織資訊 (System Admin)"
+    security:
+      - bearerAuth: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: "../components/schemas/organization.yml#/UpdateOrganizationRequest"
+    responses:
+      "200":
+        description: Updated organization
+        content:
+          application/json:
+            schema:
+              $ref: "../components/schemas/organization.yml#/OrganizationResponse"
+      "404":
+        description: Organization Not found
+  delete:
+    tags:
+      - Organizations
+    summary: "刪除組織 (Soft Delete - System Admin)"
+    security:
+      - bearerAuth: []
+    responses:
+      "204":
+        description: Organization deleted (No Content)

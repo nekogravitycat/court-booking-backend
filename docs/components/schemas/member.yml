@@ -1,0 +1,40 @@
+MemberResponse:
+  type: object
+  properties:
+    user_id:
+      type: string
+      format: uuid
+    email:
+      type: string
+    display_name:
+      type: string
+      nullable: true
+    role:
+      type: string
+      enum: [owner, admin, member]
+  required:
+    - user_id
+    - email
+    - role
+
+AddMemberRequest:
+  type: object
+  properties:
+    user_id:
+      type: string
+      format: uuid
+    role:
+      type: string
+      enum: [owner, admin, member]
+  required:
+    - user_id
+    - role
+
+UpdateMemberRequest:
+  type: object
+  properties:
+    role:
+      type: string
+      enum: [owner, admin, member]
+  required:
+    - role

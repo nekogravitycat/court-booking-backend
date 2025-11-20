@@ -1,0 +1,59 @@
+register:
+  post:
+    tags:
+      - Auth
+    summary: "使用者註冊"
+    operationId: registerUser
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: "../components/schemas/user.yml#/RegisterRequest"
+    responses:
+      "201":
+        description: Created - 回傳新建立的使用者資訊
+        content:
+          application/json:
+            schema:
+              $ref: "../components/schemas/user.yml#/MeResponse"
+      "400":
+        description: Validation error (email required, password too short)
+        content:
+          application/json:
+            schema:
+              $ref: "../components/schemas/common.yml#/ErrorResponse"
+      "409":
+        description: Email already used
+        content:
+          application/json:
+            schema:
+              $ref: "../components/schemas/common.yml#/ErrorResponse"
+
+login:
+  post:
+    tags:
+      - Auth
+    summary: "使用者登入"
+    operationId: loginUser
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: "../components/schemas/user.yml#/LoginRequest"
+    responses:
+      "200":
+        description: Success - 回傳 Access Token 與使用者資訊
+        content:
+          application/json:
+            schema:
+              $ref: "../components/schemas/user.yml#/LoginResponse"
+      "400":
+        description: Invalid Request
+      "401":
+        description: Invalid credentials
+        content:
+          application/json:
+            schema:
+              $ref: "../components/schemas/common.yml#/ErrorResponse"

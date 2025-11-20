@@ -1,0 +1,144 @@
+listBookings:
+  get:
+    tags:
+      - Bookings
+    summary: "列出預約記錄"
+    security:
+      - bearerAuth: []
+    parameters:
+      - $ref: "../components/parameters.yml#/page"
+      - $ref: "../components/parameters.yml#/page_size"
+      - name: user_id
+        in: query
+        schema:
+          type: string
+          format: uuid
+        description: "Filter by user (Admin only, or self)"
+      - name: resource_id
+        in: query
+        schema:
+          type: string
+          format: uuid
+      - name: status
+        in: query
+        schema:
+          type: string
+          enum: [pending, confirmed, cancelled]
+      - name: start_time_from
+        in: query
+        schema:
+          type: string
+          format: date-time
+      - name: start_time_to
+        in: query
+        schema:
+          type: string
+          format: date-time
+    responses:
+      "200":
+        description: paged bookings
+        content:
+          application/json:
+            schema:
+              allOf:
+                - $ref: "../components/schemas/common.yml#/PageResponse"
+                - properties:
+                    items:
+                      type: array
+                      items:
+                        $ref: "../components/schemas/booking.yml#/BookingResponse"
+  post:
+    tags:
+      - Bookings
+    summary: "建立預約 (User)"
+    security:
+      - bearerAuth: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: "../components/schemas/booking.yml#/CreateBookingRequest"
+    responses:
+      "201":
+        description: created
+        content:
+          application/json:
+            schema:
+              $ref: "../components/schemas/booking.yml#/BookingResponse"
+      "400":
+        description: Validation error or time invalid
+        content:
+          application/json:
+            schema:
+              $ref: "../components/schemas/common.yml#/ErrorResponse"
+      "409":
+        description: Conflict (time overlap)
+        content:
+          application/json:
+            schema:
+              $ref: "../components/schemas/common.yml#/ErrorResponse"
+
+bookingDetail:
+  parameters:
+    - name: id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+  get:
+    tags:
+      - Bookings
+    summary: "取得預約詳情"
+    security:
+      - bearerAuth: []
+    responses:
+      "200":
+        description: booking details
+        content:
+          application/json:
+            schema:
+              $ref: "../components/schemas/booking.yml#/BookingResponse"
+      "403":
+        description: Forbidden (Not owner or admin)
+      "404":
+        description: Not found
+  patch:
+    tags:
+      - Bookings
+    summary: "更新預約 (時間或狀態)"
+    security:
+      - bearerAuth: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: "../components/schemas/booking.yml#/UpdateBookingRequest"
+    responses:
+      "200":
+        description: updated
+        content:
+          application/json:
+            schema:
+              $ref: "../components/schemas/booking.yml#/BookingResponse"
+      "400":
+        description: Invalid status or time range
+      "403":
+        description: Permission denied
+      "409":
+        description: Time conflict
+  delete:
+    tags:
+      - Bookings
+    summary: "刪除 / 取消預約"
+    security:
+      - bearerAuth: []
+    responses:
+      "204":
+        description: deleted
+      "403":
+        description: Permission denied
+      "404":
+        description: Not found

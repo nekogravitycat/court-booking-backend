@@ -1,0 +1,42 @@
+ResourceTypeResponse:
+  type: object
+  properties:
+    id:
+      type: string
+      format: uuid
+    organization_id:
+      type: string
+      format: uuid
+    name:
+      type: string
+    description:
+      type: string
+    created_at:
+      type: string
+      format: date-time
+  required:
+    - id
+    - organization_id
+    - name
+
+CreateResourceTypeBody:
+  type: object
+  properties:
+    organization_id:
+      type: string
+      format: uuid
+    name:
+      type: string
+    description:
+      type: string
+  required:
+    - organization_id
+    - name
+
+UpdateResourceTypeBody:
+  type: object
+  properties:
+    name:
+      type: string
+    description:
+      type: string

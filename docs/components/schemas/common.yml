@@ -1,0 +1,25 @@
+ErrorResponse:
+  type: object
+  properties:
+    error:
+      type: string
+      description: 錯誤訊息描述
+    details:
+      type: string
+      description: 詳細錯誤資訊 (Optional)
+  example:
+    error: "invalid request"
+
+PageResponse:
+  type: object
+  properties:
+    items:
+      type: array
+      items:
+        type: object
+    page:
+      type: integer
+    page_size:
+      type: integer
+    total:
+      type: integer
