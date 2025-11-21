@@ -131,6 +131,6 @@ func createTestUser(t *testing.T, email, password string, isAdmin bool) *user.Us
 }
 
 func generateToken(userID, email string) string {
-	token, _ := jwtManager.GenerateAccessToken(userID, email)
+	token, _ := jwtManager.GenerateAccessToken(userID)
 	return token
 }

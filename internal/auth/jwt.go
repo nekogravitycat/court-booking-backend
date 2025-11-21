@@ -12,13 +12,6 @@ var (
 	ErrSignFailed   = errors.New("failed to sign token")
 )
 
-// Claims defines the JWT claims we embed in our token.
-type Claims struct {
-	UserID string `json:"sub"`
-	Email  string `json:"email"`
-	jwt.RegisteredClaims
-}
-
 // JWTManager manages JWT access token creation and validation.
 type JWTManager struct {
 	secret []byte
@@ -34,17 +27,13 @@ func NewJWTManager(secret string, ttl time.Duration) *JWTManager {
 }
 
 // GenerateAccessToken creates a signed JWT for the given user.
-func (m *JWTManager) GenerateAccessToken(userID, email string) (string, error) {
+func (m *JWTManager) GenerateAccessToken(userID string) (string, error) {
 	now := time.Now().UTC()
 
-	claims := &Claims{
-		UserID: userID,
-		Email:  email,
-		RegisteredClaims: jwt.RegisteredClaims{
-			Subject:   userID,
-			IssuedAt:  jwt.NewNumericDate(now),
-			ExpiresAt: jwt.NewNumericDate(now.Add(m.ttl)),
-		},
+	claims := &jwt.RegisteredClaims{
+		Subject:   userID,
+		IssuedAt:  jwt.NewNumericDate(now),
+		ExpiresAt: jwt.NewNumericDate(now.Add(m.ttl)),
 	}
 
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
@@ -58,8 +47,8 @@ func (m *JWTManager) GenerateAccessToken(userID, email string) (string, error) {
 }
 
 // ParseAndValidate validates a JWT and returns the parsed claims.
-func (m *JWTManager) ParseAndValidate(tokenStr string) (*Claims, error) {
-	token, err := jwt.ParseWithClaims(tokenStr, &Claims{}, func(t *jwt.Token) (interface{}, error) {
+func (m *JWTManager) ParseAndValidate(tokenStr string) (*jwt.RegisteredClaims, error) {
+	token, err := jwt.ParseWithClaims(tokenStr, &jwt.RegisteredClaims{}, func(t *jwt.Token) (interface{}, error) {
 		// Ensure token is signed using HS256
 		if _, ok := t.Method.(*jwt.SigningMethodHMAC); !ok {
 			return nil, ErrInvalidToken
@@ -70,7 +59,7 @@ func (m *JWTManager) ParseAndValidate(tokenStr string) (*Claims, error) {
 		return nil, ErrInvalidToken
 	}
 
-	claims, ok := token.Claims.(*Claims)
+	claims, ok := token.Claims.(*jwt.RegisteredClaims)
 	if !ok || !token.Valid {
 		return nil, ErrInvalidToken
 	}

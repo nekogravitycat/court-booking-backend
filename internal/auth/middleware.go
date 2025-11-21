@@ -37,8 +37,7 @@ func AuthRequired(jwtManager *JWTManager) gin.HandlerFunc {
 		}
 
 		// Store user info into Gin context for later handlers.
-		c.Set("userID", claims.UserID)
-		c.Set("userEmail", claims.Email)
+		c.Set("userID", claims.Subject)
 
 		c.Next()
 	}

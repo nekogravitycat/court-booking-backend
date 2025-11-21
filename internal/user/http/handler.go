@@ -81,7 +81,7 @@ func (h *UserHandler) Login(c *gin.Context) {
 	}
 
 	// Generate JWT using the injected jwtManager
-	token, err := h.jwtManager.GenerateAccessToken(u.ID, u.Email)
+	token, err := h.jwtManager.GenerateAccessToken(u.ID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"error": "failed to generate token",
