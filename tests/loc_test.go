@@ -79,7 +79,7 @@ func TestLocationCRUDAndPermissions(t *testing.T) {
 
 	t.Run("Create Location: Validation Failures", func(t *testing.T) {
 		// Missing Name
-		invalidPayload := locHttp.CreateLocationBody{
+		invalidPayload := locHttp.CreateLocationRequest{
 			OrganizationID: orgA_ID,
 			Name:           "", // Empty
 			Capacity:       10,
@@ -90,7 +90,7 @@ func TestLocationCRUDAndPermissions(t *testing.T) {
 		assert.Equal(t, http.StatusBadRequest, w.Code, "Should fail when name is empty")
 
 		// Invalid Coordinates
-		invalidGeoPayload := locHttp.CreateLocationBody{
+		invalidGeoPayload := locHttp.CreateLocationRequest{
 			OrganizationID: orgA_ID,
 			Name:           "Bad Geo",
 			Longitude:      200.0, // Invalid
@@ -101,7 +101,7 @@ func TestLocationCRUDAndPermissions(t *testing.T) {
 	})
 
 	t.Run("Create Location: Permission Denied", func(t *testing.T) {
-		validPayload := locHttp.CreateLocationBody{
+		validPayload := locHttp.CreateLocationRequest{
 			OrganizationID:    orgA_ID,
 			Name:              "Member Created Court",
 			Capacity:          5,
@@ -126,7 +126,7 @@ func TestLocationCRUDAndPermissions(t *testing.T) {
 	})
 
 	t.Run("Create Location: Success (Admin/Owner)", func(t *testing.T) {
-		validPayload := locHttp.CreateLocationBody{
+		validPayload := locHttp.CreateLocationRequest{
 			OrganizationID:    orgA_ID,
 			Name:              "Main Court A",
 			Capacity:          20,
@@ -153,7 +153,7 @@ func TestLocationCRUDAndPermissions(t *testing.T) {
 	t.Run("List Locations: Filtering", func(t *testing.T) {
 		// Add a dummy location for Org B to ensure filtering works
 		// We use adminBToken to create it legally
-		dummyPayload := locHttp.CreateLocationBody{
+		dummyPayload := locHttp.CreateLocationRequest{
 			OrganizationID: orgA_ID, // Intentionally using Org A ID but sending with Admin B Token (Should fail per strict rules)
 			Name:           "Fail Attempt",
 			Longitude:      0, Latitude: 0,
@@ -176,7 +176,7 @@ func TestLocationCRUDAndPermissions(t *testing.T) {
 	t.Run("Update Location: Permission Boundaries", func(t *testing.T) {
 		path := fmt.Sprintf("/v1/locations/%s", locationID)
 		newName := "Hacked Name"
-		payload := locHttp.UpdateLocationBody{Name: &newName}
+		payload := locHttp.UpdateLocationRequest{Name: &newName}
 
 		// 1. Member of the same Org
 		wMember := executeRequest("PATCH", path, payload, memberAToken)
@@ -196,7 +196,7 @@ func TestLocationCRUDAndPermissions(t *testing.T) {
 	t.Run("Update Location: Success", func(t *testing.T) {
 		path := fmt.Sprintf("/v1/locations/%s", locationID)
 		newName := "Renamed Court A"
-		payload := locHttp.UpdateLocationBody{Name: &newName}
+		payload := locHttp.UpdateLocationRequest{Name: &newName}
 
 		// Owner of Org A should succeed
 		w := executeRequest("PATCH", path, payload, ownerAToken)
@@ -236,7 +236,7 @@ func TestLocationCRUDAndPermissions(t *testing.T) {
 		path := fmt.Sprintf("/v1/locations/%s", fakeID)
 
 		// Update
-		wUpdate := executeRequest("PATCH", path, locHttp.UpdateLocationBody{}, ownerAToken)
+		wUpdate := executeRequest("PATCH", path, locHttp.UpdateLocationRequest{}, ownerAToken)
 		assert.Equal(t, http.StatusNotFound, wUpdate.Code)
 
 		// Delete
@@ -253,7 +253,7 @@ func TestLocationCRUDAndPermissions(t *testing.T) {
 
 		// 2. PATCH
 		newName := "Should Not Update"
-		payload := locHttp.UpdateLocationBody{Name: &newName}
+		payload := locHttp.UpdateLocationRequest{Name: &newName}
 		wPatch := executeRequest("PATCH", invalidPath, payload, ownerAToken)
 		assert.Equal(t, http.StatusBadRequest, wPatch.Code, "Should return 400 for invalid UUID in PATCH")
 

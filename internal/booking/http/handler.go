@@ -126,7 +126,7 @@ func (h *Handler) List(c *gin.Context) {
 }
 
 func (h *Handler) Create(c *gin.Context) {
-	var body CreateBookingBody
+	var body CreateBookingRequest
 	if err := c.ShouldBindJSON(&body); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request body", "details": err.Error()})
 		return
@@ -207,7 +207,7 @@ func (h *Handler) Update(c *gin.Context) {
 		return
 	}
 
-	var body UpdateBookingBody
+	var body UpdateBookingRequest
 	if err := c.ShouldBindJSON(&body); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request body"})
 		return

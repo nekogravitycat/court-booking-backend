@@ -77,7 +77,7 @@ func (h *LocationHandler) List(c *gin.Context) {
 // Create adds a new location.
 // It enforces strict permission checks: only Organization Admins or Owners can create locations.
 func (h *LocationHandler) Create(c *gin.Context) {
-	var body CreateLocationBody
+	var body CreateLocationRequest
 	if err := c.ShouldBindJSON(&body); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request body", "details": err.Error()})
 		return
@@ -178,7 +178,7 @@ func (h *LocationHandler) Update(c *gin.Context) {
 	}
 
 	// Handle update logic.
-	var body UpdateLocationBody
+	var body UpdateLocationRequest
 	if err := c.ShouldBindJSON(&body); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request body"})
 		return

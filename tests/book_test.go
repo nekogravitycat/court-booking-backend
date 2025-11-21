@@ -67,7 +67,7 @@ func TestBookingCRUDAndPermissions(t *testing.T) {
 			orgHttp.AddMemberRequest{UserID: orgMemberA.ID, Role: "member"}, sysAdminToken)
 
 		// 3. Create Location in Org A
-		locPayload := locHttp.CreateLocationBody{
+		locPayload := locHttp.CreateLocationRequest{
 			OrganizationID:    orgA.ID,
 			Name:              "Court Loc A",
 			Capacity:          10,
@@ -79,19 +79,19 @@ func TestBookingCRUDAndPermissions(t *testing.T) {
 		json.Unmarshal(wLoc.Body.Bytes(), &locA)
 
 		// 4. Create Resource Type in Org A
-		rtPayload := rtHttp.CreateBody{OrganizationID: orgA.ID, Name: "Tennis"}
+		rtPayload := rtHttp.CreateRequest{OrganizationID: orgA.ID, Name: "Tennis"}
 		wRT := executeRequest("POST", "/v1/resource-types", rtPayload, orgAdminAToken)
-		var rtA rtHttp.Response
+		var rtA rtHttp.ResourceTypeResponse
 		json.Unmarshal(wRT.Body.Bytes(), &rtA)
 
 		// 5. Create Resource (The Asset to be booked)
-		resPayload := resHttp.CreateBody{
+		resPayload := resHttp.CreateRequest{
 			Name:           "Tennis Court 1",
 			LocationID:     locA.ID,
 			ResourceTypeID: rtA.ID,
 		}
 		wRes := executeRequest("POST", "/v1/resources", resPayload, orgAdminAToken)
-		var resA resHttp.Response
+		var resA resHttp.ResourceResponse
 		json.Unmarshal(wRes.Body.Bytes(), &resA)
 		resourceID = resA.ID
 
@@ -135,7 +135,7 @@ func TestBookingCRUDAndPermissions(t *testing.T) {
 
 	t.Run("Create Booking: Bad Request (Business Logic)", func(t *testing.T) {
 		// Case: End Time Before Start Time
-		badRangePayload := bookingHttp.CreateBookingBody{
+		badRangePayload := bookingHttp.CreateBookingRequest{
 			ResourceID: resourceID,
 			StartTime:  time.Now().Add(2 * time.Hour),
 			EndTime:    time.Now().Add(1 * time.Hour),
@@ -144,7 +144,7 @@ func TestBookingCRUDAndPermissions(t *testing.T) {
 		assert.Equal(t, http.StatusBadRequest, wRange.Code, "Should return 400 for invalid time range")
 
 		// Case: Start Time in the Past
-		pastPayload := bookingHttp.CreateBookingBody{
+		pastPayload := bookingHttp.CreateBookingRequest{
 			ResourceID: resourceID,
 			StartTime:  time.Now().Add(-2 * time.Hour),
 			EndTime:    time.Now().Add(-1 * time.Hour),
@@ -163,7 +163,7 @@ func TestBookingCRUDAndPermissions(t *testing.T) {
 		startTime := time.Now().UTC().Add(24 * time.Hour)
 		endTime := startTime.Add(1 * time.Hour)
 
-		payload := bookingHttp.CreateBookingBody{
+		payload := bookingHttp.CreateBookingRequest{
 			ResourceID: resourceID,
 			StartTime:  startTime,
 			EndTime:    endTime,
@@ -188,7 +188,7 @@ func TestBookingCRUDAndPermissions(t *testing.T) {
 		startTime := time.Now().UTC().Add(24 * time.Hour)
 		endTime := startTime.Add(1 * time.Hour)
 
-		payload := bookingHttp.CreateBookingBody{
+		payload := bookingHttp.CreateBookingRequest{
 			ResourceID: resourceID,
 			StartTime:  startTime,
 			EndTime:    endTime,
@@ -199,7 +199,7 @@ func TestBookingCRUDAndPermissions(t *testing.T) {
 		assert.Equal(t, http.StatusConflict, w.Code, "Should return 409 Conflict for overlapping booking")
 
 		// Attempt Partial Overlap (Starts inside existing booking)
-		partialPayload := bookingHttp.CreateBookingBody{
+		partialPayload := bookingHttp.CreateBookingRequest{
 			ResourceID: resourceID,
 			StartTime:  startTime.Add(30 * time.Minute),
 			EndTime:    endTime.Add(30 * time.Minute),
@@ -278,14 +278,14 @@ func TestBookingCRUDAndPermissions(t *testing.T) {
 		// Invalid Start > End
 		newStart := time.Now().UTC().Add(48 * time.Hour)
 		newEnd := newStart.Add(-1 * time.Hour) // Invalid
-		payload := bookingHttp.UpdateBookingBody{StartTime: &newStart, EndTime: &newEnd}
+		payload := bookingHttp.UpdateBookingRequest{StartTime: &newStart, EndTime: &newEnd}
 
 		w := executeRequest("PATCH", path, payload, bookerToken)
 		assert.Equal(t, http.StatusBadRequest, w.Code, "Should return 400 for invalid time range update")
 
 		// Invalid Status string
 		badStatus := "archived"
-		payloadStatus := bookingHttp.UpdateBookingBody{Status: &badStatus}
+		payloadStatus := bookingHttp.UpdateBookingRequest{Status: &badStatus}
 		wStatus := executeRequest("PATCH", path, payloadStatus, sysAdminToken)
 		assert.Equal(t, http.StatusBadRequest, wStatus.Code, "Should return 400 for invalid status enum")
 	})
@@ -296,19 +296,19 @@ func TestBookingCRUDAndPermissions(t *testing.T) {
 		// Owner tries to CONFIRM their own booking -> Forbidden
 		// Only Managers/Admins can confirm
 		statusConfirmed := "confirmed"
-		payload := bookingHttp.UpdateBookingBody{Status: &statusConfirmed}
+		payload := bookingHttp.UpdateBookingRequest{Status: &statusConfirmed}
 		w := executeRequest("PATCH", path, payload, bookerToken)
 		assert.Equal(t, http.StatusForbidden, w.Code, "User cannot confirm their own booking")
 
 		// Owner tries to CANCEL -> OK
 		statusCancelled := "cancelled"
-		payloadCancel := bookingHttp.UpdateBookingBody{Status: &statusCancelled}
+		payloadCancel := bookingHttp.UpdateBookingRequest{Status: &statusCancelled}
 		wCancel := executeRequest("PATCH", path, payloadCancel, bookerToken)
 		assert.Equal(t, http.StatusOK, wCancel.Code, "User should be able to cancel their own booking")
 
 		// Reset to pending for next tests (using SysAdmin)
 		statusPending := "pending"
-		executeRequest("PATCH", path, bookingHttp.UpdateBookingBody{Status: &statusPending}, sysAdminToken)
+		executeRequest("PATCH", path, bookingHttp.UpdateBookingRequest{Status: &statusPending}, sysAdminToken)
 	})
 
 	t.Run("Update Booking: Reschedule (Success & Conflict)", func(t *testing.T) {
@@ -317,7 +317,7 @@ func TestBookingCRUDAndPermissions(t *testing.T) {
 		// 1. Success: Reschedule to empty slot
 		newStart := time.Now().UTC().Add(50 * time.Hour)
 		newEnd := newStart.Add(1 * time.Hour)
-		payload := bookingHttp.UpdateBookingBody{StartTime: &newStart, EndTime: &newEnd}
+		payload := bookingHttp.UpdateBookingRequest{StartTime: &newStart, EndTime: &newEnd}
 
 		w := executeRequest("PATCH", path, payload, bookerToken)
 		assert.Equal(t, http.StatusOK, w.Code, "Owner should be able to reschedule")
@@ -326,7 +326,7 @@ func TestBookingCRUDAndPermissions(t *testing.T) {
 		// Create another booking first
 		conflictStart := time.Now().UTC().Add(60 * time.Hour)
 		conflictEnd := conflictStart.Add(1 * time.Hour)
-		otherPayload := bookingHttp.CreateBookingBody{
+		otherPayload := bookingHttp.CreateBookingRequest{
 			ResourceID: resourceID,
 			StartTime:  conflictStart,
 			EndTime:    conflictEnd,
@@ -334,7 +334,7 @@ func TestBookingCRUDAndPermissions(t *testing.T) {
 		executeRequest("POST", "/v1/bookings", otherPayload, strangerToken)
 
 		// Try to move original booking to this time
-		conflictUpdate := bookingHttp.UpdateBookingBody{StartTime: &conflictStart, EndTime: &conflictEnd}
+		conflictUpdate := bookingHttp.UpdateBookingRequest{StartTime: &conflictStart, EndTime: &conflictEnd}
 		wConflict := executeRequest("PATCH", path, conflictUpdate, bookerToken)
 		assert.Equal(t, http.StatusConflict, wConflict.Code, "Should return 409 when rescheduling to occupied slot")
 	})
@@ -342,7 +342,7 @@ func TestBookingCRUDAndPermissions(t *testing.T) {
 	t.Run("Update Booking: Cross-Org Protection", func(t *testing.T) {
 		path := fmt.Sprintf("/v1/bookings/%s", bookingID)
 		statusConfirmed := "confirmed"
-		payload := bookingHttp.UpdateBookingBody{Status: &statusConfirmed}
+		payload := bookingHttp.UpdateBookingRequest{Status: &statusConfirmed}
 
 		// Admin of Org B tries to update booking in Org A
 		w := executeRequest("PATCH", path, payload, orgAdminBToken)
@@ -370,7 +370,7 @@ func TestBookingCRUDAndPermissions(t *testing.T) {
 	t.Run("Delete Booking: Success", func(t *testing.T) {
 		// Create a disposable booking
 		startTime := time.Now().UTC().Add(100 * time.Hour)
-		createPayload := bookingHttp.CreateBookingBody{
+		createPayload := bookingHttp.CreateBookingRequest{
 			ResourceID: resourceID,
 			StartTime:  startTime,
 			EndTime:    startTime.Add(1 * time.Hour),
@@ -401,7 +401,7 @@ func TestBookingCRUDAndPermissions(t *testing.T) {
 
 		// PATCH -> 404
 		status := "cancelled"
-		payload := bookingHttp.UpdateBookingBody{Status: &status}
+		payload := bookingHttp.UpdateBookingRequest{Status: &status}
 		wUpdate := executeRequest("PATCH", path, payload, sysAdminToken)
 		assert.Equal(t, http.StatusNotFound, wUpdate.Code, "Should return 404 for updating non-existent ID")
 
@@ -420,7 +420,7 @@ func TestBookingCRUDAndPermissions(t *testing.T) {
 
 		// PATCH -> 400
 		status := "cancelled"
-		payload := bookingHttp.UpdateBookingBody{Status: &status}
+		payload := bookingHttp.UpdateBookingRequest{Status: &status}
 		wPatch := executeRequest("PATCH", invalidPath, payload, sysAdminToken)
 		assert.Equal(t, http.StatusBadRequest, wPatch.Code, "Should return 400 for invalid UUID in PATCH")
 

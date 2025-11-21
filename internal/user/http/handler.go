@@ -213,7 +213,7 @@ func (h *UserHandler) Update(c *gin.Context) {
 		return
 	}
 
-	var body UpdateUserBody
+	var body UpdateUserRequest
 	if err := c.ShouldBindJSON(&body); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid body"})
 		return

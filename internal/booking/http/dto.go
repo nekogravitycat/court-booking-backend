@@ -30,13 +30,13 @@ func NewBookingResponse(b *booking.Booking) BookingResponse {
 	}
 }
 
-type CreateBookingBody struct {
+type CreateBookingRequest struct {
 	ResourceID string    `json:"resource_id" binding:"required,uuid"`
 	StartTime  time.Time `json:"start_time" binding:"required"`
 	EndTime    time.Time `json:"end_time" binding:"required"`
 }
 
-type UpdateBookingBody struct {
+type UpdateBookingRequest struct {
 	StartTime *time.Time `json:"start_time"`
 	EndTime   *time.Time `json:"end_time"`
 	Status    *string    `json:"status" binding:"omitempty,oneof=pending confirmed cancelled"`

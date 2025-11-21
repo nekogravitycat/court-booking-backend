@@ -6,7 +6,7 @@ import (
 	"github.com/nekogravitycat/court-booking-backend/internal/resource"
 )
 
-type Response struct {
+type ResourceResponse struct {
 	ID             string    `json:"id"`
 	Name           string    `json:"name"`
 	ResourceTypeID string    `json:"resource_type_id"`
@@ -14,8 +14,8 @@ type Response struct {
 	CreatedAt      time.Time `json:"created_at"`
 }
 
-func NewResponse(r *resource.Resource) Response {
-	return Response{
+func NewResponse(r *resource.Resource) ResourceResponse {
+	return ResourceResponse{
 		ID:             r.ID,
 		Name:           r.Name,
 		ResourceTypeID: r.ResourceTypeID,
@@ -24,12 +24,12 @@ func NewResponse(r *resource.Resource) Response {
 	}
 }
 
-type CreateBody struct {
+type CreateRequest struct {
 	Name           string `json:"name" binding:"required"`
 	LocationID     string `json:"location_id" binding:"required,uuid"`
 	ResourceTypeID string `json:"resource_type_id" binding:"required,uuid"`
 }
 
-type UpdateBody struct {
+type UpdateRequest struct {
 	Name *string `json:"name" binding:"omitempty"`
 }

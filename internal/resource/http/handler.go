@@ -62,7 +62,7 @@ func (h *Handler) List(c *gin.Context) {
 		return
 	}
 
-	items := make([]Response, len(resources))
+	items := make([]ResourceResponse, len(resources))
 	for i, r := range resources {
 		items[i] = NewResponse(r)
 	}
@@ -72,7 +72,7 @@ func (h *Handler) List(c *gin.Context) {
 }
 
 func (h *Handler) Create(c *gin.Context) {
-	var body CreateBody
+	var body CreateRequest
 	if err := c.ShouldBindJSON(&body); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request body", "details": err.Error()})
 		return
@@ -172,7 +172,7 @@ func (h *Handler) Update(c *gin.Context) {
 		return
 	}
 
-	var body UpdateBody
+	var body UpdateRequest
 	if err := c.ShouldBindJSON(&body); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request body"})
 		return

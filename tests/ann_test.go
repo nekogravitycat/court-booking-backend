@@ -31,7 +31,7 @@ func TestAnnouncementCRUDAndPermissions(t *testing.T) {
 	// ==== Create Tests (Validation & Permissions) ====
 
 	t.Run("Create Announcement: Success (System Admin)", func(t *testing.T) {
-		payload := annHttp.CreateBody{
+		payload := annHttp.CreateRequest{
 			Title:   "System Maintenance",
 			Content: "The system will be down at midnight.",
 		}
@@ -39,7 +39,7 @@ func TestAnnouncementCRUDAndPermissions(t *testing.T) {
 		w := executeRequest("POST", "/v1/announcements", payload, sysAdminToken)
 		require.Equal(t, http.StatusCreated, w.Code)
 
-		var resp annHttp.Response
+		var resp annHttp.AnnouncementResponse
 		err := json.Unmarshal(w.Body.Bytes(), &resp)
 		require.NoError(t, err)
 
@@ -54,7 +54,7 @@ func TestAnnouncementCRUDAndPermissions(t *testing.T) {
 
 	t.Run("Create Announcement: Unauthorized (No Token)", func(t *testing.T) {
 		// Ensure middleware catches missing auth header
-		payload := annHttp.CreateBody{
+		payload := annHttp.CreateRequest{
 			Title:   "Secret News",
 			Content: "Content",
 		}
@@ -63,7 +63,7 @@ func TestAnnouncementCRUDAndPermissions(t *testing.T) {
 	})
 
 	t.Run("Create Announcement: Permission Denied (Regular User)", func(t *testing.T) {
-		payload := annHttp.CreateBody{
+		payload := annHttp.CreateRequest{
 			Title:   "Hacked Announcement",
 			Content: "I shouldn't be able to post this.",
 		}
@@ -74,7 +74,7 @@ func TestAnnouncementCRUDAndPermissions(t *testing.T) {
 
 	t.Run("Create Announcement: Validation Failure (Empty Fields)", func(t *testing.T) {
 		// Case 1: Empty Title (Logic Check)
-		payloadNoTitle := annHttp.CreateBody{
+		payloadNoTitle := annHttp.CreateRequest{
 			Title:   "   ", // Only spaces should also be rejected
 			Content: "Content without title",
 		}
@@ -82,7 +82,7 @@ func TestAnnouncementCRUDAndPermissions(t *testing.T) {
 		assert.Equal(t, http.StatusBadRequest, wTitle.Code, "Should return 400 for whitespace-only title")
 
 		// Case 2: Empty Content (Logic Check)
-		payloadNoContent := annHttp.CreateBody{
+		payloadNoContent := annHttp.CreateRequest{
 			Title:   "Title without content",
 			Content: "",
 		}
@@ -105,7 +105,7 @@ func TestAnnouncementCRUDAndPermissions(t *testing.T) {
 
 	t.Run("List Announcements: Success & Filtering", func(t *testing.T) {
 		// Create a second announcement to test filtering
-		secondPayload := annHttp.CreateBody{
+		secondPayload := annHttp.CreateRequest{
 			Title:   "Badminton Tournament",
 			Content: "Join us next week!",
 		}
@@ -115,7 +115,7 @@ func TestAnnouncementCRUDAndPermissions(t *testing.T) {
 		wAll := executeRequest("GET", "/v1/announcements", nil, regularUserToken)
 		assert.Equal(t, http.StatusOK, wAll.Code)
 
-		var listResp response.PageResponse[annHttp.Response]
+		var listResp response.PageResponse[annHttp.AnnouncementResponse]
 		json.Unmarshal(wAll.Body.Bytes(), &listResp)
 		assert.GreaterOrEqual(t, listResp.Total, 2)
 
@@ -123,7 +123,7 @@ func TestAnnouncementCRUDAndPermissions(t *testing.T) {
 		wFilter := executeRequest("GET", "/v1/announcements?q=Maintenance", nil, regularUserToken)
 		assert.Equal(t, http.StatusOK, wFilter.Code)
 
-		var filterResp response.PageResponse[annHttp.Response]
+		var filterResp response.PageResponse[annHttp.AnnouncementResponse]
 		json.Unmarshal(wFilter.Body.Bytes(), &filterResp)
 		assert.Equal(t, 1, filterResp.Total)
 		assert.Equal(t, "System Maintenance", filterResp.Items[0].Title)
@@ -134,7 +134,7 @@ func TestAnnouncementCRUDAndPermissions(t *testing.T) {
 		w := executeRequest("GET", path, nil, regularUserToken)
 
 		assert.Equal(t, http.StatusOK, w.Code)
-		var resp annHttp.Response
+		var resp annHttp.AnnouncementResponse
 		json.Unmarshal(w.Body.Bytes(), &resp)
 		assert.Equal(t, announcementID, resp.ID)
 	})
@@ -144,14 +144,14 @@ func TestAnnouncementCRUDAndPermissions(t *testing.T) {
 	t.Run("Update Announcement: Success (System Admin)", func(t *testing.T) {
 		path := fmt.Sprintf("/v1/announcements/%s", announcementID)
 		newTitle := "Updated Maintenance Schedule"
-		payload := annHttp.UpdateBody{
+		payload := annHttp.UpdateRequest{
 			Title: &newTitle,
 		}
 
 		w := executeRequest("PATCH", path, payload, sysAdminToken)
 		require.Equal(t, http.StatusOK, w.Code)
 
-		var resp annHttp.Response
+		var resp annHttp.AnnouncementResponse
 		json.Unmarshal(w.Body.Bytes(), &resp)
 		assert.Equal(t, newTitle, resp.Title)
 		// Content should remain unchanged
@@ -161,7 +161,7 @@ func TestAnnouncementCRUDAndPermissions(t *testing.T) {
 	t.Run("Update Announcement: Permission Denied (Regular User)", func(t *testing.T) {
 		path := fmt.Sprintf("/v1/announcements/%s", announcementID)
 		newTitle := "Hacked Title"
-		payload := annHttp.UpdateBody{
+		payload := annHttp.UpdateRequest{
 			Title: &newTitle,
 		}
 
@@ -172,7 +172,7 @@ func TestAnnouncementCRUDAndPermissions(t *testing.T) {
 	t.Run("Update Announcement: Validation Failure (Empty Strings)", func(t *testing.T) {
 		path := fmt.Sprintf("/v1/announcements/%s", announcementID)
 		emptyStr := "   " // Whitespace should be trimmed and fail
-		payload := annHttp.UpdateBody{
+		payload := annHttp.UpdateRequest{
 			Title: &emptyStr,
 		}
 
@@ -219,7 +219,7 @@ func TestAnnouncementCRUDAndPermissions(t *testing.T) {
 
 		// PATCH
 		newTitle := "Ghost"
-		payload := annHttp.UpdateBody{Title: &newTitle}
+		payload := annHttp.UpdateRequest{Title: &newTitle}
 		wPatch := executeRequest("PATCH", path, payload, sysAdminToken)
 		assert.Equal(t, http.StatusNotFound, wPatch.Code)
 
@@ -241,7 +241,7 @@ func TestAnnouncementCRUDAndPermissions(t *testing.T) {
 
 		// PATCH
 		newTitle := "Should fail"
-		payload := annHttp.UpdateBody{Title: &newTitle}
+		payload := annHttp.UpdateRequest{Title: &newTitle}
 		wPatch := executeRequest("PATCH", invalidPath, payload, sysAdminToken)
 		assert.Equal(t, http.StatusBadRequest, wPatch.Code, "Should return 400 for invalid UUID in PATCH")
 

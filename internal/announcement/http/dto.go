@@ -6,7 +6,7 @@ import (
 	"github.com/nekogravitycat/court-booking-backend/internal/announcement"
 )
 
-type Response struct {
+type AnnouncementResponse struct {
 	ID        string    `json:"id"`
 	Title     string    `json:"title"`
 	Content   string    `json:"content"`
@@ -14,8 +14,8 @@ type Response struct {
 	UpdatedAt time.Time `json:"updated_at"`
 }
 
-func NewResponse(a *announcement.Announcement) Response {
-	return Response{
+func NewResponse(a *announcement.Announcement) AnnouncementResponse {
+	return AnnouncementResponse{
 		ID:        a.ID,
 		Title:     a.Title,
 		Content:   a.Content,
@@ -24,12 +24,12 @@ func NewResponse(a *announcement.Announcement) Response {
 	}
 }
 
-type CreateBody struct {
+type CreateRequest struct {
 	Title   string `json:"title" binding:"required"`
 	Content string `json:"content" binding:"required"`
 }
 
-type UpdateBody struct {
+type UpdateRequest struct {
 	Title   *string `json:"title"`
 	Content *string `json:"content"`
 }

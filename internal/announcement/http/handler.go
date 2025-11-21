@@ -36,7 +36,7 @@ func (h *Handler) List(c *gin.Context) {
 		return
 	}
 
-	items := make([]Response, len(list))
+	items := make([]AnnouncementResponse, len(list))
 	for i, a := range list {
 		items[i] = NewResponse(a)
 	}
@@ -67,7 +67,7 @@ func (h *Handler) Get(c *gin.Context) {
 }
 
 func (h *Handler) Create(c *gin.Context) {
-	var body CreateBody
+	var body CreateRequest
 	if err := c.ShouldBindJSON(&body); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request body", "details": err.Error()})
 		return
@@ -100,7 +100,7 @@ func (h *Handler) Update(c *gin.Context) {
 		return
 	}
 
-	var body UpdateBody
+	var body UpdateRequest
 	if err := c.ShouldBindJSON(&body); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request body"})
 		return

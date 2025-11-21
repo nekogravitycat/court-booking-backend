@@ -42,7 +42,7 @@ func NewLocationResponse(l *location.Location) LocationResponse {
 	}
 }
 
-type CreateLocationBody struct {
+type CreateLocationRequest struct {
 	OrganizationID    string  `json:"organization_id" binding:"required,uuid"`
 	Name              string  `json:"name" binding:"required"`
 	Capacity          int64   `json:"capacity" binding:"required"`
@@ -57,7 +57,7 @@ type CreateLocationBody struct {
 	Latitude          float64 `json:"latitude" binding:"required,min=-90,max=90"`
 }
 
-type UpdateLocationBody struct {
+type UpdateLocationRequest struct {
 	Name              *string  `json:"name"`
 	Capacity          *int64   `json:"capacity"`
 	OpeningHoursStart *string  `json:"opening_hours_start"`

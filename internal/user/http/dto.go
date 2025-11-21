@@ -6,9 +6,9 @@ import (
 	"github.com/nekogravitycat/court-booking-backend/internal/user"
 )
 
-// UpdateUserBody defines fields allowed to be updated via PATCH /users/:id.
+// UpdateUserRequest defines fields allowed to be updated via PATCH /users/:id.
 // Use pointers to distinguish between "field not sent" and "field sent as false/empty".
-type UpdateUserBody struct {
+type UpdateUserRequest struct {
 	DisplayName   *string `json:"display_name"`
 	IsActive      *bool   `json:"is_active"`
 	IsSystemAdmin *bool   `json:"is_system_admin"`
@@ -18,9 +18,9 @@ type UpdateUserBody struct {
 type UserResponse struct {
 	ID            string     `json:"id"`
 	Email         string     `json:"email"`
-	DisplayName   *string    `json:"display_name,omitempty"`
+	DisplayName   *string    `json:"display_name"`
 	CreatedAt     time.Time  `json:"created_at"`
-	LastLoginAt   *time.Time `json:"last_login_at,omitempty"`
+	LastLoginAt   *time.Time `json:"last_login_at"`
 	IsActive      bool       `json:"is_active"`
 	IsSystemAdmin bool       `json:"is_system_admin"`
 }
@@ -50,7 +50,7 @@ func NewUserResponse(u *user.User) UserResponse {
 type RegisterRequest struct {
 	Email       string `json:"email" binding:"required,email"`
 	Password    string `json:"password" binding:"required,min=8"`
-	DisplayName string `json:"display_name"`
+	DisplayName string `json:"display_name" binding:"required"`
 }
 
 // LoginRequest defines the payload for user login.

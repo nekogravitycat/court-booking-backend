@@ -36,7 +36,7 @@ func NewOrganizationResponse(o *organization.Organization) OrganizationResponse 
 type MemberResponse struct {
 	UserID      string  `json:"user_id"`
 	Email       string  `json:"email"`
-	DisplayName *string `json:"display_name,omitempty"`
+	DisplayName *string `json:"display_name"`
 	Role        string  `json:"role"`
 }
 

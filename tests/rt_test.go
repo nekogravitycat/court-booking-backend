@@ -79,7 +79,7 @@ func TestResourceTypeCRUDAndPermissions(t *testing.T) {
 	t.Run("Create Resource Type: Input Validation (Bad Request)", func(t *testing.T) {
 		// Case 1: Missing Required Fields (Name)
 		// The binding:"required" tag should trigger 400
-		invalidPayload := rtHttp.CreateBody{
+		invalidPayload := rtHttp.CreateRequest{
 			OrganizationID: orgA_ID,
 			Name:           "", // Empty name
 			Description:    "Missing name",
@@ -105,7 +105,7 @@ func TestResourceTypeCRUDAndPermissions(t *testing.T) {
 	})
 
 	t.Run("Create Resource Type: Strict Permission Control", func(t *testing.T) {
-		validPayload := rtHttp.CreateBody{
+		validPayload := rtHttp.CreateRequest{
 			OrganizationID: orgA_ID,
 			Name:           "Restricted Type",
 			Description:    "Should not exist",
@@ -125,7 +125,7 @@ func TestResourceTypeCRUDAndPermissions(t *testing.T) {
 		assert.Equal(t, http.StatusForbidden, wAdminB.Code, "Admin of another org should not be allowed to create resources for this org")
 
 		// 4. Cross-Organization Attack: Admin of Org A trying to create resource for Org B
-		payloadForB := rtHttp.CreateBody{
+		payloadForB := rtHttp.CreateRequest{
 			OrganizationID: orgB_ID, // Targeting Org B
 			Name:           "Attack Type",
 		}
@@ -134,7 +134,7 @@ func TestResourceTypeCRUDAndPermissions(t *testing.T) {
 	})
 
 	t.Run("Create Resource Type: Success", func(t *testing.T) {
-		validPayload := rtHttp.CreateBody{
+		validPayload := rtHttp.CreateRequest{
 			OrganizationID: orgA_ID,
 			Name:           "Badminton Court",
 			Description:    "Standard BWF approved court",
@@ -144,7 +144,7 @@ func TestResourceTypeCRUDAndPermissions(t *testing.T) {
 		w := executeRequest("POST", "/v1/resource-types", validPayload, adminAToken)
 		require.Equal(t, http.StatusCreated, w.Code, "Admin should be able to create resource type")
 
-		var resp rtHttp.Response
+		var resp rtHttp.ResourceTypeResponse
 		err := json.Unmarshal(w.Body.Bytes(), &resp)
 		require.NoError(t, err, "Should unmarshal response successfully")
 		assert.Equal(t, "Badminton Court", resp.Name, "Name should match created value")
@@ -161,7 +161,7 @@ func TestResourceTypeCRUDAndPermissions(t *testing.T) {
 		w := executeRequest("GET", path, nil, strangerToken)
 		assert.Equal(t, http.StatusOK, w.Code, "Should allow public/authenticated listing")
 
-		var listResp response.PageResponse[rtHttp.Response]
+		var listResp response.PageResponse[rtHttp.ResourceTypeResponse]
 		json.Unmarshal(w.Body.Bytes(), &listResp)
 
 		assert.GreaterOrEqual(t, listResp.Total, 1, "Should return at least one item")
@@ -174,7 +174,7 @@ func TestResourceTypeCRUDAndPermissions(t *testing.T) {
 		w := executeRequest("GET", path, nil, memberAToken)
 		assert.Equal(t, http.StatusOK, w.Code, "Should get existing resource type")
 
-		var resp rtHttp.Response
+		var resp rtHttp.ResourceTypeResponse
 		json.Unmarshal(w.Body.Bytes(), &resp)
 		assert.Equal(t, resourceTypeID, resp.ID, "ID should match requested ID")
 
@@ -196,7 +196,7 @@ func TestResourceTypeCRUDAndPermissions(t *testing.T) {
 
 		// PATCH
 		newName := "Dont Update"
-		payload := rtHttp.UpdateBody{Name: &newName}
+		payload := rtHttp.UpdateRequest{Name: &newName}
 		wPatch := executeRequest("PATCH", invalidPath, payload, ownerAToken)
 		assert.Equal(t, http.StatusBadRequest, wPatch.Code, "Should return 400 for invalid UUID path param in PATCH")
 
@@ -220,7 +220,7 @@ func TestResourceTypeCRUDAndPermissions(t *testing.T) {
 	t.Run("Update Resource Type: Permission Boundaries", func(t *testing.T) {
 		path := fmt.Sprintf("/v1/resource-types/%s", resourceTypeID)
 		newName := "Hacked Name"
-		payload := rtHttp.UpdateBody{Name: &newName}
+		payload := rtHttp.UpdateRequest{Name: &newName}
 
 		// 1. Member of same Org -> Forbidden
 		wMember := executeRequest("PATCH", path, payload, memberAToken)
@@ -240,7 +240,7 @@ func TestResourceTypeCRUDAndPermissions(t *testing.T) {
 		path := fmt.Sprintf("/v1/resource-types/%s", resourceTypeID)
 		newName := "Premium Badminton Court"
 		newDesc := "Air conditioned"
-		payload := rtHttp.UpdateBody{
+		payload := rtHttp.UpdateRequest{
 			Name:        &newName,
 			Description: &newDesc,
 		}
@@ -249,7 +249,7 @@ func TestResourceTypeCRUDAndPermissions(t *testing.T) {
 		w := executeRequest("PATCH", path, payload, ownerAToken)
 		require.Equal(t, http.StatusOK, w.Code, "Owner should be able to update")
 
-		var resp rtHttp.Response
+		var resp rtHttp.ResourceTypeResponse
 		json.Unmarshal(w.Body.Bytes(), &resp)
 		assert.Equal(t, "Premium Badminton Court", resp.Name, "Name should be updated")
 		assert.Equal(t, "Air conditioned", resp.Description, "Description should be updated")
@@ -284,7 +284,7 @@ func TestResourceTypeCRUDAndPermissions(t *testing.T) {
 		fakeID := "00000000-0000-0000-0000-000000000000"
 		path := fmt.Sprintf("/v1/resource-types/%s", fakeID)
 		newName := "Ghost"
-		payload := rtHttp.UpdateBody{Name: &newName}
+		payload := rtHttp.UpdateRequest{Name: &newName}
 
 		// Update -> 404
 		wUpdate := executeRequest("PATCH", path, payload, ownerAToken)

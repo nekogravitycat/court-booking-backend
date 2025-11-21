@@ -120,7 +120,7 @@ func TestUserManagementPermissions(t *testing.T) {
 	t.Run("Admin Update User Status", func(t *testing.T) {
 		path := "/v1/users/" + normalUser.ID
 		isActive := false
-		updatePayload := userHttp.UpdateUserBody{
+		updatePayload := userHttp.UpdateUserRequest{
 			IsActive: &isActive,
 		}
 		w := executeRequest("PATCH", path, updatePayload, adminToken)
@@ -168,7 +168,7 @@ func TestUserNotFoundAndInvalidInput(t *testing.T) {
 
 		// 2. PATCH
 		isActive := false
-		payload := userHttp.UpdateUserBody{IsActive: &isActive}
+		payload := userHttp.UpdateUserRequest{IsActive: &isActive}
 		wPatch := executeRequest("PATCH", invalidPath, payload, token)
 		assert.Equal(t, http.StatusBadRequest, wPatch.Code, "Should return 400 for invalid UUID in PATCH")
 	})
