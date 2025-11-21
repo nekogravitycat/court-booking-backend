@@ -1,0 +1,13 @@
+# Ignore all files by default
+*
+
+# Include codebase directories
+!cmd/
+!internal/
+
+# Include Go module files
+!go.mod
+!go.sum
+
+# Include Dockerfile
+!Dockerfile
