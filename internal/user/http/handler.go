@@ -242,3 +242,27 @@ func (h *UserHandler) Update(c *gin.Context) {
 
 	c.JSON(http.StatusOK, resp)
 }
+
+// Delete performs a soft delete on a user.
+// Access Control: System Admin only.
+func (h *UserHandler) Delete(c *gin.Context) {
+	id := c.Param("id")
+
+	// Validate UUID format
+	if _, err := uuid.Parse(id); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid UUID"})
+		return
+	}
+
+	if err := h.userService.Delete(c.Request.Context(), id); err != nil {
+		switch {
+		case errors.Is(err, user.ErrNotFound):
+			c.JSON(http.StatusNotFound, gin.H{"error": "user not found"})
+		default:
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to delete user"})
+		}
+		return
+	}
+
+	c.Status(http.StatusNoContent)
+}

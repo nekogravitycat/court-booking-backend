@@ -288,6 +288,94 @@ func TestUserOrganizationResponse(t *testing.T) {
 	})
 }
 
+func TestDeleteUser(t *testing.T) {
+	clearTables()
+
+	// Setup: Create actors
+	// 1. Admin user (Authorized to delete)
+	adminUser := createTestUser(t, "admin@delete.com", "adminpass", true)
+	adminToken := generateToken(adminUser.ID, adminUser.Email)
+
+	// 2. Normal user (Unauthorized to delete)
+	normalUser := createTestUser(t, "normal@delete.com", "userpass", false)
+	normalToken := generateToken(normalUser.ID, normalUser.Email)
+
+	// 3. Victim user (The one to be deleted)
+	victimUser := createTestUser(t, "victim@delete.com", "victimpass", false)
+
+	t.Run("Delete Without Auth", func(t *testing.T) {
+		path := "/v1/users/" + victimUser.ID
+		w := executeRequest("DELETE", path, nil, "")
+		assert.Equal(t, http.StatusUnauthorized, w.Code, "Should return 401 when no token is provided")
+	})
+
+	t.Run("Delete With Normal User Token", func(t *testing.T) {
+		path := "/v1/users/" + victimUser.ID
+		w := executeRequest("DELETE", path, nil, normalToken)
+		assert.Equal(t, http.StatusForbidden, w.Code, "Should return 403 when a normal user tries to delete")
+	})
+
+	t.Run("Delete With Invalid UUID", func(t *testing.T) {
+		w := executeRequest("DELETE", "/v1/users/invalid-uuid-string", nil, adminToken)
+		assert.Equal(t, http.StatusBadRequest, w.Code, "Should return 400 for invalid UUID format")
+	})
+
+	t.Run("Delete Non-existent User", func(t *testing.T) {
+		fakeUUID := "00000000-0000-0000-0000-000000000000"
+		w := executeRequest("DELETE", "/v1/users/"+fakeUUID, nil, adminToken)
+		assert.Equal(t, http.StatusNotFound, w.Code, "Should return 404 when deleting a non-existent user")
+	})
+
+	t.Run("Delete Success (Soft Delete)", func(t *testing.T) {
+		path := "/v1/users/" + victimUser.ID
+		w := executeRequest("DELETE", path, nil, adminToken)
+
+		// 1. Check HTTP Status
+		require.Equal(t, http.StatusNoContent, w.Code, "Should return 204 No Content on success")
+
+		// 2. Verify Database State (via API)
+		// We fetch the user again to ensure 'is_active' is now false.
+		// Note: We use the admin token to fetch, as the user might be blocked from logging in.
+		wGet := executeRequest("GET", path, nil, adminToken)
+		require.Equal(t, http.StatusOK, wGet.Code)
+
+		var resp userHttp.MeResponse
+		err := json.Unmarshal(wGet.Body.Bytes(), &resp)
+		require.NoError(t, err)
+
+		assert.Equal(t, victimUser.ID, resp.User.ID)
+		assert.False(t, resp.User.IsActive, "User should be marked as inactive (soft deleted)")
+	})
+
+	t.Run("Delete Idempotency (Delete Again)", func(t *testing.T) {
+		// Even if the user is already inactive, the DELETE operation should succeed (204).
+		// This ensures the client doesn't get an error if they retry the request due to network issues.
+		path := "/v1/users/" + victimUser.ID
+		w := executeRequest("DELETE", path, nil, adminToken)
+		assert.Equal(t, http.StatusNoContent, w.Code, "Repeated delete should still return 204")
+	})
+
+	t.Run("Deleted User Cannot Login", func(t *testing.T) {
+		// Attempt to login with the user credentials that were just deleted
+		loginPayload := userHttp.LoginRequest{
+			Email:    "victim@delete.com", // The email of victimUser
+			Password: "victimpass",        // The password we set during setup
+		}
+
+		w := executeRequest("POST", "/v1/auth/login", loginPayload, "")
+
+		// Expect 401 Unauthorized because the user is inactive
+		assert.Equal(t, http.StatusUnauthorized, w.Code, "Soft deleted user should not be able to login")
+
+		// Optional: Verify the error message doesn't leak that the user exists but is inactive
+		// It should be the generic "invalid email or password"
+		var resp map[string]string
+		err := json.Unmarshal(w.Body.Bytes(), &resp)
+		require.NoError(t, err)
+		assert.Equal(t, "invalid email or password", resp["error"])
+	})
+}
+
 // -------------------------------------------------------------------
 // Helper Functions
 // -------------------------------------------------------------------

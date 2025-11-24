@@ -24,6 +24,7 @@ type Service interface {
 
 	List(ctx context.Context, filter UserFilter) ([]*User, int, error)
 	Update(ctx context.Context, id string, req UpdateUserRequest) (*User, error)
+	Delete(ctx context.Context, id string) error
 }
 
 type service struct {
@@ -162,4 +163,14 @@ func (s *service) Update(ctx context.Context, id string, req UpdateUserRequest) 
 	}
 
 	return u, nil
+}
+
+func (s *service) Delete(ctx context.Context, id string) error {
+	// Check if user exists
+	_, err := s.repo.GetByID(ctx, id)
+	if err != nil {
+		return err
+	}
+
+	return s.repo.Delete(ctx, id)
 }

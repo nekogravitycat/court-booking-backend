@@ -24,6 +24,7 @@ type Repository interface {
 	UpdateLastLogin(ctx context.Context, id string, t time.Time) error
 	List(ctx context.Context, filter UserFilter) ([]*User, int, error)
 	Update(ctx context.Context, u *User) error
+	Delete(ctx context.Context, id string) error
 }
 
 type pgxUserRepository struct {
@@ -319,6 +320,25 @@ func (r *pgxUserRepository) Update(ctx context.Context, u *User) error {
 	ct, err := r.pool.Exec(ctx, query, u.DisplayName, u.IsActive, u.IsSystemAdmin, u.ID)
 	if err != nil {
 		return fmt.Errorf("update user failed: %w", err)
+	}
+
+	if ct.RowsAffected() == 0 {
+		return ErrNotFound
+	}
+
+	return nil
+}
+
+func (r *pgxUserRepository) Delete(ctx context.Context, id string) error {
+	const query = `
+		UPDATE public.users
+		SET is_active = false
+		WHERE id = $1
+	`
+
+	ct, err := r.pool.Exec(ctx, query, id)
+	if err != nil {
+		return fmt.Errorf("delete user failed: %w", err)
 	}
 
 	if ct.RowsAffected() == 0 {
