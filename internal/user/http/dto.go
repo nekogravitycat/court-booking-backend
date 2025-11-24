@@ -16,13 +16,14 @@ type UpdateUserRequest struct {
 
 // UserResponse is the shape of user data returned in API responses.
 type UserResponse struct {
-	ID            string     `json:"id"`
-	Email         string     `json:"email"`
-	DisplayName   *string    `json:"display_name"`
-	CreatedAt     time.Time  `json:"created_at"`
-	LastLoginAt   *time.Time `json:"last_login_at"`
-	IsActive      bool       `json:"is_active"`
-	IsSystemAdmin bool       `json:"is_system_admin"`
+	ID            string                      `json:"id"`
+	Email         string                      `json:"email"`
+	DisplayName   *string                     `json:"display_name"`
+	CreatedAt     time.Time                   `json:"created_at"`
+	LastLoginAt   *time.Time                  `json:"last_login_at"`
+	IsActive      bool                        `json:"is_active"`
+	IsSystemAdmin bool                        `json:"is_system_admin"`
+	Organizations []OrganizationBriefResponse `json:"organizations"`
 }
 
 // NewUserResponse converts domain user.User to UserResponse used by the API.
@@ -35,6 +36,17 @@ func NewUserResponse(u *user.User) UserResponse {
 		lastLoginAt = &ll
 	}
 
+	// Map the organizations
+	orgs := make([]OrganizationBriefResponse, 0, len(u.Organizations))
+	if u.Organizations != nil {
+		for _, org := range u.Organizations {
+			orgs = append(orgs, OrganizationBriefResponse{
+				ID:   org.ID,
+				Name: org.Name,
+			})
+		}
+	}
+
 	return UserResponse{
 		ID:            u.ID,
 		Email:         u.Email,
@@ -43,6 +55,7 @@ func NewUserResponse(u *user.User) UserResponse {
 		LastLoginAt:   lastLoginAt,
 		IsActive:      u.IsActive,
 		IsSystemAdmin: u.IsSystemAdmin,
+		Organizations: orgs,
 	}
 }
 
@@ -68,4 +81,10 @@ type LoginResponse struct {
 // MeResponse returns the current user info.
 type MeResponse struct {
 	User UserResponse `json:"user"`
+}
+
+// OrganizationBriefResponse is a nested struct for user list.
+type OrganizationBriefResponse struct {
+	ID   string `json:"id"`
+	Name string `json:"name"`
 }

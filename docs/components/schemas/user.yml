@@ -21,12 +21,27 @@ UserResponse:
       type: boolean
     is_system_admin:
       type: boolean
+    organizations:
+      type: array
+      description: The list of organizations the user belongs to
+      items:
+        type: object
+        properties:
+          id:
+            type: string
+            format: uuid
+          name:
+            type: string
+        required:
+          - id
+          - name
   required:
     - id
     - email
     - created_at
     - is_active
     - is_system_admin
+    - organizations
 
 MeResponse:
   type: object

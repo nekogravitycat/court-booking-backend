@@ -3,8 +3,10 @@ package user
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 	"strconv"
 	"time"
 
@@ -37,15 +39,34 @@ func NewPgxRepository(pool *pgxpool.Pool) Repository {
 
 func (r *pgxUserRepository) GetByEmail(ctx context.Context, email string) (*User, error) {
 	const query = `
-		SELECT id, email, password_hash, display_name, created_at, last_login_at, is_active, is_system_admin
-		FROM public.users
-		WHERE email = $1
+		SELECT
+			u.id,
+			u.email,
+			u.password_hash,
+			u.display_name,
+			u.created_at,
+			u.last_login_at,
+			u.is_active,
+			u.is_system_admin,
+			COALESCE(
+				(
+					SELECT json_agg(json_build_object('id', o.id, 'name', o.name))
+					FROM public.organization_permissions op
+					JOIN public.organizations o ON op.organization_id = o.id
+					WHERE op.user_id = u.id AND o.is_active = true
+				),
+				'[]'::json
+			) AS organizations
+		FROM public.users u
+		WHERE u.email = $1
 	`
 
 	row := r.pool.QueryRow(ctx, query, email)
 
 	var u User
-	err := row.Scan(
+	var orgsJSON []byte
+
+	if err := row.Scan(
 		&u.ID,
 		&u.Email,
 		&u.PasswordHash,
@@ -54,12 +75,19 @@ func (r *pgxUserRepository) GetByEmail(ctx context.Context, email string) (*User
 		&u.LastLoginAt,
 		&u.IsActive,
 		&u.IsSystemAdmin,
-	)
-	if err != nil {
+		&orgsJSON, // Scan JSON for organizations
+	); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, ErrNotFound
 		}
 		return nil, fmt.Errorf("GetByEmail query failed: %w", err)
+	}
+
+	// Try parse the organizations JSON into the slice
+	if len(orgsJSON) > 0 {
+		if err := json.Unmarshal(orgsJSON, &u.Organizations); err != nil {
+			log.Printf("warning: failed to unmarshal organizations for user %s: %v", u.ID, err)
+		}
 	}
 
 	return &u, nil
@@ -67,15 +95,34 @@ func (r *pgxUserRepository) GetByEmail(ctx context.Context, email string) (*User
 
 func (r *pgxUserRepository) GetByID(ctx context.Context, id string) (*User, error) {
 	const query = `
-		SELECT id, email, password_hash, display_name, created_at, last_login_at, is_active, is_system_admin
-		FROM public.users
-		WHERE id = $1
+		SELECT
+			u.id,
+			u.email,
+			u.password_hash,
+			u.display_name,
+			u.created_at,
+			u.last_login_at,
+			u.is_active,
+			u.is_system_admin,
+			COALESCE(
+				(
+					SELECT json_agg(json_build_object('id', o.id, 'name', o.name))
+					FROM public.organization_permissions op
+					JOIN public.organizations o ON op.organization_id = o.id
+					WHERE op.user_id = u.id AND o.is_active = true
+				),
+				'[]'::json
+			) AS organizations
+		FROM public.users u
+		WHERE u.id = $1
 	`
 
 	row := r.pool.QueryRow(ctx, query, id)
 
 	var u User
-	err := row.Scan(
+	var orgsJSON []byte
+
+	if err := row.Scan(
 		&u.ID,
 		&u.Email,
 		&u.PasswordHash,
@@ -84,12 +131,19 @@ func (r *pgxUserRepository) GetByID(ctx context.Context, id string) (*User, erro
 		&u.LastLoginAt,
 		&u.IsActive,
 		&u.IsSystemAdmin,
-	)
-	if err != nil {
+		&orgsJSON, // Scan JSON for organizations
+	); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, ErrNotFound
 		}
 		return nil, fmt.Errorf("GetByID query failed: %w", err)
+	}
+
+	// Try parse the organizations JSON into the slice
+	if len(orgsJSON) > 0 {
+		if err := json.Unmarshal(orgsJSON, &u.Organizations); err != nil {
+			log.Printf("warning: failed to unmarshal organizations for user %s: %v", u.ID, err)
+		}
 	}
 
 	return &u, nil
@@ -102,7 +156,7 @@ func (r *pgxUserRepository) Create(ctx context.Context, u *User) error {
 		RETURNING id, created_at
 	`
 
-	err := r.pool.QueryRow(
+	if err := r.pool.QueryRow(
 		ctx,
 		query,
 		u.Email,
@@ -110,8 +164,7 @@ func (r *pgxUserRepository) Create(ctx context.Context, u *User) error {
 		u.DisplayName,
 		u.IsActive,
 		u.IsSystemAdmin,
-	).Scan(&u.ID, &u.CreatedAt)
-	if err != nil {
+	).Scan(&u.ID, &u.CreatedAt); err != nil {
 		var e *pgconn.PgError
 		if errors.As(err, &e) && e.Code == pgerrcode.UniqueViolation {
 			return ErrEmailAlreadyUsed
@@ -142,10 +195,29 @@ func (r *pgxUserRepository) UpdateLastLogin(ctx context.Context, id string, t ti
 }
 
 func (r *pgxUserRepository) List(ctx context.Context, filter UserFilter) ([]*User, int, error) {
-	var args []interface{}
+	var args []any
+	// We use a Correlated Subquery to fetch organizations as a JSON array.
 	queryBuilder := bytes.NewBufferString(`
-		SELECT id, email, password_hash, display_name, created_at, last_login_at, is_active, is_system_admin, count(*) OVER() AS total_count
-		FROM public.users
+		SELECT
+			u.id,
+			u.email,
+			u.password_hash,
+			u.display_name,
+			u.created_at,
+			u.last_login_at,
+			u.is_active,
+			u.is_system_admin,
+			count(*) OVER() AS total_count,
+			COALESCE(
+				(
+					SELECT json_agg(json_build_object('id', o.id, 'name', o.name))
+					FROM public.organization_permissions op
+					JOIN public.organizations o ON op.organization_id = o.id
+					WHERE op.user_id = u.id AND o.is_active = true
+				),
+				'[]'::json
+			) AS organizations
+		FROM public.users u
 		WHERE 1=1
 	`)
 
@@ -204,6 +276,8 @@ func (r *pgxUserRepository) List(ctx context.Context, filter UserFilter) ([]*Use
 
 	for rows.Next() {
 		var u User
+		var orgsJSON []byte
+
 		if err := rows.Scan(
 			&u.ID,
 			&u.Email,
@@ -213,10 +287,22 @@ func (r *pgxUserRepository) List(ctx context.Context, filter UserFilter) ([]*Use
 			&u.LastLoginAt,
 			&u.IsActive,
 			&u.IsSystemAdmin,
-			&total, // Scan the window function result
+			&total,    // Scan the window function result
+			&orgsJSON, // Scan the JSON result for organizations
 		); err != nil {
 			return nil, 0, fmt.Errorf("scan user failed: %w", err)
 		}
+
+		// Parse the organizations JSON into the slice
+		// pgx can actually scan directly into structs if setup correctly,
+		// but using json.Unmarshal is safer and simpler for this specific case without extra config.
+		if len(orgsJSON) > 0 {
+			if err := json.Unmarshal(orgsJSON, &u.Organizations); err != nil {
+				// Log the error but continue; we don't want one bad record to fail the whole list.
+				log.Printf("warning: failed to unmarshal organizations for user %s: %v", u.ID, err)
+			}
+		}
+
 		users = append(users, &u)
 	}
 

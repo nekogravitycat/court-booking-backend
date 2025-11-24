@@ -1,6 +1,7 @@
 package tests
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"testing"
@@ -172,4 +173,140 @@ func TestUserNotFoundAndInvalidInput(t *testing.T) {
 		wPatch := executeRequest("PATCH", invalidPath, payload, token)
 		assert.Equal(t, http.StatusBadRequest, wPatch.Code, "Should return 400 for invalid UUID in PATCH")
 	})
+}
+
+func TestUserOrganizationResponse(t *testing.T) {
+	clearTables()
+
+	// Setup: Create users
+	// Admin user to test GetByID permissions
+	adminUser := createTestUser(t, "admin@check.com", "pass", true)
+	adminToken := generateToken(adminUser.ID, adminUser.Email)
+
+	// Target user whose organizations we will verify
+	targetUser := createTestUser(t, "target@check.com", "pass", false)
+	targetToken := generateToken(targetUser.ID, targetUser.Email)
+
+	// User with zero organizations (edge case)
+	lonelyUser := createTestUser(t, "lonely@check.com", "pass", false)
+	lonelyToken := generateToken(lonelyUser.ID, lonelyUser.Email)
+
+	// Setup: Create organizations directly in DB
+	orgA_ID := createTestOrganization(t, "Badminton Club A", true)
+	orgB_ID := createTestOrganization(t, "Tennis Club B", true)
+	orgInactive_ID := createTestOrganization(t, "Closed Club", false) // Inactive organization
+
+	// Setup: Add targetUser to organizations
+	// Add to active Org A
+	addMemberToOrg(t, orgA_ID, targetUser.ID, "member")
+	// Add to active Org B
+	addMemberToOrg(t, orgB_ID, targetUser.ID, "admin")
+	// Add to inactive Org (should be filtered out)
+	addMemberToOrg(t, orgInactive_ID, targetUser.ID, "member")
+
+	// Test Case: Check /me endpoint (should include multiple organizations and filter inactive ones)
+	t.Run("Get Me Includes Active Organizations Only", func(t *testing.T) {
+		w := executeRequest("GET", "/v1/me", nil, targetToken)
+		require.Equal(t, http.StatusOK, w.Code)
+
+		var resp userHttp.MeResponse
+		err := json.Unmarshal(w.Body.Bytes(), &resp)
+		require.NoError(t, err)
+
+		// Verify User ID
+		assert.Equal(t, targetUser.ID, resp.User.ID)
+
+		// Verify Organization list length
+		// Should have exactly 2 active organizations (OrgA, OrgB). OrgInactive must be excluded.
+		require.Len(t, resp.User.Organizations, 2, "Should have exactly 2 active organizations")
+
+		// Verify content (order is not guaranteed, so we check existence)
+		orgNames := []string{}
+		for _, org := range resp.User.Organizations {
+			orgNames = append(orgNames, org.Name)
+			assert.NotEmpty(t, org.ID)
+		}
+		assert.Contains(t, orgNames, "Badminton Club A")
+		assert.Contains(t, orgNames, "Tennis Club B")
+		assert.NotContains(t, orgNames, "Closed Club", "Inactive organization should not be listed")
+	})
+
+	// Test Case: Check Admin viewing a specific user (GET /users/:id)
+	t.Run("Admin Get User Includes Organizations", func(t *testing.T) {
+		path := "/v1/users/" + targetUser.ID
+		w := executeRequest("GET", path, nil, adminToken)
+		require.Equal(t, http.StatusOK, w.Code)
+
+		var resp userHttp.MeResponse
+		err := json.Unmarshal(w.Body.Bytes(), &resp)
+		require.NoError(t, err)
+
+		require.Len(t, resp.User.Organizations, 2)
+		// Check if one of the expected orgs is present
+		found := false
+		for _, o := range resp.User.Organizations {
+			if o.Name == "Badminton Club A" {
+				found = true
+				break
+			}
+		}
+		assert.True(t, found, "Expected organization not found in admin view")
+	})
+
+	// Test Case: Check User List (GET /users) with JSON Aggregation
+	t.Run("List Users Includes Organizations Field", func(t *testing.T) {
+		// Filter by email to isolate the target user
+		url := "/v1/users?email=target@check.com"
+		w := executeRequest("GET", url, nil, adminToken)
+		require.Equal(t, http.StatusOK, w.Code)
+
+		var resp response.PageResponse[userHttp.UserResponse]
+		err := json.Unmarshal(w.Body.Bytes(), &resp)
+		require.NoError(t, err)
+
+		require.Equal(t, 1, resp.Total)
+		userItem := resp.Items[0]
+
+		// Verify the list item contains the nested organization data
+		require.Len(t, userItem.Organizations, 2)
+		// Verify one of the organizations exists
+		assert.NotEmpty(t, userItem.Organizations[0].Name)
+	})
+
+	// Test Case: Edge Case - User with no organizations
+	t.Run("User With No Organizations Returns Empty Array", func(t *testing.T) {
+		w := executeRequest("GET", "/v1/me", nil, lonelyToken)
+		require.Equal(t, http.StatusOK, w.Code)
+
+		var resp userHttp.MeResponse
+		err := json.Unmarshal(w.Body.Bytes(), &resp)
+		require.NoError(t, err)
+
+		// It should not be nil; it should be an empty slice (depending on COALESCE implementation)
+		assert.NotNil(t, resp.User.Organizations)
+		assert.Len(t, resp.User.Organizations, 0)
+	})
+}
+
+// -------------------------------------------------------------------
+// Helper Functions
+// -------------------------------------------------------------------
+
+// createTestOrganization inserts a dummy organization directly into the database.
+// Note: Ensure 'dbPool' or your global test database variable is accessible here.
+func createTestOrganization(t *testing.T, name string, isActive bool) string {
+	var id string
+	query := `INSERT INTO organizations (name, is_active) VALUES ($1, $2) RETURNING id`
+
+	err := testPool.QueryRow(context.Background(), query, name, isActive).Scan(&id)
+	require.NoError(t, err, "Failed to create test organization")
+	return id
+}
+
+// addMemberToOrg inserts a record into organization_permissions directly.
+func addMemberToOrg(t *testing.T, orgID, userID, role string) {
+	query := `INSERT INTO organization_permissions (organization_id, user_id, role) VALUES ($1, $2, $3)`
+
+	_, err := testPool.Exec(context.Background(), query, orgID, userID, role)
+	require.NoError(t, err, "Failed to add member to org")
 }

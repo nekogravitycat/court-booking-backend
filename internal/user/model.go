@@ -24,6 +24,7 @@ type User struct {
 	LastLoginAt   *time.Time
 	IsActive      bool
 	IsSystemAdmin bool
+	Organizations []UserOrganizationBrief
 }
 
 // UserFilter defines filter options for listing users.
@@ -35,4 +36,10 @@ type UserFilter struct {
 	Page     int
 	PageSize int
 	Sort     string // simple string for now, e.g., "created_at desc"
+}
+
+// UserOrganizationBrief holds minimal organization info for list views.
+type UserOrganizationBrief struct {
+	ID   string `json:"id"`
+	Name string `json:"name"`
 }
