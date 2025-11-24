@@ -42,7 +42,7 @@ listLocations:
       content:
         application/json:
           schema:
-            $ref: "../components/schemas/location.yml#/CreateLocationBody"
+            $ref: "../components/schemas/location.yml#/CreateLocationRequest"
     responses:
       "201":
         description: Location created
@@ -56,19 +56,19 @@ listLocations:
         description: Permission denied
 
 locationDetail:
-  parameters:
-    - name: id
-      in: path
-      required: true
-      schema:
-        type: string
-        format: uuid
   get:
     tags:
       - Locations
     summary: "取得單一 Location 詳情"
     security:
       - bearerAuth: []
+    parameters: &idParams
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
     responses:
       "200":
         description: Location details
@@ -84,11 +84,12 @@ locationDetail:
     summary: "更新 Location (Organization Owner/Admin)"
     security:
       - bearerAuth: []
+    parameters: *idParams
     requestBody:
       content:
         application/json:
           schema:
-            $ref: "../components/schemas/location.yml#/UpdateLocationBody"
+            $ref: "../components/schemas/location.yml#/UpdateLocationRequest"
     responses:
       "200":
         description: Updated location
@@ -106,6 +107,7 @@ locationDetail:
     summary: "刪除 Location (Organization Owner/Admin)"
     security:
       - bearerAuth: []
+    parameters: *idParams
     responses:
       "204":
         description: Location deleted

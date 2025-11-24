@@ -19,6 +19,7 @@ UserResponse:
       nullable: true
     is_active:
       type: boolean
+      description: "若為 false 代表使用者已被軟刪除"
     is_system_admin:
       type: boolean
     organizations:
@@ -66,6 +67,7 @@ RegisterRequest:
   required:
     - email
     - password
+    - display_name
 
 LoginRequest:
   type: object
@@ -90,12 +92,13 @@ LoginResponse:
     - access_token
     - user
 
-UpdateUserBody:
+UpdateUserRequest:
   type: object
   properties:
     display_name:
       type: string
     is_active:
       type: boolean
+      description: "設定為 false 可進行軟刪除 (或使用 DELETE API)"
     is_system_admin:
       type: boolean

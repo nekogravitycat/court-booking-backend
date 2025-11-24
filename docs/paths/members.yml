@@ -1,12 +1,4 @@
 listMembers:
-  parameters:
-    - name: id
-      in: path
-      required: true
-      description: Organization ID
-      schema:
-        type: string
-        format: uuid
   get:
     tags:
       - Members
@@ -14,6 +6,13 @@ listMembers:
     security:
       - bearerAuth: []
     parameters:
+      - name: id
+        in: path
+        required: true
+        description: Organization ID
+        schema:
+          type: string
+          format: uuid
       - $ref: "../components/parameters.yml#/page"
       - $ref: "../components/parameters.yml#/page_size"
     responses:
@@ -35,6 +34,14 @@ listMembers:
     summary: "邀請/加入成員 (System Admin)"
     security:
       - bearerAuth: []
+    parameters:
+      - name: id
+        in: path
+        required: true
+        description: Organization ID
+        schema:
+          type: string
+          format: uuid
     requestBody:
       required: true
       content:
@@ -50,27 +57,27 @@ listMembers:
         description: User is already a member
 
 memberDetail:
-  parameters:
-    - name: id
-      in: path
-      required: true
-      description: Organization ID
-      schema:
-        type: string
-        format: uuid
-    - name: user_id
-      in: path
-      required: true
-      description: User ID
-      schema:
-        type: string
-        format: uuid
   patch:
     tags:
       - Members
     summary: "修改成員角色 (System Admin)"
     security:
       - bearerAuth: []
+    parameters: &idParams
+      - name: id
+        in: path
+        required: true
+        description: Organization ID
+        schema:
+          type: string
+          format: uuid
+      - name: user_id
+        in: path
+        required: true
+        description: User ID
+        schema:
+          type: string
+          format: uuid
     requestBody:
       required: true
       content:
@@ -96,6 +103,7 @@ memberDetail:
     summary: "移除成員 (System Admin)"
     security:
       - bearerAuth: []
+    parameters: *idParams
     responses:
       "204":
         description: Member removed

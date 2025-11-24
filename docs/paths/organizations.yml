@@ -44,19 +44,19 @@ listOrganizations:
         description: Forbidden
 
 organizationDetail:
-  parameters:
-    - name: id
-      in: path
-      required: true
-      schema:
-        type: string
-        format: uuid
   get:
     tags:
       - Organizations
     summary: "取得組織詳情"
     security:
       - bearerAuth: []
+    parameters: &idParam
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
     responses:
       "200":
         description: Organization details
@@ -72,6 +72,7 @@ organizationDetail:
     summary: "更新組織資訊 (System Admin)"
     security:
       - bearerAuth: []
+    parameters: *idParam
     requestBody:
       required: true
       content:
@@ -93,6 +94,7 @@ organizationDetail:
     summary: "刪除組織 (Soft Delete - System Admin)"
     security:
       - bearerAuth: []
+    parameters: *idParam
     responses:
       "204":
         description: Organization deleted (No Content)

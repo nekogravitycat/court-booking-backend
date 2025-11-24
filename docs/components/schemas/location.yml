@@ -48,7 +48,7 @@ LocationResponse:
     - longitude
     - latitude
 
-CreateLocationBody:
+CreateLocationRequest:
   type: object
   properties:
     organization_id:
@@ -95,7 +95,7 @@ CreateLocationBody:
     - longitude
     - latitude
 
-UpdateLocationBody:
+UpdateLocationRequest:
   type: object
   properties:
     name:

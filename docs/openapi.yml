@@ -79,8 +79,8 @@ components:
     LoginResponse:
       $ref: "./components/schemas/user.yml#/LoginResponse"
 
-    UpdateUserBody:
-      $ref: "./components/schemas/user.yml#/UpdateUserBody"
+    UpdateUserRequest:
+      $ref: "./components/schemas/user.yml#/UpdateUserRequest"
 
     # --------------------------
     # Organization Models
@@ -109,11 +109,11 @@ components:
     LocationResponse:
       $ref: "./components/schemas/location.yml#/LocationResponse"
 
-    CreateLocationBody:
-      $ref: "./components/schemas/location.yml#/CreateLocationBody"
+    CreateLocationRequest:
+      $ref: "./components/schemas/location.yml#/CreateLocationRequest"
 
-    UpdateLocationBody:
-      $ref: "./components/schemas/location.yml#/UpdateLocationBody"
+    UpdateLocationRequest:
+      $ref: "./components/schemas/location.yml#/UpdateLocationRequest"
 
     # --------------------------
     # ResourceType Models
@@ -121,8 +121,8 @@ components:
     ResourceTypeResponse:
       $ref: "./components/schemas/resourcetype.yml#/ResourceTypeResponse"
 
-    CreateResourceTypeBody:
-      $ref: "./components/schemas/resourcetype.yml#/CreateResourceTypeBody"
+    CreateResourceTypeRequest:
+      $ref: "./components/schemas/resourcetype.yml#/CreateResourceTypeRequest"
 
     # --------------------------
     # Resource Models

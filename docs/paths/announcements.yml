@@ -49,19 +49,19 @@ listAnnouncements:
         description: Missing title or content
 
 announcementDetail:
-  parameters:
-    - name: id
-      in: path
-      required: true
-      schema:
-        type: string
-        format: uuid
   get:
     tags:
       - Announcements
     summary: "取得公告詳情"
     security:
       - bearerAuth: []
+    parameters: &idParams
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
     responses:
       "200":
         description: announcement details
@@ -77,6 +77,7 @@ announcementDetail:
     summary: "更新公告 (System Admin)"
     security:
       - bearerAuth: []
+    parameters: *idParams
     requestBody:
       content:
         application/json:
@@ -97,6 +98,7 @@ announcementDetail:
     summary: "刪除公告 (System Admin)"
     security:
       - bearerAuth: []
+    parameters: *idParams
     responses:
       "204":
         description: deleted

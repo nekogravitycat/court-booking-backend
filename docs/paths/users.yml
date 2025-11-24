@@ -41,19 +41,19 @@ listUsers:
         description: Forbidden - 非系統管理員
 
 userDetail:
-  parameters:
-    - name: id
-      in: path
-      required: true
-      schema:
-        type: string
-        format: uuid
   get:
     tags:
       - Users
     summary: "取得單一使用者詳情 (System Admin)"
     security:
       - bearerAuth: []
+    parameters: &idParam
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
     responses:
       "200":
         description: User details
@@ -71,12 +71,13 @@ userDetail:
     summary: "更新使用者狀態/權限 (System Admin)"
     security:
       - bearerAuth: []
+    parameters: *idParam
     requestBody:
       required: true
       content:
         application/json:
           schema:
-            $ref: "../components/schemas/user.yml#/UpdateUserBody"
+            $ref: "../components/schemas/user.yml#/UpdateUserRequest"
     responses:
       "200":
         description: Updated user
@@ -84,6 +85,22 @@ userDetail:
           application/json:
             schema:
               $ref: "../components/schemas/user.yml#/MeResponse"
+      "403":
+        description: Forbidden
+      "404":
+        description: User Not found
+  delete:
+    tags:
+      - Users
+    summary: "刪除使用者 (軟刪除) (System Admin)"
+    security:
+      - bearerAuth: []
+    parameters: *idParam
+    responses:
+      "204":
+        description: User deleted successfully (No Content)
+      "400":
+        description: Invalid UUID format
       "403":
         description: Forbidden
       "404":

@@ -19,7 +19,7 @@ ResourceTypeResponse:
     - organization_id
     - name
 
-CreateResourceTypeBody:
+CreateResourceTypeRequest:
   type: object
   properties:
     organization_id:
