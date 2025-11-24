@@ -116,7 +116,7 @@ func TestResourceCRUDAndPermissions(t *testing.T) {
 		assert.Equal(t, http.StatusBadRequest, w.Code, "Should return 400 when required name is empty")
 
 		// Case: Invalid UUIDs (Binding validation)
-		invalidIDsPayload := map[string]interface{}{
+		invalidIDsPayload := map[string]any{
 			"name":             "Test Court",
 			"location_id":      "not-a-uuid",
 			"resource_type_id": rtA_ID,

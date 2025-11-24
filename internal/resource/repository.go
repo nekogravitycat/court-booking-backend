@@ -58,7 +58,7 @@ func (r *pgxRepository) GetByID(ctx context.Context, id string) (*Resource, erro
 }
 
 func (r *pgxRepository) List(ctx context.Context, filter Filter) ([]*Resource, int, error) {
-	var args []interface{}
+	var args []any
 	queryBase := `
 		SELECT id, resource_type_id, location_id, name, created_at, count(*) OVER() as total_count
 		FROM public.resources

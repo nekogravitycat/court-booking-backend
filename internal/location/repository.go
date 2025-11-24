@@ -78,7 +78,7 @@ func (r *pgxRepository) GetByID(ctx context.Context, id string) (*Location, erro
 }
 
 func (r *pgxRepository) List(ctx context.Context, filter LocationFilter) ([]*Location, int, error) {
-	var args []interface{}
+	var args []any
 	queryBase := `
 		SELECT
 			id, organization_id, name, created_at, capacity,

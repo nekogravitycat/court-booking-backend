@@ -90,7 +90,7 @@ func clearTables() {
 	}
 }
 
-func executeRequest(method, path string, body interface{}, token string) *httptest.ResponseRecorder {
+func executeRequest(method, path string, body any, token string) *httptest.ResponseRecorder {
 	var reqBody []byte
 	if body != nil {
 		reqBody, _ = json.Marshal(body)

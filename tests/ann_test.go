@@ -93,7 +93,7 @@ func TestAnnouncementCRUDAndPermissions(t *testing.T) {
 	t.Run("Create Announcement: Malformed Input (Bad Request)", func(t *testing.T) {
 		// Case 1: Invalid JSON Types (e.g. Title is an integer)
 		// This ensures the ShouldBindJSON does not panic and returns 400
-		invalidTypePayload := map[string]interface{}{
+		invalidTypePayload := map[string]any{
 			"title":   12345, // Should be string
 			"content": "Valid content",
 		}

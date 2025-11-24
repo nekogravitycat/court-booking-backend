@@ -48,7 +48,7 @@ func (m *JWTManager) GenerateAccessToken(userID string) (string, error) {
 
 // ParseAndValidate validates a JWT and returns the parsed claims.
 func (m *JWTManager) ParseAndValidate(tokenStr string) (*jwt.RegisteredClaims, error) {
-	token, err := jwt.ParseWithClaims(tokenStr, &jwt.RegisteredClaims{}, func(t *jwt.Token) (interface{}, error) {
+	token, err := jwt.ParseWithClaims(tokenStr, &jwt.RegisteredClaims{}, func(t *jwt.Token) (any, error) {
 		// Ensure token is signed using HS256
 		if _, ok := t.Method.(*jwt.SigningMethodHMAC); !ok {
 			return nil, ErrInvalidToken
