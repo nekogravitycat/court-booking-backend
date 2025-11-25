@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"strconv"
 	"time"
 
 	"github.com/joho/godotenv"
@@ -19,6 +20,7 @@ type Config struct {
 	DBDSN             string
 	JWTSecret         string
 	JWTAccessTokenTTL time.Duration
+	BcryptCost        int
 }
 
 // Load loads configuration from .env (optional) and environment variables.
@@ -32,14 +34,14 @@ func Load() (*Config, error) {
 	cfg := &Config{}
 
 	// Production origin (default: empty)
-	cfg.ProdOrigins = getEnvOrDefault("PROD_ORIGINS", "")
+	cfg.ProdOrigins = getEnv("PROD_ORIGINS", "")
 
 	// Application environment (default: dev)
-	appEnvStr := getEnvOrDefault("APP_ENV", "dev")
+	appEnvStr := getEnv("APP_ENV", "dev")
 	cfg.IsProduction = appEnvStr == PROD_STRING
 
 	// HTTP listen address (default: :8080)
-	cfg.HTTPAddr = getEnvOrDefault("HTTP_ADDR", ":8080")
+	cfg.HTTPAddr = getEnv("HTTP_ADDR", ":8080")
 
 	// Database DSN is required
 	cfg.DBDSN = os.Getenv("DB_DSN")
@@ -54,21 +56,40 @@ func Load() (*Config, error) {
 	}
 
 	// JWT access token TTL, parse as time.Duration (e.g. "15m", "1h").
-	ttlStr := getEnvOrDefault("JWT_ACCESS_TOKEN_TTL", "15m")
+	ttlStr := getEnv("JWT_ACCESS_TOKEN_TTL", "15m")
 	ttl, err := time.ParseDuration(ttlStr)
 	if err != nil {
 		return nil, fmt.Errorf("invalid JWT_ACCESS_TOKEN_TTL: %w", err)
 	}
 	cfg.JWTAccessTokenTTL = ttl
 
+	// Bcrypt cost for password hashing (default: 12)
+	cfg.BcryptCost = getEnvAsInt("BCRYPT_COST", 12)
+
 	return cfg, nil
 }
 
-// getEnvOrDefault returns the value of the environment variable if set,
+// getEnv returns the value of the environment variable if set,
 // otherwise returns the provided default value.
-func getEnvOrDefault(key, defaultValue string) string {
+func getEnv(key, defaultValue string) string {
 	if v, ok := os.LookupEnv(key); ok {
 		return v
 	}
 	return defaultValue
+}
+
+// getEnvAsInt retrieves an environment variable as an integer,
+// or returns the default value if not set or invalid.
+func getEnvAsInt(key string, defaultValue int) int {
+	valStr := getEnv(key, "")
+	if valStr == "" {
+		return defaultValue
+	}
+	val, err := strconv.Atoi(valStr)
+	if err != nil {
+		log.Printf("invalid integer for env %s: %v", key, err)
+		log.Printf("using default value %d for env %s", defaultValue, key)
+		return defaultValue
+	}
+	return val
 }

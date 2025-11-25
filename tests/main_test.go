@@ -54,10 +54,10 @@ func TestMain(m *testing.M) {
 
 	// Initialize App Container using shared logic
 	appContainer := app.NewContainer(app.Config{
-		DBPool:       testPool,
-		JWTSecret:    testSecret,
-		JWTTTL:       30 * time.Minute,
-		PasswordCost: 4, // Lower cost for testing purposes
+		DBPool:     testPool,
+		JWTSecret:  testSecret,
+		JWTTTL:     30 * time.Minute,
+		BcryptCost: 4, // Lower cost for testing purposes
 	})
 
 	// Assign global variables for tests to use

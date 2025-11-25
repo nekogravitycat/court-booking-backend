@@ -9,8 +9,6 @@ import (
 	"syscall"
 	"time"
 
-	"golang.org/x/crypto/bcrypt"
-
 	"github.com/nekogravitycat/court-booking-backend/internal/app"
 	"github.com/nekogravitycat/court-booking-backend/internal/config"
 	"github.com/nekogravitycat/court-booking-backend/internal/db"
@@ -47,7 +45,7 @@ func main() {
 		DBPool:       pool,
 		JWTSecret:    cfg.JWTSecret,
 		JWTTTL:       cfg.JWTAccessTokenTTL,
-		PasswordCost: bcrypt.DefaultCost,
+		BcryptCost:   cfg.BcryptCost,
 	})
 
 	// Use http.Server for graceful shutdown

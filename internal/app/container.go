@@ -23,7 +23,7 @@ type Config struct {
 	DBPool       *pgxpool.Pool
 	JWTSecret    string
 	JWTTTL       time.Duration
-	PasswordCost int
+	BcryptCost   int
 }
 
 // Container holds the initialized components that are needed externally.
@@ -35,7 +35,7 @@ type Container struct {
 // NewContainer initializes all modules and returns the container.
 func NewContainer(cfg Config) *Container {
 	// Init Components
-	passwordHasher := auth.NewBcryptPasswordHasherWithCost(cfg.PasswordCost)
+	passwordHasher := auth.NewBcryptPasswordHasherWithCost(cfg.BcryptCost)
 	jwtManager := auth.NewJWTManager(cfg.JWTSecret, cfg.JWTTTL)
 
 	// User Module
