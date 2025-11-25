@@ -14,6 +14,8 @@ import (
 	"github.com/nekogravitycat/court-booking-backend/internal/db"
 )
 
+const SERVER_SHUTDOWN_TIMEOUT = 5 * time.Second
+
 func main() {
 	// For receiving Ctrl+C / SIGTERM
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
@@ -25,6 +27,7 @@ func main() {
 		log.Fatalf("failed to load config: %v", err)
 	}
 
+	// Log mode
 	if cfg.IsProduction {
 		log.Printf("starting server in production mode")
 	} else {
@@ -67,13 +70,13 @@ func main() {
 	log.Println("shutdown signal received")
 
 	// Create a shutdown context with timeout
-	shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), SERVER_SHUTDOWN_TIMEOUT)
 	defer cancel()
 
 	// Shutdown HTTP server
 	if err := server.Shutdown(shutdownCtx); err != nil {
 		log.Printf("server forced to shutdown: %v", err)
+	} else {
+		log.Println("server exited gracefully")
 	}
-
-	log.Println("server exited gracefully")
 }

@@ -64,7 +64,10 @@ func Load() (*Config, error) {
 	cfg.JWTAccessTokenTTL = ttl
 
 	// Bcrypt cost for password hashing (default: 12)
-	cfg.BcryptCost = getEnvAsInt("BCRYPT_COST", 12)
+	cfg.BcryptCost, err = getEnvAsInt("BCRYPT_COST", 12)
+	if err != nil {
+		return nil, fmt.Errorf("invalid BCRYPT_COST: %w", err)
+	}
 
 	return cfg, nil
 }
@@ -78,18 +81,20 @@ func getEnv(key, defaultValue string) string {
 	return defaultValue
 }
 
-// getEnvAsInt retrieves an environment variable as an integer,
-// or returns the default value if not set or invalid.
-func getEnvAsInt(key string, defaultValue int) int {
+// getEnvAsInt retrieves an environment variable as an integer.
+// It returns the default value if the variable is not set.
+// It returns an error if the variable is set but is not a valid integer.
+func getEnvAsInt(key string, defaultValue int) (int, error) {
 	valStr := getEnv(key, "")
 	if valStr == "" {
-		return defaultValue
+		return defaultValue, nil
 	}
+
 	val, err := strconv.Atoi(valStr)
 	if err != nil {
-		log.Printf("invalid integer for env %s: %v", key, err)
-		log.Printf("using default value %d for env %s", defaultValue, key)
-		return defaultValue
+		// Return 0 and a wrapped error to provide context
+		return 0, fmt.Errorf("env %s value %q is not a valid integer: %w", key, valStr, err)
 	}
-	return val
+
+	return val, nil
 }
