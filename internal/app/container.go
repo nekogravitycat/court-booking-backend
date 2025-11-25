@@ -18,7 +18,7 @@ import (
 
 // Config holds the dependencies and settings required to start the application.
 type Config struct {
-	AppEnv       string
+	IsProduction bool
 	ProdOrigins  string
 	DBPool       *pgxpool.Pool
 	JWTSecret    string
@@ -68,7 +68,7 @@ func NewContainer(cfg Config) *Container {
 
 	// API Router Config
 	routerParams := api.Config{
-		AppEnv:         cfg.AppEnv,
+		IsProduction:   cfg.IsProduction,
 		ProdOrigins:    cfg.ProdOrigins,
 		UserService:    userService,
 		OrgService:     orgService,

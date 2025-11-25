@@ -36,9 +36,6 @@ RUN adduser -D -g '' appuser
 # Copy the binary from the builder stage
 COPY --from=builder /app/server .
 
-# Copy documentation if your code reads it at runtime (optional based on your structure)
-# COPY --from=builder /app/docs ./docs
-
 # Use the non-root user
 USER appuser
 

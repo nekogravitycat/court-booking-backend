@@ -26,7 +26,7 @@ import (
 
 // Config holds all dependencies required to initialize the router.
 type Config struct {
-	AppEnv         string
+	IsProduction   bool
 	ProdOrigins    string
 	UserService    user.Service
 	OrgService     organization.Service
@@ -40,6 +40,11 @@ type Config struct {
 
 // NewRouter initializes the HTTP router engine using the provided config.
 func NewRouter(cfg Config) *gin.Engine {
+	// Set Gin mode
+	if cfg.IsProduction {
+		gin.SetMode(gin.ReleaseMode)
+	}
+
 	r := gin.New()
 
 	// Global Middleware
@@ -54,7 +59,7 @@ func NewRouter(cfg Config) *gin.Engine {
 		allowedOrigins[i] = strings.TrimSpace(o)
 	}
 
-	if cfg.AppEnv == "prod" {
+	if cfg.IsProduction {
 		// Production: Strict mode, only allow exact domain match
 		config.AllowOrigins = allowedOrigins
 	} else {

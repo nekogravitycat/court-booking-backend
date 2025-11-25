@@ -4,16 +4,17 @@ import (
 	"fmt"
 	"log"
 	"os"
-	"strconv"
 	"time"
 
 	"github.com/joho/godotenv"
 )
 
+const PROD_STRING = "prod"
+
 // Config holds all application configuration loaded from environment.
 type Config struct {
+	IsProduction      bool
 	ProdOrigins       string
-	AppEnv            string
 	HTTPAddr          string
 	DBDSN             string
 	JWTSecret         string
@@ -33,8 +34,9 @@ func Load() (*Config, error) {
 	// Production origin (default: empty)
 	cfg.ProdOrigins = getEnvOrDefault("PROD_ORIGINS", "")
 
-	// Application environment (default: local)
-	cfg.AppEnv = getEnvOrDefault("APP_ENV", "local")
+	// Application environment (default: dev)
+	appEnvStr := getEnvOrDefault("APP_ENV", "dev")
+	cfg.IsProduction = appEnvStr == PROD_STRING
 
 	// HTTP listen address (default: :8080)
 	cfg.HTTPAddr = getEnvOrDefault("HTTP_ADDR", ":8080")
@@ -69,16 +71,4 @@ func getEnvOrDefault(key, defaultValue string) string {
 		return v
 	}
 	return defaultValue
-}
-
-// getEnvAsIntOrDefault is a helper for parsing integer environment variables.
-func getEnvAsIntOrDefault(key string, defaultValue int) (int, error) {
-	if v, ok := os.LookupEnv(key); ok {
-		i, err := strconv.Atoi(v)
-		if err != nil {
-			return 0, fmt.Errorf("invalid integer for %s: %w", key, err)
-		}
-		return i, nil
-	}
-	return defaultValue, nil
 }
