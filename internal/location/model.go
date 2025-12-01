@@ -13,6 +13,7 @@ var (
 	ErrInvalidGeo          = errors.New("invalid latitude or longitude")
 	ErrInvalidOpeningHours = errors.New("opening hours start must be before end")
 	ErrCapacityInvalid     = errors.New("capacity must be greater than zero")
+	ErrInvalidTimeRange    = errors.New("start time must be before end time")
 )
 
 // Location represents a physical venue under an organization.
@@ -36,7 +37,24 @@ type Location struct {
 // LocationFilter defines parameters for listing locations.
 type LocationFilter struct {
 	OrganizationID string
-	Keyword        string // Search in Name or LocationInfo
 	Page           int
 	PageSize       int
+
+	// Filters
+
+	Name                 string // Keyword search in location name
+	Opening              *bool
+	CapacityMin          *int64
+	CapacityMax          *int64
+	OpeningHoursStartMin string // Format: HH:MM:SS
+	OpeningHoursStartMax string // Format: HH:MM:SS
+	OpeningHoursEndMin   string // Format: HH:MM:SS
+	OpeningHoursEndMax   string // Format: HH:MM:SS
+	CreatedAtFrom        time.Time
+	CreatedAtTo          time.Time
+
+	// Sorting
+
+	SortBy    string // "name", "capacity", "opening_hours_start", "opening_hours_end", "created_at"
+	SortOrder string // "ASC" or "DESC"
 }

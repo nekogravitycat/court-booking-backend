@@ -261,4 +261,104 @@ func TestLocationCRUDAndPermissions(t *testing.T) {
 		wDelete := executeRequest("DELETE", invalidPath, nil, adminAToken)
 		assert.Equal(t, http.StatusBadRequest, wDelete.Code, "Should return 400 for invalid UUID in DELETE")
 	})
+
+	t.Run("List Locations: Validation Failures", func(t *testing.T) {
+		// 1. Invalid Opening Hours Format
+		w := executeRequest("GET", fmt.Sprintf("/v1/locations?organization_id=%s&opening_hours_start_min=invalid", orgA_ID), nil, strangerToken)
+		assert.Equal(t, http.StatusBadRequest, w.Code, "Should fail when opening_hours_start_min is invalid")
+
+		var errResp map[string]interface{}
+		json.Unmarshal(w.Body.Bytes(), &errResp)
+		assert.Contains(t, errResp, "error")
+
+		// 2. Valid Opening Hours Format
+		w = executeRequest("GET", fmt.Sprintf("/v1/locations?organization_id=%s&opening_hours_start_min=09:00:00", orgA_ID), nil, strangerToken)
+		assert.Equal(t, http.StatusOK, w.Code, "Should succeed when opening_hours_start_min is valid")
+	})
+	t.Run("List Locations: Advanced Filtering and Sorting", func(t *testing.T) {
+		// Create 3 locations with distinct attributes
+		// Loc 1: Cap 10, 08:00-18:00, Open
+		executeRequest("POST", "/v1/locations", locHttp.CreateLocationRequest{
+			OrganizationID:    orgA_ID,
+			Name:              "Filter Court 1",
+			Capacity:          10,
+			OpeningHoursStart: "08:00:00",
+			OpeningHoursEnd:   "18:00:00",
+			LocationInfo:      "Info 1",
+			Opening:           true,
+			Longitude:         121.0, Latitude: 25.0,
+		}, adminAToken)
+
+		// Loc 2: Cap 50, 10:00-22:00, Closed
+		executeRequest("POST", "/v1/locations", locHttp.CreateLocationRequest{
+			OrganizationID:    orgA_ID,
+			Name:              "Filter Court 2",
+			Capacity:          50,
+			OpeningHoursStart: "10:00:00",
+			OpeningHoursEnd:   "22:00:00",
+			LocationInfo:      "Info 2",
+			Opening:           false,
+			Longitude:         121.0, Latitude: 25.0,
+		}, adminAToken)
+
+		// Loc 3: Cap 100, 06:00-14:00, Open
+		executeRequest("POST", "/v1/locations", locHttp.CreateLocationRequest{
+			OrganizationID:    orgA_ID,
+			Name:              "Filter Court 3",
+			Capacity:          100,
+			OpeningHoursStart: "06:00:00",
+			OpeningHoursEnd:   "14:00:00",
+			LocationInfo:      "Info 3",
+			Opening:           true,
+			Longitude:         121.0, Latitude: 25.0,
+		}, adminAToken)
+
+		// 1. Filter by Name (Partial Match)
+		w := executeRequest("GET", fmt.Sprintf("/v1/locations?organization_id=%s&name=Filter Court", orgA_ID), nil, strangerToken)
+		var listResp response.PageResponse[locHttp.LocationResponse]
+		json.Unmarshal(w.Body.Bytes(), &listResp)
+		// Should find all 3 "Filter Court X"
+		assert.Equal(t, 3, listResp.Total)
+
+		// 2. Filter by Opening (bool)
+		w = executeRequest("GET", fmt.Sprintf("/v1/locations?organization_id=%s&opening=false", orgA_ID), nil, strangerToken)
+		json.Unmarshal(w.Body.Bytes(), &listResp)
+		assert.Equal(t, 1, listResp.Total)
+		assert.Equal(t, "Filter Court 2", listResp.Items[0].Name)
+
+		// 3. Filter by Capacity Range (10-60) -> Should get Loc 1 and Loc 2
+		w = executeRequest("GET", fmt.Sprintf("/v1/locations?organization_id=%s&capacity_min=10&capacity_max=60&sort=capacity", orgA_ID), nil, strangerToken)
+		json.Unmarshal(w.Body.Bytes(), &listResp)
+		assert.Equal(t, 2, listResp.Total)
+		assert.Equal(t, "Filter Court 1", listResp.Items[0].Name) // Sorted ASC by default? No, default is created_at DESC. Wait, I added sort=capacity which defaults to ASC.
+		assert.Equal(t, "Filter Court 2", listResp.Items[1].Name)
+
+		// 4. Filter by Opening Hours Start (>= 09:00) -> Loc 2 (10:00)
+		w = executeRequest("GET", fmt.Sprintf("/v1/locations?organization_id=%s&opening_hours_start_min=09:00:00", orgA_ID), nil, strangerToken)
+		json.Unmarshal(w.Body.Bytes(), &listResp)
+		assert.Equal(t, 1, listResp.Total)
+		assert.Equal(t, "Filter Court 2", listResp.Items[0].Name)
+
+		// 5. Sorting (Capacity DESC) -> Loc 3 (100), Loc 2 (50), Loc 1 (10)
+		w = executeRequest("GET", fmt.Sprintf("/v1/locations?organization_id=%s&sort=-capacity", orgA_ID), nil, strangerToken)
+		json.Unmarshal(w.Body.Bytes(), &listResp)
+		assert.Equal(t, 3, listResp.Total)
+		assert.Equal(t, "Filter Court 3", listResp.Items[0].Name)
+		assert.Equal(t, "Filter Court 2", listResp.Items[1].Name)
+
+		// 6. Edge Case: Invalid Query Parameters (Should return 400 Bad Request)
+		// Invalid boolean for opening, invalid int for capacity
+		w = executeRequest("GET", fmt.Sprintf("/v1/locations?organization_id=%s&opening=not-a-bool&capacity_min=invalid", orgA_ID), nil, strangerToken)
+		assert.Equal(t, http.StatusBadRequest, w.Code)
+		// Should return error message
+		var errResp map[string]interface{}
+		json.Unmarshal(w.Body.Bytes(), &errResp)
+		assert.Contains(t, errResp, "error")
+
+		// 7. Edge Case: Logical Validation Failure (Capacity Min > Max)
+		w = executeRequest("GET", fmt.Sprintf("/v1/locations?organization_id=%s&capacity_min=100&capacity_max=50", orgA_ID), nil, strangerToken)
+		assert.Equal(t, http.StatusBadRequest, w.Code)
+		json.Unmarshal(w.Body.Bytes(), &errResp)
+		assert.Contains(t, errResp["error"], "capacity")
+	})
 }

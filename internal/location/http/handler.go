@@ -3,7 +3,8 @@ package http
 import (
 	"errors"
 	"net/http"
-	"strconv"
+	"strings"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
@@ -47,16 +48,57 @@ func (h *LocationHandler) checkPermission(c *gin.Context, orgID string) bool {
 
 // List retrieves a paginated list of locations with optional filtering.
 func (h *LocationHandler) List(c *gin.Context) {
-	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
-	pageSize, _ := strconv.Atoi(c.DefaultQuery("page_size", "20"))
-	orgID := c.Query("organization_id")
-	keyword := c.Query("q")
+	var req ListLocationsRequest
+	if err := c.ShouldBindQuery(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid query parameters", "details": err.Error()})
+		return
+	}
+
+	if err := req.Validate(); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	// Sorting logic
+	sortBy := "created_at"
+	sortOrder := "DESC"
+
+	// If SortBy is provided, use it.
+	if req.SortBy != "" {
+		if strings.HasPrefix(req.SortBy, "-") {
+			sortBy = strings.TrimPrefix(req.SortBy, "-")
+			sortOrder = "DESC"
+		} else {
+			sortBy = req.SortBy
+			sortOrder = "ASC"
+		}
+	}
+
+	// Parse CreatedAt times
+	var createdAtFrom, createdAtTo time.Time
+	if req.CreatedAtFrom != "" {
+		createdAtFrom, _ = time.Parse(time.RFC3339, req.CreatedAtFrom)
+	}
+	if req.CreatedAtTo != "" {
+		createdAtTo, _ = time.Parse(time.RFC3339, req.CreatedAtTo)
+	}
 
 	filter := location.LocationFilter{
-		OrganizationID: orgID,
-		Keyword:        keyword,
-		Page:           page,
-		PageSize:       pageSize,
+		OrganizationID:       req.OrganizationID,
+		Page:                 req.Page,
+		PageSize:             req.PageSize,
+		Name:                 req.Name,
+		Opening:              req.Opening,
+		CapacityMin:          req.CapacityMin,
+		CapacityMax:          req.CapacityMax,
+		OpeningHoursStartMin: req.OpeningHoursStartMin,
+		OpeningHoursStartMax: req.OpeningHoursStartMax,
+		OpeningHoursEndMin:   req.OpeningHoursEndMin,
+		OpeningHoursEndMax:   req.OpeningHoursEndMax,
+		CreatedAtFrom:        createdAtFrom,
+		CreatedAtTo:          createdAtTo,
+		SortBy:               sortBy,
+		SortOrder:            sortOrder,
 	}
 
 	locs, total, err := h.service.List(c.Request.Context(), filter)
@@ -70,7 +112,7 @@ func (h *LocationHandler) List(c *gin.Context) {
 		items[i] = NewLocationResponse(l)
 	}
 
-	resp := response.NewPageResponse(items, page, pageSize, total)
+	resp := response.NewPageResponse(items, req.Page, req.PageSize, total)
 	c.JSON(http.StatusOK, resp)
 }
 

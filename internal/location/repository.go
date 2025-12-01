@@ -96,13 +96,76 @@ func (r *pgxRepository) List(ctx context.Context, filter LocationFilter) ([]*Loc
 		args = append(args, filter.OrganizationID)
 		paramIndex++
 	}
-	if filter.Keyword != "" {
-		queryBase += fmt.Sprintf(" AND (name ILIKE $%d OR location_info ILIKE $%d)", paramIndex, paramIndex)
-		args = append(args, "%"+filter.Keyword+"%")
+	if filter.Name != "" {
+		queryBase += fmt.Sprintf(" AND name ILIKE $%d", paramIndex)
+		args = append(args, "%"+filter.Name+"%")
+		paramIndex++
+	}
+	if filter.Opening != nil {
+		queryBase += fmt.Sprintf(" AND opening = $%d", paramIndex)
+		args = append(args, *filter.Opening)
+		paramIndex++
+	}
+	if filter.CapacityMin != nil {
+		queryBase += fmt.Sprintf(" AND capacity >= $%d", paramIndex)
+		args = append(args, *filter.CapacityMin)
+		paramIndex++
+	}
+	if filter.CapacityMax != nil {
+		queryBase += fmt.Sprintf(" AND capacity <= $%d", paramIndex)
+		args = append(args, *filter.CapacityMax)
+		paramIndex++
+	}
+	if filter.OpeningHoursStartMin != "" {
+		queryBase += fmt.Sprintf(" AND opening_hours_start >= $%d", paramIndex)
+		args = append(args, filter.OpeningHoursStartMin)
+		paramIndex++
+	}
+	if filter.OpeningHoursStartMax != "" {
+		queryBase += fmt.Sprintf(" AND opening_hours_start <= $%d", paramIndex)
+		args = append(args, filter.OpeningHoursStartMax)
+		paramIndex++
+	}
+	if filter.OpeningHoursEndMin != "" {
+		queryBase += fmt.Sprintf(" AND opening_hours_end >= $%d", paramIndex)
+		args = append(args, filter.OpeningHoursEndMin)
+		paramIndex++
+	}
+	if filter.OpeningHoursEndMax != "" {
+		queryBase += fmt.Sprintf(" AND opening_hours_end <= $%d", paramIndex)
+		args = append(args, filter.OpeningHoursEndMax)
+		paramIndex++
+	}
+	if !filter.CreatedAtFrom.IsZero() {
+		queryBase += fmt.Sprintf(" AND created_at >= $%d", paramIndex)
+		args = append(args, filter.CreatedAtFrom)
+		paramIndex++
+	}
+	if !filter.CreatedAtTo.IsZero() {
+		queryBase += fmt.Sprintf(" AND created_at <= $%d", paramIndex)
+		args = append(args, filter.CreatedAtTo)
 		paramIndex++
 	}
 
-	queryBase += " ORDER BY created_at DESC"
+	// Sorting
+	sortMap := map[string]string{
+		"capacity":            "capacity",
+		"opening_hours_start": "opening_hours_start",
+		"opening_hours_end":   "opening_hours_end",
+		"created_at":          "created_at",
+	}
+
+	orderBy := "created_at"
+	if val, ok := sortMap[filter.SortBy]; ok {
+		orderBy = val
+	}
+
+	orderDir := "DESC"
+	if filter.SortOrder == "ASC" {
+		orderDir = "ASC"
+	}
+
+	queryBase += fmt.Sprintf(" ORDER BY %s %s", orderBy, orderDir)
 
 	// Pagination
 	if filter.Page < 1 {

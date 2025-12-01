@@ -1,5 +1,5 @@
 .env
-codebase-for-llm.xml
+codebase-for-llm.*
 
 # Binaries for programs and plugins
 *.exe
