@@ -8,7 +8,9 @@ listUsers:
     parameters:
       - $ref: "../components/parameters.yml#/page"
       - $ref: "../components/parameters.yml#/page_size"
-      - $ref: "../components/parameters.yml#/sort"
+      - $ref: "../components/parameters.yml#/sort_by"
+        description: "Sort field (enum: name, email, created_at)"
+      - $ref: "../components/parameters.yml#/sort_order"
       - name: email
         in: query
         schema:

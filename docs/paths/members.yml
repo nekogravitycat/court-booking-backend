@@ -15,6 +15,9 @@ listMembers:
           format: uuid
       - $ref: "../components/parameters.yml#/page"
       - $ref: "../components/parameters.yml#/page_size"
+      - $ref: "../components/parameters.yml#/sort_by"
+        description: "Sort field (enum: role)"
+      - $ref: "../components/parameters.yml#/sort_order"
     responses:
       "200":
         description: Member list

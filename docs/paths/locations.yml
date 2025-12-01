@@ -64,11 +64,9 @@ listLocations:
         schema:
           type: string
           format: date-time
-      - name: sort
-        in: query
-        schema:
-          type: string
-          description: "Sort field (e.g. capacity, -capacity)"
+      - $ref: "../components/parameters.yml#/sort_by"
+        description: "Sort field (enum: capacity, opening_hours_start, opening_hours_end, created_at)"
+      - $ref: "../components/parameters.yml#/sort_order"
     responses:
       "200":
         description: Location list

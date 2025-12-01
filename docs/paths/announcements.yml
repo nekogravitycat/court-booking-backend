@@ -8,6 +8,9 @@ listAnnouncements:
     parameters:
       - $ref: "../components/parameters.yml#/page"
       - $ref: "../components/parameters.yml#/page_size"
+      - $ref: "../components/parameters.yml#/sort_by"
+        description: "Sort field (enum: title, created_at)"
+      - $ref: "../components/parameters.yml#/sort_order"
       - name: q
         in: query
         schema:

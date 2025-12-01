@@ -17,9 +17,18 @@ page_size:
     default: 20
   description: 每頁顯示筆數
 
-sort:
-  name: sort
+sort_by:
+  name: sort_by
   in: query
   schema:
     type: string
-  description: 排序欄位 (例如：created_at, -created_at, email)
+  description: 排序欄位
+
+sort_order:
+  name: sort_order
+  in: query
+  schema:
+    type: string
+    enum: [ASC, DESC]
+    default: DESC
+  description: 排序方向 (預設 DESC)

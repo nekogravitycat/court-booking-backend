@@ -48,8 +48,7 @@ components:
       $ref: "./components/parameters.yml#/page"
     page_size:
       $ref: "./components/parameters.yml#/page_size"
-    sort:
-      $ref: "./components/parameters.yml#/sort"
+
 
   schemas:
     # --------------------------
