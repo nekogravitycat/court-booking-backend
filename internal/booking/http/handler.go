@@ -1,7 +1,6 @@
 package http
 
 import (
-	"errors"
 	"net/http"
 	"strings"
 
@@ -114,7 +113,7 @@ func (h *Handler) List(c *gin.Context) {
 
 	bookings, total, err := h.service.List(c.Request.Context(), filter)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to list bookings"})
+		response.Error(c, err)
 		return
 	}
 
@@ -154,17 +153,7 @@ func (h *Handler) Create(c *gin.Context) {
 
 	b, err := h.service.Create(c.Request.Context(), req)
 	if err != nil {
-		switch {
-		case errors.Is(err, booking.ErrResourceNotFound):
-			c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
-		case errors.Is(err, booking.ErrStartTimePast),
-			errors.Is(err, booking.ErrInvalidTimeRange):
-			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-		case errors.Is(err, booking.ErrTimeConflict):
-			c.JSON(http.StatusConflict, gin.H{"error": err.Error()})
-		default:
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to create booking"})
-		}
+		response.Error(c, err)
 		return
 	}
 
@@ -180,14 +169,8 @@ func (h *Handler) Get(c *gin.Context) {
 
 	b, err := h.service.GetByID(c.Request.Context(), req.ID)
 	if err != nil {
-		switch {
-		case errors.Is(err, booking.ErrNotFound):
-			c.JSON(http.StatusNotFound, gin.H{"error": "booking not found"})
-			return
-		default:
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to get booking"})
-			return
-		}
+		response.Error(c, err)
+		return
 	}
 
 	// Access Check: User owns booking OR SysAdmin OR OrgManager
@@ -236,20 +219,7 @@ func (h *Handler) Update(c *gin.Context) {
 
 	b, err := h.service.Update(c.Request.Context(), uri.ID, req, userID, isSysAdmin)
 	if err != nil {
-		switch {
-		case errors.Is(err, booking.ErrNotFound):
-			c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
-		case errors.Is(err, booking.ErrPermissionDenied):
-			c.JSON(http.StatusForbidden, gin.H{"error": err.Error()})
-		case errors.Is(err, booking.ErrTimeConflict):
-			c.JSON(http.StatusConflict, gin.H{"error": err.Error()})
-		case errors.Is(err, booking.ErrStartTimePast),
-			errors.Is(err, booking.ErrInvalidTimeRange),
-			errors.Is(err, booking.ErrInvalidStatus):
-			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-		default:
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to update booking"})
-		}
+		response.Error(c, err)
 		return
 	}
 
@@ -268,14 +238,7 @@ func (h *Handler) Delete(c *gin.Context) {
 
 	err := h.service.Delete(c.Request.Context(), req.ID, userID, isSysAdmin)
 	if err != nil {
-		switch {
-		case errors.Is(err, booking.ErrNotFound):
-			c.JSON(http.StatusNotFound, gin.H{"error": "booking not found"})
-		case errors.Is(err, booking.ErrPermissionDenied):
-			c.JSON(http.StatusForbidden, gin.H{"error": "permission denied"})
-		default:
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to delete booking"})
-		}
+		response.Error(c, err)
 		return
 	}
 

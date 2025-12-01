@@ -1,18 +1,20 @@
 package organization
 
 import (
-	"errors"
+	"net/http"
 	"time"
+
+	"github.com/nekogravitycat/court-booking-backend/internal/pkg/apperror"
 )
 
 var (
-	ErrUserAlreadyMember = errors.New("user is already a member of this organization")
-	ErrUserNotFound      = errors.New("user not found")
-	ErrUserNotMember     = errors.New("user is not a member of the organization")
-	ErrOrgNotFound       = errors.New("organization not found")
-	ErrNameRequired      = errors.New("organization name is required")
-	ErrUserIDRequired    = errors.New("user_id is required")
-	ErrInvalidRole       = errors.New("invalid role")
+	ErrUserAlreadyMember = apperror.New(http.StatusConflict, "user is already a member of this organization")
+	ErrUserNotFound      = apperror.New(http.StatusNotFound, "user not found")
+	ErrUserNotMember     = apperror.New(http.StatusNotFound, "user is not a member of the organization")
+	ErrOrgNotFound       = apperror.New(http.StatusNotFound, "organization not found")
+	ErrNameRequired      = apperror.New(http.StatusBadRequest, "organization name is required")
+	ErrUserIDRequired    = apperror.New(http.StatusBadRequest, "user_id is required")
+	ErrInvalidRole       = apperror.New(http.StatusBadRequest, "invalid role")
 )
 
 // Organization represents a venue owner or brand entity.

@@ -1,19 +1,21 @@
 package location
 
 import (
-	"errors"
+	"net/http"
 	"time"
+
+	"github.com/nekogravitycat/court-booking-backend/internal/pkg/apperror"
 )
 
 var (
-	ErrOrgNotFound         = errors.New("organization not found")
-	ErrLocNotFound         = errors.New("location not found")
-	ErrOrgIDRequired       = errors.New("organization_id is required")
-	ErrNameRequired        = errors.New("name is required")
-	ErrInvalidGeo          = errors.New("invalid latitude or longitude")
-	ErrInvalidOpeningHours = errors.New("opening hours start must be before end")
-	ErrCapacityInvalid     = errors.New("capacity must be greater than zero")
-	ErrInvalidTimeRange    = errors.New("start time must be before end time")
+	ErrOrgNotFound         = apperror.New(http.StatusNotFound, "organization not found")
+	ErrLocNotFound         = apperror.New(http.StatusNotFound, "location not found")
+	ErrOrgIDRequired       = apperror.New(http.StatusBadRequest, "organization_id is required")
+	ErrNameRequired        = apperror.New(http.StatusBadRequest, "name is required")
+	ErrInvalidGeo          = apperror.New(http.StatusBadRequest, "invalid latitude or longitude")
+	ErrInvalidOpeningHours = apperror.New(http.StatusBadRequest, "opening hours start must be before end")
+	ErrCapacityInvalid     = apperror.New(http.StatusBadRequest, "capacity must be greater than zero")
+	ErrInvalidTimeRange    = apperror.New(http.StatusBadRequest, "start time must be before end time")
 )
 
 // Location represents a physical venue under an organization.

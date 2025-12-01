@@ -99,7 +99,7 @@ func (h *LocationHandler) List(c *gin.Context) {
 
 	locs, total, err := h.service.List(c.Request.Context(), filter)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to list locations"})
+		response.Error(c, err)
 		return
 	}
 
@@ -144,17 +144,7 @@ func (h *LocationHandler) Create(c *gin.Context) {
 
 	loc, err := h.service.Create(c.Request.Context(), req)
 	if err != nil {
-		switch {
-		case errors.Is(err, location.ErrOrgIDRequired),
-			errors.Is(err, location.ErrNameRequired),
-			errors.Is(err, location.ErrOrgNotFound),
-			errors.Is(err, location.ErrInvalidGeo),
-			errors.Is(err, location.ErrInvalidOpeningHours),
-			errors.Is(err, location.ErrCapacityInvalid):
-			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-		default:
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to create location"})
-		}
+		response.Error(c, err)
 		return
 	}
 
@@ -171,12 +161,7 @@ func (h *LocationHandler) Get(c *gin.Context) {
 
 	loc, err := h.service.GetByID(c.Request.Context(), req.ID)
 	if err != nil {
-		switch {
-		case errors.Is(err, location.ErrLocNotFound):
-			c.JSON(http.StatusNotFound, gin.H{"error": "location not found"})
-		default:
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to get location"})
-		}
+		response.Error(c, err)
 		return
 	}
 
@@ -234,8 +219,7 @@ func (h *LocationHandler) Update(c *gin.Context) {
 
 	loc, err := h.service.Update(c.Request.Context(), uri.ID, req)
 	if err != nil {
-		// Although checked earlier, handle potential errors from the service layer.
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to update location"})
+		response.Error(c, err)
 		return
 	}
 
@@ -254,14 +238,8 @@ func (h *LocationHandler) Delete(c *gin.Context) {
 	// Fetch the existing location to determine which organization it belongs to.
 	existingLoc, err := h.service.GetByID(c.Request.Context(), req.ID)
 	if err != nil {
-		switch {
-		case errors.Is(err, location.ErrLocNotFound):
-			c.JSON(http.StatusNotFound, gin.H{"error": "location not found"})
-			return
-		default:
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to fetch location for permission check"})
-			return
-		}
+		response.Error(c, err)
+		return
 	}
 
 	// Permission check: The user must be an Admin or Owner of that organization.
@@ -272,7 +250,7 @@ func (h *LocationHandler) Delete(c *gin.Context) {
 
 	// Execute deletion.
 	if err := h.service.Delete(c.Request.Context(), req.ID); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to delete location"})
+		response.Error(c, err)
 		return
 	}
 

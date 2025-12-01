@@ -1,18 +1,20 @@
 package booking
 
 import (
-	"errors"
+	"net/http"
 	"time"
+
+	"github.com/nekogravitycat/court-booking-backend/internal/pkg/apperror"
 )
 
 var (
-	ErrNotFound         = errors.New("booking not found")
-	ErrTimeConflict     = errors.New("time slot already booked")
-	ErrInvalidTimeRange = errors.New("start time must be before end time")
-	ErrInvalidStatus    = errors.New("invalid booking status")
-	ErrResourceNotFound = errors.New("resource not found")
-	ErrPermissionDenied = errors.New("permission denied")
-	ErrStartTimePast    = errors.New("cannot create booking in the past")
+	ErrNotFound         = apperror.New(http.StatusNotFound, "booking not found")
+	ErrTimeConflict     = apperror.New(http.StatusConflict, "time slot already booked")
+	ErrInvalidTimeRange = apperror.New(http.StatusBadRequest, "start time must be before end time")
+	ErrInvalidStatus    = apperror.New(http.StatusBadRequest, "invalid booking status")
+	ErrResourceNotFound = apperror.New(http.StatusNotFound, "resource not found")
+	ErrPermissionDenied = apperror.New(http.StatusForbidden, "permission denied")
+	ErrStartTimePast    = apperror.New(http.StatusBadRequest, "cannot create booking in the past")
 )
 
 type Status string

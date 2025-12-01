@@ -1,14 +1,16 @@
 package resourcetype
 
 import (
-	"errors"
+	"net/http"
 	"time"
+
+	"github.com/nekogravitycat/court-booking-backend/internal/pkg/apperror"
 )
 
 var (
-	ErrNotFound      = errors.New("resource type not found")
-	ErrOrgIDRequired = errors.New("organization_id is required")
-	ErrNameRequired  = errors.New("name is required")
+	ErrNotFound      = apperror.New(http.StatusNotFound, "resource type not found")
+	ErrOrgIDRequired = apperror.New(http.StatusBadRequest, "organization_id is required")
+	ErrNameRequired  = apperror.New(http.StatusBadRequest, "name is required")
 )
 
 // ResourceType represents a category of resources (e.g., Badminton Court).

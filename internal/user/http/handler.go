@@ -43,14 +43,7 @@ func (h *UserHandler) Register(c *gin.Context) {
 
 	u, err := h.userService.Register(ctx, req.Email, req.Password, req.DisplayName)
 	if err != nil {
-		switch {
-		case errors.Is(err, user.ErrEmailAlreadyUsed):
-			c.JSON(http.StatusConflict, gin.H{"error": err.Error()})
-		case errors.Is(err, user.ErrEmailRequired), errors.Is(err, user.ErrPasswordTooShort):
-			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-		default:
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to create user"})
-		}
+		response.Error(c, err)
 		return
 	}
 
@@ -79,15 +72,12 @@ func (h *UserHandler) Login(c *gin.Context) {
 
 	u, err := h.userService.Login(ctx, req.Email, req.Password)
 	if err != nil {
-		switch {
-		case errors.Is(err, user.ErrInvalidCredentials),
-			errors.Is(err, user.ErrNotFound),
-			errors.Is(err, user.ErrInactiveUser):
-			// For security reasons, do not reveal which condition failed
-			c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid email or password"})
-		default:
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "login failed"})
+		// For security reasons, map specific errors to InvalidCredentials
+		if errors.Is(err, user.ErrNotFound) || errors.Is(err, user.ErrInactiveUser) {
+			response.Error(c, user.ErrInvalidCredentials)
+			return
 		}
+		response.Error(c, err)
 		return
 	}
 
@@ -128,7 +118,7 @@ func (h *UserHandler) Me(c *gin.Context) {
 
 	u, err := h.userService.GetByID(ctx, userID)
 	if err != nil {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "user not found"})
+		response.Error(c, err)
 		return
 	}
 
@@ -174,7 +164,7 @@ func (h *UserHandler) List(c *gin.Context) {
 
 	users, total, err := h.userService.List(c.Request.Context(), filter)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to list users"})
+		response.Error(c, err)
 		return
 	}
 
@@ -200,14 +190,8 @@ func (h *UserHandler) Get(c *gin.Context) {
 
 	targetUser, err := h.userService.GetByID(c.Request.Context(), req.ID)
 	if err != nil {
-		switch {
-		case errors.Is(err, user.ErrNotFound):
-			c.JSON(http.StatusNotFound, gin.H{"error": "user not found"})
-			return
-		default:
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to get user"})
-			return
-		}
+		response.Error(c, err)
+		return
 	}
 
 	resp := MeResponse{
@@ -245,12 +229,7 @@ func (h *UserHandler) Update(c *gin.Context) {
 
 	updatedUser, err := h.userService.Update(c.Request.Context(), uri.ID, req)
 	if err != nil {
-		switch {
-		case errors.Is(err, user.ErrNotFound):
-			c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
-		default:
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to update user"})
-		}
+		response.Error(c, err)
 		return
 	}
 
@@ -271,12 +250,7 @@ func (h *UserHandler) Delete(c *gin.Context) {
 	}
 
 	if err := h.userService.Delete(c.Request.Context(), req.ID); err != nil {
-		switch {
-		case errors.Is(err, user.ErrNotFound):
-			c.JSON(http.StatusNotFound, gin.H{"error": "user not found"})
-		default:
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to delete user"})
-		}
+		response.Error(c, err)
 		return
 	}
 

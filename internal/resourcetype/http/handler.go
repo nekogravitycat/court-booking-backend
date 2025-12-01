@@ -1,7 +1,6 @@
 package http
 
 import (
-	"errors"
 	"net/http"
 	"strings"
 
@@ -71,7 +70,7 @@ func (h *Handler) List(c *gin.Context) {
 
 	rts, total, err := h.service.List(c.Request.Context(), filter)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to list resource types"})
+		response.Error(c, err)
 		return
 	}
 
@@ -110,7 +109,7 @@ func (h *Handler) Create(c *gin.Context) {
 
 	rt, err := h.service.Create(c.Request.Context(), req)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to create resource type"})
+		response.Error(c, err)
 		return
 	}
 
@@ -126,14 +125,8 @@ func (h *Handler) Get(c *gin.Context) {
 
 	rt, err := h.service.GetByID(c.Request.Context(), req.ID)
 	if err != nil {
-		switch {
-		case errors.Is(err, resourcetype.ErrNotFound):
-			c.JSON(http.StatusNotFound, gin.H{"error": "resource type not found"})
-			return
-		default:
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to get resource type"})
-			return
-		}
+		response.Error(c, err)
+		return
 	}
 
 	c.JSON(http.StatusOK, NewResponse(rt))
@@ -149,14 +142,8 @@ func (h *Handler) Update(c *gin.Context) {
 	// Fetch existing to check Org ID for permissions
 	existingRT, err := h.service.GetByID(c.Request.Context(), uri.ID)
 	if err != nil {
-		switch {
-		case errors.Is(err, resourcetype.ErrNotFound):
-			c.JSON(http.StatusNotFound, gin.H{"error": "resource type not found"})
-			return
-		default:
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to fetch resource type"})
-			return
-		}
+		response.Error(c, err)
+		return
 	}
 
 	// Permission check
@@ -183,7 +170,7 @@ func (h *Handler) Update(c *gin.Context) {
 
 	rt, err := h.service.Update(c.Request.Context(), uri.ID, req)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to update resource type"})
+		response.Error(c, err)
 		return
 	}
 
@@ -200,14 +187,8 @@ func (h *Handler) Delete(c *gin.Context) {
 	// Fetch existing to check Org ID for permissions
 	existingRT, err := h.service.GetByID(c.Request.Context(), req.ID)
 	if err != nil {
-		switch {
-		case errors.Is(err, resourcetype.ErrNotFound):
-			c.JSON(http.StatusNotFound, gin.H{"error": "resource type not found"})
-			return
-		default:
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to fetch resource type"})
-			return
-		}
+		response.Error(c, err)
+		return
 	}
 
 	// Permission check
@@ -217,7 +198,7 @@ func (h *Handler) Delete(c *gin.Context) {
 	}
 
 	if err := h.service.Delete(c.Request.Context(), req.ID); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to delete resource type"})
+		response.Error(c, err)
 		return
 	}
 

@@ -1,14 +1,16 @@
 package announcement
 
 import (
-	"errors"
+	"net/http"
 	"time"
+
+	"github.com/nekogravitycat/court-booking-backend/internal/pkg/apperror"
 )
 
 var (
-	ErrNotFound        = errors.New("announcement not found")
-	ErrTitleRequired   = errors.New("title is required")
-	ErrContentRequired = errors.New("content is required")
+	ErrNotFound        = apperror.New(http.StatusNotFound, "announcement not found")
+	ErrTitleRequired   = apperror.New(http.StatusBadRequest, "title is required")
+	ErrContentRequired = apperror.New(http.StatusBadRequest, "content is required")
 )
 
 // Announcement represents a system-wide news or update.

@@ -1,16 +1,18 @@
 package resource
 
 import (
-	"errors"
+	"net/http"
 	"time"
+
+	"github.com/nekogravitycat/court-booking-backend/internal/pkg/apperror"
 )
 
 var (
-	ErrNotFound            = errors.New("resource not found")
-	ErrOrgMismatch         = errors.New("location and resource type must belong to the same organization")
-	ErrEmptyName           = errors.New("name cannot be empty")
-	ErrInvalidLocation     = errors.New("invalid location_id")
-	ErrInvalidResourceType = errors.New("invalid resource_type_id")
+	ErrNotFound            = apperror.New(http.StatusNotFound, "resource not found")
+	ErrOrgMismatch         = apperror.New(http.StatusBadRequest, "location and resource type must belong to the same organization")
+	ErrEmptyName           = apperror.New(http.StatusBadRequest, "name cannot be empty")
+	ErrInvalidLocation     = apperror.New(http.StatusBadRequest, "invalid location_id")
+	ErrInvalidResourceType = apperror.New(http.StatusBadRequest, "invalid resource_type_id")
 )
 
 // Resource represents a bookable unit (e.g., Court A, Room 101).

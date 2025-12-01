@@ -1,17 +1,19 @@
 package user
 
 import (
-	"errors"
+	"net/http"
 	"time"
+
+	"github.com/nekogravitycat/court-booking-backend/internal/pkg/apperror"
 )
 
 var (
-	ErrNotFound           = errors.New("user not found")
-	ErrEmailAlreadyUsed   = errors.New("email already used")
-	ErrInvalidCredentials = errors.New("invalid email or password")
-	ErrInactiveUser       = errors.New("user is inactive")
-	ErrEmailRequired      = errors.New("email is required")
-	ErrPasswordTooShort   = errors.New("password is too short")
+	ErrNotFound           = apperror.New(http.StatusNotFound, "user not found")
+	ErrEmailAlreadyUsed   = apperror.New(http.StatusConflict, "email already used")
+	ErrInvalidCredentials = apperror.New(http.StatusUnauthorized, "invalid email or password")
+	ErrInactiveUser       = apperror.New(http.StatusUnauthorized, "user is inactive")
+	ErrEmailRequired      = apperror.New(http.StatusBadRequest, "email is required")
+	ErrPasswordTooShort   = apperror.New(http.StatusBadRequest, "password is too short")
 )
 
 // User represents a user in the system.

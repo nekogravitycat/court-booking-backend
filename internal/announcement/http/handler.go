@@ -1,7 +1,6 @@
 package http
 
 import (
-	"errors"
 	"net/http"
 	"strings"
 
@@ -50,7 +49,7 @@ func (h *Handler) List(c *gin.Context) {
 
 	list, total, err := h.service.List(c.Request.Context(), filter)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to list announcements"})
+		response.Error(c, err)
 		return
 	}
 
@@ -72,12 +71,7 @@ func (h *Handler) Get(c *gin.Context) {
 
 	a, err := h.service.GetByID(c.Request.Context(), req.ID)
 	if err != nil {
-		switch {
-		case errors.Is(err, announcement.ErrNotFound):
-			c.JSON(http.StatusNotFound, gin.H{"error": "announcement not found"})
-		default:
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to get announcement"})
-		}
+		response.Error(c, err)
 		return
 	}
 
@@ -103,13 +97,7 @@ func (h *Handler) Create(c *gin.Context) {
 
 	a, err := h.service.Create(c.Request.Context(), req)
 	if err != nil {
-		switch {
-		case errors.Is(err, announcement.ErrTitleRequired),
-			errors.Is(err, announcement.ErrContentRequired):
-			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-		default:
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to create announcement"})
-		}
+		response.Error(c, err)
 		return
 	}
 
@@ -141,15 +129,7 @@ func (h *Handler) Update(c *gin.Context) {
 
 	a, err := h.service.Update(c.Request.Context(), uri.ID, req)
 	if err != nil {
-		switch {
-		case errors.Is(err, announcement.ErrNotFound):
-			c.JSON(http.StatusNotFound, gin.H{"error": "announcement not found"})
-		case errors.Is(err, announcement.ErrTitleRequired),
-			errors.Is(err, announcement.ErrContentRequired):
-			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-		default:
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to update announcement"})
-		}
+		response.Error(c, err)
 		return
 	}
 
@@ -164,12 +144,7 @@ func (h *Handler) Delete(c *gin.Context) {
 	}
 
 	if err := h.service.Delete(c.Request.Context(), req.ID); err != nil {
-		switch {
-		case errors.Is(err, announcement.ErrNotFound):
-			c.JSON(http.StatusNotFound, gin.H{"error": "announcement not found"})
-		default:
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to delete announcement"})
-		}
+		response.Error(c, err)
 		return
 	}
 

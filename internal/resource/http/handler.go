@@ -1,7 +1,6 @@
 package http
 
 import (
-	"errors"
 	"net/http"
 	"strings"
 
@@ -75,7 +74,7 @@ func (h *Handler) List(c *gin.Context) {
 
 	resources, total, err := h.service.List(c.Request.Context(), filter)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to list resources"})
+		response.Error(c, err)
 		return
 	}
 
@@ -122,15 +121,7 @@ func (h *Handler) Create(c *gin.Context) {
 
 	res, err := h.service.Create(c.Request.Context(), req)
 	if err != nil {
-		switch {
-		case errors.Is(err, resource.ErrInvalidLocation),
-			errors.Is(err, resource.ErrInvalidResourceType),
-			errors.Is(err, resource.ErrOrgMismatch),
-			errors.Is(err, resource.ErrEmptyName):
-			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-		default:
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to create resource"})
-		}
+		response.Error(c, err)
 		return
 	}
 
@@ -146,12 +137,7 @@ func (h *Handler) Get(c *gin.Context) {
 
 	res, err := h.service.GetByID(c.Request.Context(), req.ID)
 	if err != nil {
-		switch {
-		case errors.Is(err, resource.ErrNotFound):
-			c.JSON(http.StatusNotFound, gin.H{"error": "resource not found"})
-		default:
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to get resource"})
-		}
+		response.Error(c, err)
 		return
 	}
 
@@ -169,14 +155,8 @@ func (h *Handler) Update(c *gin.Context) {
 	// 1. Get Resource to find Location
 	existingRes, err := h.service.GetByID(c.Request.Context(), uri.ID)
 	if err != nil {
-		switch {
-		case errors.Is(err, resource.ErrNotFound):
-			c.JSON(http.StatusNotFound, gin.H{"error": "resource not found"})
-			return
-		default:
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to fetch resource"})
-			return
-		}
+		response.Error(c, err)
+		return
 	}
 
 	// 2. Get Location to find Org
@@ -209,14 +189,7 @@ func (h *Handler) Update(c *gin.Context) {
 
 	res, err := h.service.Update(c.Request.Context(), uri.ID, req)
 	if err != nil {
-		switch {
-		case errors.Is(err, resource.ErrNotFound):
-			c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
-		case errors.Is(err, resource.ErrEmptyName):
-			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-		default:
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to update resource"})
-		}
+		response.Error(c, err)
 		return
 	}
 
@@ -233,12 +206,7 @@ func (h *Handler) Delete(c *gin.Context) {
 	// Permission Check Flow
 	existingRes, err := h.service.GetByID(c.Request.Context(), req.ID)
 	if err != nil {
-		switch {
-		case errors.Is(err, resource.ErrNotFound):
-			c.JSON(http.StatusNotFound, gin.H{"error": "resource not found"})
-		default:
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to fetch resource"})
-		}
+		response.Error(c, err)
 		return
 	}
 
@@ -254,7 +222,7 @@ func (h *Handler) Delete(c *gin.Context) {
 	}
 
 	if err := h.service.Delete(c.Request.Context(), req.ID); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to delete resource"})
+		response.Error(c, err)
 		return
 	}
 
