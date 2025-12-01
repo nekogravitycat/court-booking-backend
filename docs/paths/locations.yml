@@ -13,11 +13,62 @@ listLocations:
         schema:
           type: string
           format: uuid
-      - name: q
+      - name: name
         in: query
         schema:
           type: string
-          description: 關鍵字搜尋 (Name or Info)
+          description: Location Name (Partial Match)
+      - name: opening
+        in: query
+        schema:
+          type: boolean
+      - name: capacity_min
+        in: query
+        schema:
+          type: integer
+      - name: capacity_max
+        in: query
+        schema:
+          type: integer
+      - name: opening_hours_start_min
+        in: query
+        schema:
+          type: string
+          format: time
+          example: "09:00:00"
+      - name: opening_hours_start_max
+        in: query
+        schema:
+          type: string
+          format: time
+          example: "18:00:00"
+      - name: opening_hours_end_min
+        in: query
+        schema:
+          type: string
+          format: time
+          example: "18:00:00"
+      - name: opening_hours_end_max
+        in: query
+        schema:
+          type: string
+          format: time
+          example: "22:00:00"
+      - name: created_at_from
+        in: query
+        schema:
+          type: string
+          format: date-time
+      - name: created_at_to
+        in: query
+        schema:
+          type: string
+          format: date-time
+      - name: sort
+        in: query
+        schema:
+          type: string
+          description: "Sort field (e.g. capacity, -capacity)"
     responses:
       "200":
         description: Location list
@@ -31,6 +82,8 @@ listLocations:
                       type: array
                       items:
                         $ref: "../components/schemas/location.yml#/LocationResponse"
+      "400":
+        description: Validation error
   post:
     tags:
       - Locations
