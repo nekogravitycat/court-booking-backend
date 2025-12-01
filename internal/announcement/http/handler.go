@@ -3,11 +3,11 @@ package http
 import (
 	"errors"
 	"net/http"
-	"strconv"
+	"strings"
 
 	"github.com/gin-gonic/gin"
-	"github.com/google/uuid"
 	"github.com/nekogravitycat/court-booking-backend/internal/announcement"
+	"github.com/nekogravitycat/court-booking-backend/internal/pkg/request"
 	"github.com/nekogravitycat/court-booking-backend/internal/pkg/response"
 )
 
@@ -20,14 +20,32 @@ func NewHandler(service announcement.Service) *Handler {
 }
 
 func (h *Handler) List(c *gin.Context) {
-	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
-	pageSize, _ := strconv.Atoi(c.DefaultQuery("page_size", "20"))
-	keyword := c.Query("q")
+	var req ListAnnouncementsRequest
+	if err := c.ShouldBindQuery(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid query parameters", "details": err.Error()})
+		return
+	}
+
+	if err := req.Validate(); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
 
 	filter := announcement.Filter{
-		Keyword:  keyword,
-		Page:     page,
-		PageSize: pageSize,
+		Keyword:   req.Keyword,
+		Page:      req.Page,
+		PageSize:  req.PageSize,
+		SortBy:    req.SortBy,
+		SortOrder: req.SortOrder,
+	}
+
+	if filter.SortBy == "" {
+		filter.SortBy = "created_at"
+	}
+	if filter.SortOrder == "" {
+		filter.SortOrder = "DESC"
+	} else {
+		filter.SortOrder = strings.ToUpper(filter.SortOrder)
 	}
 
 	list, total, err := h.service.List(c.Request.Context(), filter)
@@ -41,18 +59,18 @@ func (h *Handler) List(c *gin.Context) {
 		items[i] = NewResponse(a)
 	}
 
-	resp := response.NewPageResponse(items, page, pageSize, total)
+	resp := response.NewPageResponse(items, req.Page, req.PageSize, total)
 	c.JSON(http.StatusOK, resp)
 }
 
 func (h *Handler) Get(c *gin.Context) {
-	id := c.Param("id")
-	if _, err := uuid.Parse(id); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid UUID"})
+	var req request.ByIDRequest
+	if err := c.ShouldBindUri(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request", "details": err.Error()})
 		return
 	}
 
-	a, err := h.service.GetByID(c.Request.Context(), id)
+	a, err := h.service.GetByID(c.Request.Context(), req.ID)
 	if err != nil {
 		switch {
 		case errors.Is(err, announcement.ErrNotFound):
@@ -70,6 +88,11 @@ func (h *Handler) Create(c *gin.Context) {
 	var body CreateRequest
 	if err := c.ShouldBindJSON(&body); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request body", "details": err.Error()})
+		return
+	}
+
+	if err := body.Validate(); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
@@ -94,15 +117,20 @@ func (h *Handler) Create(c *gin.Context) {
 }
 
 func (h *Handler) Update(c *gin.Context) {
-	id := c.Param("id")
-	if _, err := uuid.Parse(id); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid UUID"})
+	var uri request.ByIDRequest
+	if err := c.ShouldBindUri(&uri); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request", "details": err.Error()})
 		return
 	}
 
 	var body UpdateRequest
 	if err := c.ShouldBindJSON(&body); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request body"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request body", "details": err.Error()})
+		return
+	}
+
+	if err := body.Validate(); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
@@ -111,7 +139,7 @@ func (h *Handler) Update(c *gin.Context) {
 		Content: body.Content,
 	}
 
-	a, err := h.service.Update(c.Request.Context(), id, req)
+	a, err := h.service.Update(c.Request.Context(), uri.ID, req)
 	if err != nil {
 		switch {
 		case errors.Is(err, announcement.ErrNotFound):
@@ -129,13 +157,13 @@ func (h *Handler) Update(c *gin.Context) {
 }
 
 func (h *Handler) Delete(c *gin.Context) {
-	id := c.Param("id")
-	if _, err := uuid.Parse(id); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid UUID"})
+	var req request.ByIDRequest
+	if err := c.ShouldBindUri(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request", "details": err.Error()})
 		return
 	}
 
-	if err := h.service.Delete(c.Request.Context(), id); err != nil {
+	if err := h.service.Delete(c.Request.Context(), req.ID); err != nil {
 		switch {
 		case errors.Is(err, announcement.ErrNotFound):
 			c.JSON(http.StatusNotFound, gin.H{"error": "announcement not found"})

@@ -33,9 +33,10 @@ type UserFilter struct {
 	DisplayName string
 	IsActive    *bool // Use pointer to distinguish between false and nil (not set)
 
-	Page     int
-	PageSize int
-	Sort     string // simple string for now, e.g., "created_at desc"
+	Page      int
+	PageSize  int
+	SortBy    string
+	SortOrder string
 }
 
 // UserOrganizationBrief holds minimal organization info for list views.

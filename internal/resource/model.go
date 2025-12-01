@@ -28,4 +28,6 @@ type Filter struct {
 	ResourceTypeID string
 	Page           int
 	PageSize       int
+	SortBy         string
+	SortOrder      string
 }

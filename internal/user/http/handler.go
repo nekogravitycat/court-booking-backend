@@ -3,11 +3,12 @@ package http
 import (
 	"errors"
 	"net/http"
-	"strconv"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 	"github.com/nekogravitycat/court-booking-backend/internal/auth"
+	"github.com/nekogravitycat/court-booking-backend/internal/pkg/request"
 	"github.com/nekogravitycat/court-booking-backend/internal/pkg/response"
 	"github.com/nekogravitycat/court-booking-backend/internal/user"
 )
@@ -29,7 +30,12 @@ func NewHandler(userService user.Service, jwtManager *auth.JWTManager) *UserHand
 func (h *UserHandler) Register(c *gin.Context) {
 	var req RegisterRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request", "details": err.Error()})
+		return
+	}
+
+	if err := req.Validate(); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
@@ -60,7 +66,12 @@ func (h *UserHandler) Register(c *gin.Context) {
 func (h *UserHandler) Login(c *gin.Context) {
 	var req LoginRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request", "details": err.Error()})
+		return
+	}
+
+	if err := req.Validate(); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
@@ -131,28 +142,34 @@ func (h *UserHandler) Me(c *gin.Context) {
 // List retrieves a paginated list of users with optional filtering.
 // Access Control: System Admin only.
 func (h *UserHandler) List(c *gin.Context) {
-	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
-	pageSize, _ := strconv.Atoi(c.DefaultQuery("page_size", "20"))
-	sort := c.DefaultQuery("sort", "created_at DESC")
-	email := c.Query("email")
-	displayName := c.Query("display_name")
+	var req ListUsersRequest
+	if err := c.ShouldBindQuery(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid query parameters", "details": err.Error()})
+		return
+	}
 
-	// Parse is_active bool
-	var isActivePtr *bool
-	if v := c.Query("is_active"); v != "" {
-		b, err := strconv.ParseBool(v)
-		if err == nil {
-			isActivePtr = &b
-		}
+	if err := req.Validate(); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
 	}
 
 	filter := user.UserFilter{
-		Page:        page,
-		PageSize:    pageSize,
-		Sort:        sort,
-		Email:       email,
-		DisplayName: displayName,
-		IsActive:    isActivePtr,
+		Page:        req.Page,
+		PageSize:    req.PageSize,
+		SortBy:      req.SortBy,
+		SortOrder:   req.SortOrder,
+		Email:       req.Email,
+		DisplayName: req.DisplayName,
+		IsActive:    req.IsActive,
+	}
+
+	if filter.SortBy == "" {
+		filter.SortBy = "created_at"
+	}
+	if filter.SortOrder == "" {
+		filter.SortOrder = "DESC"
+	} else {
+		filter.SortOrder = strings.ToUpper(filter.SortOrder)
 	}
 
 	users, total, err := h.userService.List(c.Request.Context(), filter)
@@ -167,7 +184,7 @@ func (h *UserHandler) List(c *gin.Context) {
 		items[i] = NewUserResponse(u)
 	}
 
-	resp := response.NewPageResponse(items, page, pageSize, total)
+	resp := response.NewPageResponse(items, req.Page, req.PageSize, total)
 
 	c.JSON(http.StatusOK, resp)
 }
@@ -175,15 +192,13 @@ func (h *UserHandler) List(c *gin.Context) {
 // Get retrieves a specific user by their ID.
 // Access Control: System Admin only.
 func (h *UserHandler) Get(c *gin.Context) {
-	id := c.Param("id")
-
-	// Validate UUID format
-	if _, err := uuid.Parse(id); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid UUID"})
+	var req request.ByIDRequest
+	if err := c.ShouldBindUri(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request", "details": err.Error()})
 		return
 	}
 
-	targetUser, err := h.userService.GetByID(c.Request.Context(), id)
+	targetUser, err := h.userService.GetByID(c.Request.Context(), req.ID)
 	if err != nil {
 		switch {
 		case errors.Is(err, user.ErrNotFound):
@@ -205,17 +220,20 @@ func (h *UserHandler) Get(c *gin.Context) {
 // Update modifies specific attributes of a user.
 // Access Control: System Admin only.
 func (h *UserHandler) Update(c *gin.Context) {
-	id := c.Param("id")
-
-	// Validate UUID format
-	if _, err := uuid.Parse(id); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid UUID"})
+	var uri request.ByIDRequest
+	if err := c.ShouldBindUri(&uri); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request", "details": err.Error()})
 		return
 	}
 
 	var body UpdateUserRequest
 	if err := c.ShouldBindJSON(&body); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid body"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid body", "details": err.Error()})
+		return
+	}
+
+	if err := body.Validate(); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
@@ -225,7 +243,7 @@ func (h *UserHandler) Update(c *gin.Context) {
 		IsSystemAdmin: body.IsSystemAdmin,
 	}
 
-	updatedUser, err := h.userService.Update(c.Request.Context(), id, req)
+	updatedUser, err := h.userService.Update(c.Request.Context(), uri.ID, req)
 	if err != nil {
 		switch {
 		case errors.Is(err, user.ErrNotFound):
@@ -246,15 +264,13 @@ func (h *UserHandler) Update(c *gin.Context) {
 // Delete performs a soft delete on a user.
 // Access Control: System Admin only.
 func (h *UserHandler) Delete(c *gin.Context) {
-	id := c.Param("id")
-
-	// Validate UUID format
-	if _, err := uuid.Parse(id); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid UUID"})
+	var req request.ByIDRequest
+	if err := c.ShouldBindUri(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request", "details": err.Error()})
 		return
 	}
 
-	if err := h.userService.Delete(c.Request.Context(), id); err != nil {
+	if err := h.userService.Delete(c.Request.Context(), req.ID); err != nil {
 		switch {
 		case errors.Is(err, user.ErrNotFound):
 			c.JSON(http.StatusNotFound, gin.H{"error": "user not found"})

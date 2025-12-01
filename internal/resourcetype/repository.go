@@ -72,7 +72,18 @@ func (r *pgxRepository) List(ctx context.Context, filter Filter) ([]*ResourceTyp
 		paramIndex++
 	}
 
-	queryBase += " ORDER BY created_at DESC"
+	// Sorting
+	orderBy := "created_at"
+	if filter.SortBy != "" {
+		orderBy = filter.SortBy
+	}
+
+	orderDir := "DESC"
+	if filter.SortOrder != "" {
+		orderDir = filter.SortOrder
+	}
+
+	queryBase += " ORDER BY " + orderBy + " " + orderDir
 
 	// Pagination
 	if filter.Page < 1 {

@@ -94,7 +94,18 @@ func (r *pgxRepository) List(ctx context.Context, filter Filter) ([]*Booking, in
 		paramIndex++
 	}
 
-	queryBase += " ORDER BY start_time DESC"
+	// Sorting
+	orderBy := "start_time"
+	if filter.SortBy != "" {
+		orderBy = filter.SortBy
+	}
+
+	orderDir := "DESC"
+	if filter.SortOrder != "" {
+		orderDir = filter.SortOrder
+	}
+
+	queryBase += " ORDER BY " + orderBy + " " + orderDir
 
 	// Pagination
 	if filter.Page < 1 {

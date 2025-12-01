@@ -7,10 +7,10 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/google/uuid"
 	"github.com/nekogravitycat/court-booking-backend/internal/auth"
 	"github.com/nekogravitycat/court-booking-backend/internal/location"
 	"github.com/nekogravitycat/court-booking-backend/internal/organization"
+	"github.com/nekogravitycat/court-booking-backend/internal/pkg/request"
 	"github.com/nekogravitycat/court-booking-backend/internal/pkg/response"
 )
 
@@ -63,15 +63,11 @@ func (h *LocationHandler) List(c *gin.Context) {
 	sortBy := "created_at"
 	sortOrder := "DESC"
 
-	// If SortBy is provided, use it.
 	if req.SortBy != "" {
-		if strings.HasPrefix(req.SortBy, "-") {
-			sortBy = strings.TrimPrefix(req.SortBy, "-")
-			sortOrder = "DESC"
-		} else {
-			sortBy = req.SortBy
-			sortOrder = "ASC"
-		}
+		sortBy = req.SortBy
+	}
+	if req.SortOrder != "" {
+		sortOrder = strings.ToUpper(req.SortOrder)
 	}
 
 	// Parse CreatedAt times
@@ -167,15 +163,13 @@ func (h *LocationHandler) Create(c *gin.Context) {
 
 // Get retrieves specific location details.
 func (h *LocationHandler) Get(c *gin.Context) {
-	id := c.Param("id")
-
-	// Validate UUID format
-	if _, err := uuid.Parse(id); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid UUID"})
+	var req request.ByIDRequest
+	if err := c.ShouldBindUri(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request", "details": err.Error()})
 		return
 	}
 
-	loc, err := h.service.GetByID(c.Request.Context(), id)
+	loc, err := h.service.GetByID(c.Request.Context(), req.ID)
 	if err != nil {
 		switch {
 		case errors.Is(err, location.ErrLocNotFound):
@@ -192,16 +186,14 @@ func (h *LocationHandler) Get(c *gin.Context) {
 // Update modifies specific attributes of a location.
 // It enforces strict permission checks: only Organization Admins or Owners can update locations.
 func (h *LocationHandler) Update(c *gin.Context) {
-	id := c.Param("id")
-
-	// Validate UUID format
-	if _, err := uuid.Parse(id); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid UUID"})
+	var uri request.ByIDRequest
+	if err := c.ShouldBindUri(&uri); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request", "details": err.Error()})
 		return
 	}
 
 	// Fetch the existing location to determine which organization it belongs to.
-	existingLoc, err := h.service.GetByID(c.Request.Context(), id)
+	existingLoc, err := h.service.GetByID(c.Request.Context(), uri.ID)
 	if err != nil {
 		switch {
 		case errors.Is(err, location.ErrLocNotFound):
@@ -240,7 +232,7 @@ func (h *LocationHandler) Update(c *gin.Context) {
 		Latitude:          body.Latitude,
 	}
 
-	loc, err := h.service.Update(c.Request.Context(), id, req)
+	loc, err := h.service.Update(c.Request.Context(), uri.ID, req)
 	if err != nil {
 		// Although checked earlier, handle potential errors from the service layer.
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to update location"})
@@ -253,16 +245,14 @@ func (h *LocationHandler) Update(c *gin.Context) {
 // Delete removes a location.
 // It enforces strict permission checks: only Organization Admins or Owners can delete locations.
 func (h *LocationHandler) Delete(c *gin.Context) {
-	id := c.Param("id")
-
-	// Validate UUID format
-	if _, err := uuid.Parse(id); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid UUID"})
+	var req request.ByIDRequest
+	if err := c.ShouldBindUri(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request", "details": err.Error()})
 		return
 	}
 
 	// Fetch the existing location to determine which organization it belongs to.
-	existingLoc, err := h.service.GetByID(c.Request.Context(), id)
+	existingLoc, err := h.service.GetByID(c.Request.Context(), req.ID)
 	if err != nil {
 		switch {
 		case errors.Is(err, location.ErrLocNotFound):
@@ -281,7 +271,7 @@ func (h *LocationHandler) Delete(c *gin.Context) {
 	}
 
 	// Execute deletion.
-	if err := h.service.Delete(c.Request.Context(), id); err != nil {
+	if err := h.service.Delete(c.Request.Context(), req.ID); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to delete location"})
 		return
 	}

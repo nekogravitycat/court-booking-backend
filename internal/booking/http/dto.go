@@ -4,7 +4,29 @@ import (
 	"time"
 
 	"github.com/nekogravitycat/court-booking-backend/internal/booking"
+	"github.com/nekogravitycat/court-booking-backend/internal/pkg/request"
 )
+
+// ListBookingsRequest defines query parameters for listing bookings.
+type ListBookingsRequest struct {
+	request.ListParams
+	ResourceID    string     `form:"resource_id" binding:"omitempty,uuid"`
+	Status        string     `form:"status" binding:"omitempty,oneof=pending confirmed cancelled"`
+	UserID        string     `form:"user_id" binding:"omitempty,uuid"`
+	StartTimeFrom *time.Time `form:"start_time_from" time_format:"2006-01-02T15:04:05Z07:00"`
+	StartTimeTo   *time.Time `form:"start_time_to" time_format:"2006-01-02T15:04:05Z07:00"`
+	SortBy        string     `form:"sort_by" binding:"omitempty,oneof=start_time end_time created_at status"`
+}
+
+// Validate performs custom validation for ListBookingsRequest.
+func (r *ListBookingsRequest) Validate() error {
+	if r.StartTimeFrom != nil && r.StartTimeTo != nil {
+		if r.StartTimeFrom.After(*r.StartTimeTo) {
+			return booking.ErrInvalidTimeRange
+		}
+	}
+	return nil
+}
 
 type BookingResponse struct {
 	ID         string    `json:"id"`
@@ -36,8 +58,29 @@ type CreateBookingRequest struct {
 	EndTime    time.Time `json:"end_time" binding:"required"`
 }
 
+// Validate performs custom validation for CreateBookingRequest.
+func (r *CreateBookingRequest) Validate() error {
+	if r.StartTime.After(r.EndTime) {
+		return booking.ErrInvalidTimeRange
+	}
+	if r.StartTime.Before(time.Now()) {
+		return booking.ErrStartTimePast
+	}
+	return nil
+}
+
 type UpdateBookingRequest struct {
 	StartTime *time.Time `json:"start_time"`
 	EndTime   *time.Time `json:"end_time"`
 	Status    *string    `json:"status" binding:"omitempty,oneof=pending confirmed cancelled"`
+}
+
+// Validate performs custom validation for UpdateBookingRequest.
+func (r *UpdateBookingRequest) Validate() error {
+	if r.StartTime != nil && r.EndTime != nil {
+		if r.StartTime.After(*r.EndTime) {
+			return booking.ErrInvalidTimeRange
+		}
+	}
+	return nil
 }

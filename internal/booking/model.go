@@ -42,4 +42,6 @@ type Filter struct {
 	EndTime    *time.Time // Filter bookings ending before this time
 	Page       int
 	PageSize   int
+	SortBy     string
+	SortOrder  string
 }

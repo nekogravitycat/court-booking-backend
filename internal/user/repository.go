@@ -236,23 +236,18 @@ func (r *pgxUserRepository) List(ctx context.Context, filter UserFilter) ([]*Use
 		queryBuilder.WriteString(" AND is_active = $" + strconv.Itoa(len(args)))
 	}
 
-	// Sorting (whitelist fields to prevent injection)
-	sort := "created_at DESC" // default
-	if filter.Sort != "" {
-		// Basic validation logic can be added here or in service layer
-		// For now, we assume input is sanitized or we handle mapped values
-		switch filter.Sort {
-		case "created_at":
-			sort = "created_at ASC"
-		case "-created_at":
-			sort = "created_at DESC"
-		case "email":
-			sort = "email ASC"
-		case "-email":
-			sort = "email DESC"
-		}
+	// Sorting
+	orderBy := "created_at"
+	if filter.SortBy != "" {
+		orderBy = filter.SortBy
 	}
-	queryBuilder.WriteString(" ORDER BY " + sort)
+
+	orderDir := "DESC"
+	if filter.SortOrder != "" {
+		orderDir = filter.SortOrder
+	}
+
+	queryBuilder.WriteString(" ORDER BY " + orderBy + " " + orderDir)
 
 	// Pagination
 	if filter.Page < 1 {

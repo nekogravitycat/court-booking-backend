@@ -76,10 +76,16 @@ func (r *pgxRepository) List(ctx context.Context, filter OrganizationFilter) ([]
 		SELECT id, name, created_at, is_active, count(*) OVER() AS total_count
 		FROM public.organizations
 		WHERE is_active = true
-		ORDER BY id DESC
 	`
-	// Note: For now we only list active organizations.
-	// If admins need to see inactive ones, we can add a filter field later.
+	orderBy := "id"
+	if filter.SortBy != "" {
+		orderBy = filter.SortBy
+	}
+
+	orderDir := "DESC"
+	if filter.SortOrder != "" {
+		orderDir = filter.SortOrder
+	}
 
 	// Pagination
 	if filter.Page < 1 {
@@ -90,7 +96,7 @@ func (r *pgxRepository) List(ctx context.Context, filter OrganizationFilter) ([]
 	}
 	offset := (filter.Page - 1) * filter.PageSize
 
-	query := queryBase + " LIMIT $1 OFFSET $2"
+	query := queryBase + " ORDER BY " + orderBy + " " + orderDir + " LIMIT $1 OFFSET $2"
 
 	rows, err := r.pool.Query(ctx, query, filter.PageSize, offset)
 	if err != nil {
@@ -242,9 +248,13 @@ func (r *pgxRepository) ListMembers(ctx context.Context, orgID string, filter Me
 		FROM public.organization_permissions op
 		JOIN public.users u ON op.user_id = u.id
 		WHERE op.organization_id = $1
-		ORDER BY op.id DESC
 	`
+	orderDir := "DESC"
+	if filter.SortOrder != "" {
+		orderDir = filter.SortOrder
+	}
 
+	// Pagination
 	if filter.Page < 1 {
 		filter.Page = 1
 	}
@@ -253,7 +263,16 @@ func (r *pgxRepository) ListMembers(ctx context.Context, orgID string, filter Me
 	}
 	offset := (filter.Page - 1) * filter.PageSize
 
-	query := queryBase + " LIMIT $2 OFFSET $3"
+	query := queryBase
+	if filter.SortBy != "" {
+		orderBy := "op.id"
+		switch filter.SortBy {
+		case "role":
+			orderBy = "op.role"
+		}
+		query += " ORDER BY " + orderBy + " " + orderDir
+	}
+	query += " LIMIT $2 OFFSET $3"
 
 	rows, err := r.pool.Query(ctx, query, orgID, filter.PageSize, offset)
 	if err != nil {

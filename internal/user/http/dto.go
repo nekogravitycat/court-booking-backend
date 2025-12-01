@@ -3,15 +3,22 @@ package http
 import (
 	"time"
 
+	"github.com/nekogravitycat/court-booking-backend/internal/pkg/request"
 	"github.com/nekogravitycat/court-booking-backend/internal/user"
 )
 
-// UpdateUserRequest defines fields allowed to be updated via PATCH /users/:id.
-// Use pointers to distinguish between "field not sent" and "field sent as false/empty".
-type UpdateUserRequest struct {
-	DisplayName   *string `json:"display_name"`
-	IsActive      *bool   `json:"is_active"`
-	IsSystemAdmin *bool   `json:"is_system_admin"`
+// ListUsersRequest defines query parameters for listing users.
+type ListUsersRequest struct {
+	request.ListParams
+	Email       string `form:"email"`
+	DisplayName string `form:"display_name"`
+	IsActive    *bool  `form:"is_active"`
+	SortBy      string `form:"sort_by" binding:"omitempty,oneof=name email created_at"`
+}
+
+// Validate performs custom validation for ListUsersRequest.
+func (r *ListUsersRequest) Validate() error {
+	return nil
 }
 
 // UserResponse is the shape of user data returned in API responses.
@@ -66,10 +73,33 @@ type RegisterRequest struct {
 	DisplayName string `json:"display_name" binding:"required"`
 }
 
+// Validate performs custom validation for RegisterRequest.
+func (r *RegisterRequest) Validate() error {
+	return nil
+}
+
 // LoginRequest defines the payload for user login.
 type LoginRequest struct {
 	Email    string `json:"email" binding:"required,email"`
 	Password string `json:"password" binding:"required"`
+}
+
+// Validate performs custom validation for LoginRequest.
+func (r *LoginRequest) Validate() error {
+	return nil
+}
+
+// UpdateUserRequest defines fields allowed to be updated via PATCH /users/:id.
+// Use pointers to distinguish between "field not sent" and "field sent as false/empty".
+type UpdateUserRequest struct {
+	DisplayName   *string `json:"display_name"`
+	IsActive      *bool   `json:"is_active"`
+	IsSystemAdmin *bool   `json:"is_system_admin"`
+}
+
+// Validate performs custom validation for UpdateUserRequest.
+func (r *UpdateUserRequest) Validate() error {
+	return nil
 }
 
 // LoginResponse returns the token and user info.

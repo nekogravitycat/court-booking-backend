@@ -4,6 +4,7 @@ import (
 	"time"
 
 	"github.com/nekogravitycat/court-booking-backend/internal/location"
+	"github.com/nekogravitycat/court-booking-backend/internal/pkg/request"
 )
 
 type LocationResponse struct {
@@ -72,8 +73,7 @@ type UpdateLocationRequest struct {
 }
 
 type ListLocationsRequest struct {
-	Page           int    `form:"page,default=1" binding:"min=1"`
-	PageSize       int    `form:"page_size,default=20" binding:"min=1,max=100"`
+	request.ListParams
 	OrganizationID string `form:"organization_id" binding:"omitempty,uuid"`
 
 	// Filters
@@ -89,8 +89,7 @@ type ListLocationsRequest struct {
 	CreatedAtTo          string `form:"created_at_to" binding:"omitempty,datetime=2006-01-02T15:04:05Z07:00"`
 
 	// Sorting
-	SortBy    string `form:"sort"`
-	SortOrder string `form:"sort_order"` // Optional, or inferred from sort param if using "-field" syntax
+	SortBy string `form:"sort_by" binding:"omitempty,oneof=capacity opening_hours_start opening_hours_end created_at"`
 }
 
 func (r *ListLocationsRequest) Validate() error {

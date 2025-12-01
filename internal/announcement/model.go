@@ -22,7 +22,9 @@ type Announcement struct {
 
 // Filter defines parameters for listing announcements.
 type Filter struct {
-	Keyword  string
-	Page     int
-	PageSize int
+	Keyword   string
+	Page      int
+	PageSize  int
+	SortBy    string
+	SortOrder string
 }

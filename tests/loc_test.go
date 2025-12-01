@@ -327,10 +327,10 @@ func TestLocationCRUDAndPermissions(t *testing.T) {
 		assert.Equal(t, "Filter Court 2", listResp.Items[0].Name)
 
 		// 3. Filter by Capacity Range (10-60) -> Should get Loc 1 and Loc 2
-		w = executeRequest("GET", fmt.Sprintf("/v1/locations?organization_id=%s&capacity_min=10&capacity_max=60&sort=capacity", orgA_ID), nil, strangerToken)
+		w = executeRequest("GET", fmt.Sprintf("/v1/locations?organization_id=%s&capacity_min=10&capacity_max=60&sort_by=capacity&sort_order=asc", orgA_ID), nil, strangerToken)
 		json.Unmarshal(w.Body.Bytes(), &listResp)
 		assert.Equal(t, 2, listResp.Total)
-		assert.Equal(t, "Filter Court 1", listResp.Items[0].Name) // Sorted ASC by default? No, default is created_at DESC. Wait, I added sort=capacity which defaults to ASC.
+		assert.Equal(t, "Filter Court 1", listResp.Items[0].Name)
 		assert.Equal(t, "Filter Court 2", listResp.Items[1].Name)
 
 		// 4. Filter by Opening Hours Start (>= 09:00) -> Loc 2 (10:00)
@@ -340,7 +340,7 @@ func TestLocationCRUDAndPermissions(t *testing.T) {
 		assert.Equal(t, "Filter Court 2", listResp.Items[0].Name)
 
 		// 5. Sorting (Capacity DESC) -> Loc 3 (100), Loc 2 (50), Loc 1 (10)
-		w = executeRequest("GET", fmt.Sprintf("/v1/locations?organization_id=%s&sort=-capacity", orgA_ID), nil, strangerToken)
+		w = executeRequest("GET", fmt.Sprintf("/v1/locations?organization_id=%s&sort_by=capacity&sort_order=desc", orgA_ID), nil, strangerToken)
 		json.Unmarshal(w.Body.Bytes(), &listResp)
 		assert.Equal(t, 3, listResp.Total)
 		assert.Equal(t, "Filter Court 3", listResp.Items[0].Name)

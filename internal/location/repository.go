@@ -147,17 +147,9 @@ func (r *pgxRepository) List(ctx context.Context, filter LocationFilter) ([]*Loc
 		paramIndex++
 	}
 
-	// Sorting
-	sortMap := map[string]string{
-		"capacity":            "capacity",
-		"opening_hours_start": "opening_hours_start",
-		"opening_hours_end":   "opening_hours_end",
-		"created_at":          "created_at",
-	}
-
 	orderBy := "created_at"
-	if val, ok := sortMap[filter.SortBy]; ok {
-		orderBy = val
+	if filter.SortBy != "" {
+		orderBy = filter.SortBy
 	}
 
 	orderDir := "DESC"

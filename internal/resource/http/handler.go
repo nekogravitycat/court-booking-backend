@@ -3,13 +3,13 @@ package http
 import (
 	"errors"
 	"net/http"
-	"strconv"
+	"strings"
 
 	"github.com/gin-gonic/gin"
-	"github.com/google/uuid"
 	"github.com/nekogravitycat/court-booking-backend/internal/auth"
 	"github.com/nekogravitycat/court-booking-backend/internal/location"
 	"github.com/nekogravitycat/court-booking-backend/internal/organization"
+	"github.com/nekogravitycat/court-booking-backend/internal/pkg/request"
 	"github.com/nekogravitycat/court-booking-backend/internal/pkg/response"
 	"github.com/nekogravitycat/court-booking-backend/internal/resource"
 )
@@ -44,16 +44,33 @@ func (h *Handler) checkPermission(c *gin.Context, orgID string) bool {
 }
 
 func (h *Handler) List(c *gin.Context) {
-	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
-	pageSize, _ := strconv.Atoi(c.DefaultQuery("page_size", "20"))
-	locationID := c.Query("location_id")
-	resourceTypeID := c.Query("resource_type_id")
+	var req ListResourcesRequest
+	if err := c.ShouldBindQuery(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid query parameters", "details": err.Error()})
+		return
+	}
+
+	if err := req.Validate(); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
 
 	filter := resource.Filter{
-		LocationID:     locationID,
-		ResourceTypeID: resourceTypeID,
-		Page:           page,
-		PageSize:       pageSize,
+		LocationID:     req.LocationID,
+		ResourceTypeID: req.ResourceTypeID,
+		Page:           req.Page,
+		PageSize:       req.PageSize,
+		SortBy:         req.SortBy,
+		SortOrder:      req.SortOrder,
+	}
+
+	if filter.SortBy == "" {
+		filter.SortBy = "created_at"
+	}
+	if filter.SortOrder == "" {
+		filter.SortOrder = "DESC"
+	} else {
+		filter.SortOrder = strings.ToUpper(filter.SortOrder)
 	}
 
 	resources, total, err := h.service.List(c.Request.Context(), filter)
@@ -67,7 +84,7 @@ func (h *Handler) List(c *gin.Context) {
 		items[i] = NewResponse(r)
 	}
 
-	resp := response.NewPageResponse(items, page, pageSize, total)
+	resp := response.NewPageResponse(items, req.Page, req.PageSize, total)
 	c.JSON(http.StatusOK, resp)
 }
 
@@ -75,6 +92,11 @@ func (h *Handler) Create(c *gin.Context) {
 	var body CreateRequest
 	if err := c.ShouldBindJSON(&body); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request body", "details": err.Error()})
+		return
+	}
+
+	if err := body.Validate(); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
@@ -116,14 +138,13 @@ func (h *Handler) Create(c *gin.Context) {
 }
 
 func (h *Handler) Get(c *gin.Context) {
-	id := c.Param("id")
-
-	if _, err := uuid.Parse(id); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid UUID"})
+	var req request.ByIDRequest
+	if err := c.ShouldBindUri(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request", "details": err.Error()})
 		return
 	}
 
-	res, err := h.service.GetByID(c.Request.Context(), id)
+	res, err := h.service.GetByID(c.Request.Context(), req.ID)
 	if err != nil {
 		switch {
 		case errors.Is(err, resource.ErrNotFound):
@@ -138,16 +159,15 @@ func (h *Handler) Get(c *gin.Context) {
 }
 
 func (h *Handler) Update(c *gin.Context) {
-	id := c.Param("id")
-
-	if _, err := uuid.Parse(id); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid UUID"})
+	var uri request.ByIDRequest
+	if err := c.ShouldBindUri(&uri); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request", "details": err.Error()})
 		return
 	}
 
 	// Permission Check Flow:
 	// 1. Get Resource to find Location
-	existingRes, err := h.service.GetByID(c.Request.Context(), id)
+	existingRes, err := h.service.GetByID(c.Request.Context(), uri.ID)
 	if err != nil {
 		switch {
 		case errors.Is(err, resource.ErrNotFound):
@@ -174,7 +194,12 @@ func (h *Handler) Update(c *gin.Context) {
 
 	var body UpdateRequest
 	if err := c.ShouldBindJSON(&body); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request body"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request body", "details": err.Error()})
+		return
+	}
+
+	if err := body.Validate(); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
@@ -182,7 +207,7 @@ func (h *Handler) Update(c *gin.Context) {
 		Name: body.Name,
 	}
 
-	res, err := h.service.Update(c.Request.Context(), id, req)
+	res, err := h.service.Update(c.Request.Context(), uri.ID, req)
 	if err != nil {
 		switch {
 		case errors.Is(err, resource.ErrNotFound):
@@ -199,15 +224,14 @@ func (h *Handler) Update(c *gin.Context) {
 }
 
 func (h *Handler) Delete(c *gin.Context) {
-	id := c.Param("id")
-
-	if _, err := uuid.Parse(id); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid UUID"})
+	var req request.ByIDRequest
+	if err := c.ShouldBindUri(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request", "details": err.Error()})
 		return
 	}
 
 	// Permission Check Flow
-	existingRes, err := h.service.GetByID(c.Request.Context(), id)
+	existingRes, err := h.service.GetByID(c.Request.Context(), req.ID)
 	if err != nil {
 		switch {
 		case errors.Is(err, resource.ErrNotFound):
@@ -229,7 +253,7 @@ func (h *Handler) Delete(c *gin.Context) {
 		return
 	}
 
-	if err := h.service.Delete(c.Request.Context(), id); err != nil {
+	if err := h.service.Delete(c.Request.Context(), req.ID); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to delete resource"})
 		return
 	}

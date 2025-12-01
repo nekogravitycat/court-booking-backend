@@ -25,4 +25,6 @@ type Filter struct {
 	OrganizationID string
 	Page           int
 	PageSize       int
+	SortBy         string
+	SortOrder      string
 }

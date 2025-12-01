@@ -25,8 +25,10 @@ type Organization struct {
 
 // OrganizationFilter defines filter options for listing organizations.
 type OrganizationFilter struct {
-	Page     int
-	PageSize int
+	Page      int
+	PageSize  int
+	SortBy    string
+	SortOrder string
 }
 
 // Define roles matching the database enum
@@ -47,6 +49,8 @@ type Member struct {
 
 // MemberFilter defines filter options for listing members.
 type MemberFilter struct {
-	Page     int
-	PageSize int
+	Page      int
+	PageSize  int
+	SortBy    string
+	SortOrder string
 }

@@ -3,15 +3,14 @@ package http
 import (
 	"errors"
 	"net/http"
-	"strconv"
-	"time"
+	"strings"
 
 	"github.com/gin-gonic/gin"
-	"github.com/google/uuid"
 	"github.com/nekogravitycat/court-booking-backend/internal/auth"
 	"github.com/nekogravitycat/court-booking-backend/internal/booking"
 	"github.com/nekogravitycat/court-booking-backend/internal/location"
 	"github.com/nekogravitycat/court-booking-backend/internal/organization"
+	"github.com/nekogravitycat/court-booking-backend/internal/pkg/request"
 	"github.com/nekogravitycat/court-booking-backend/internal/pkg/response"
 	"github.com/nekogravitycat/court-booking-backend/internal/resource"
 	"github.com/nekogravitycat/court-booking-backend/internal/user"
@@ -69,23 +68,15 @@ func (h *Handler) checkIsOrgManager(c *gin.Context, resourceID string, userID st
 }
 
 func (h *Handler) List(c *gin.Context) {
-	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
-	pageSize, _ := strconv.Atoi(c.DefaultQuery("page_size", "20"))
-
-	resourceID := c.Query("resource_id")
-	status := c.Query("status")
-	queryUserID := c.Query("user_id")
-
-	var startTime, endTime *time.Time
-	if v := c.Query("start_time_from"); v != "" {
-		if t, err := time.Parse(time.RFC3339, v); err == nil {
-			startTime = &t
-		}
+	var req ListBookingsRequest
+	if err := c.ShouldBindQuery(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid query parameters", "details": err.Error()})
+		return
 	}
-	if v := c.Query("start_time_to"); v != "" {
-		if t, err := time.Parse(time.RFC3339, v); err == nil {
-			endTime = &t
-		}
+
+	if err := req.Validate(); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
 	}
 
 	// Access Control Logic
@@ -96,18 +87,29 @@ func (h *Handler) List(c *gin.Context) {
 
 	// If Admin, they can see all or filter by specific user
 	if isSysAdmin {
-		filterUserID = queryUserID // can be empty to show all
+		filterUserID = req.UserID // can be empty to show all
 	}
 	// If Normal User, forced to see only their own
 
 	filter := booking.Filter{
 		UserID:     filterUserID,
-		ResourceID: resourceID,
-		Status:     status,
-		StartTime:  startTime,
-		EndTime:    endTime,
-		Page:       page,
-		PageSize:   pageSize,
+		ResourceID: req.ResourceID,
+		Status:     req.Status,
+		StartTime:  req.StartTimeFrom,
+		EndTime:    req.StartTimeTo,
+		Page:       req.Page,
+		PageSize:   req.PageSize,
+		SortBy:     req.SortBy,
+		SortOrder:  req.SortOrder,
+	}
+
+	if filter.SortBy == "" {
+		filter.SortBy = "start_time"
+	}
+	if filter.SortOrder == "" {
+		filter.SortOrder = "DESC"
+	} else {
+		filter.SortOrder = strings.ToUpper(filter.SortOrder)
 	}
 
 	bookings, total, err := h.service.List(c.Request.Context(), filter)
@@ -121,7 +123,7 @@ func (h *Handler) List(c *gin.Context) {
 		items[i] = NewBookingResponse(b)
 	}
 
-	resp := response.NewPageResponse(items, page, pageSize, total)
+	resp := response.NewPageResponse(items, req.Page, req.PageSize, total)
 	c.JSON(http.StatusOK, resp)
 }
 
@@ -129,6 +131,11 @@ func (h *Handler) Create(c *gin.Context) {
 	var body CreateBookingRequest
 	if err := c.ShouldBindJSON(&body); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request body", "details": err.Error()})
+		return
+	}
+
+	if err := body.Validate(); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
@@ -165,13 +172,13 @@ func (h *Handler) Create(c *gin.Context) {
 }
 
 func (h *Handler) Get(c *gin.Context) {
-	id := c.Param("id")
-	if _, err := uuid.Parse(id); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid UUID"})
+	var req request.ByIDRequest
+	if err := c.ShouldBindUri(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request", "details": err.Error()})
 		return
 	}
 
-	b, err := h.service.GetByID(c.Request.Context(), id)
+	b, err := h.service.GetByID(c.Request.Context(), req.ID)
 	if err != nil {
 		switch {
 		case errors.Is(err, booking.ErrNotFound):
@@ -201,15 +208,20 @@ func (h *Handler) Get(c *gin.Context) {
 }
 
 func (h *Handler) Update(c *gin.Context) {
-	id := c.Param("id")
-	if _, err := uuid.Parse(id); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid UUID"})
+	var uri request.ByIDRequest
+	if err := c.ShouldBindUri(&uri); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request", "details": err.Error()})
 		return
 	}
 
 	var body UpdateBookingRequest
 	if err := c.ShouldBindJSON(&body); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request body"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request body", "details": err.Error()})
+		return
+	}
+
+	if err := body.Validate(); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
@@ -222,7 +234,7 @@ func (h *Handler) Update(c *gin.Context) {
 		Status:    body.Status,
 	}
 
-	b, err := h.service.Update(c.Request.Context(), id, req, userID, isSysAdmin)
+	b, err := h.service.Update(c.Request.Context(), uri.ID, req, userID, isSysAdmin)
 	if err != nil {
 		switch {
 		case errors.Is(err, booking.ErrNotFound):
@@ -245,16 +257,16 @@ func (h *Handler) Update(c *gin.Context) {
 }
 
 func (h *Handler) Delete(c *gin.Context) {
-	id := c.Param("id")
-	if _, err := uuid.Parse(id); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid UUID"})
+	var req request.ByIDRequest
+	if err := c.ShouldBindUri(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request", "details": err.Error()})
 		return
 	}
 
 	userID := auth.GetUserID(c)
 	isSysAdmin := h.checkIsSysAdmin(c, userID)
 
-	err := h.service.Delete(c.Request.Context(), id, userID, isSysAdmin)
+	err := h.service.Delete(c.Request.Context(), req.ID, userID, isSysAdmin)
 	if err != nil {
 		switch {
 		case errors.Is(err, booking.ErrNotFound):

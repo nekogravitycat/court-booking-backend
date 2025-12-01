@@ -3,11 +3,12 @@ package http
 import (
 	"errors"
 	"net/http"
-	"strconv"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 	"github.com/nekogravitycat/court-booking-backend/internal/organization"
+	"github.com/nekogravitycat/court-booking-backend/internal/pkg/request"
 	"github.com/nekogravitycat/court-booking-backend/internal/pkg/response"
 )
 
@@ -22,12 +23,31 @@ func NewHandler(service organization.Service) *OrganizationHandler {
 // List retrieves a paginated list of active organizations.
 // It supports standard pagination parameters.
 func (h *OrganizationHandler) List(c *gin.Context) {
-	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
-	pageSize, _ := strconv.Atoi(c.DefaultQuery("page_size", "20"))
+	var req ListOrganizationsRequest
+	if err := c.ShouldBindQuery(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid query parameters", "details": err.Error()})
+		return
+	}
+
+	if err := req.Validate(); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
 
 	filter := organization.OrganizationFilter{
-		Page:     page,
-		PageSize: pageSize,
+		Page:      req.Page,
+		PageSize:  req.PageSize,
+		SortBy:    req.SortBy,
+		SortOrder: req.SortOrder,
+	}
+
+	if filter.SortBy == "" {
+		filter.SortBy = "created_at"
+	}
+	if filter.SortOrder == "" {
+		filter.SortOrder = "DESC"
+	} else {
+		filter.SortOrder = strings.ToUpper(filter.SortOrder)
 	}
 
 	orgs, total, err := h.service.List(c.Request.Context(), filter)
@@ -41,7 +61,7 @@ func (h *OrganizationHandler) List(c *gin.Context) {
 		items[i] = NewOrganizationResponse(o)
 	}
 
-	resp := response.NewPageResponse(items, page, pageSize, total)
+	resp := response.NewPageResponse(items, req.Page, req.PageSize, total)
 
 	c.JSON(http.StatusOK, resp)
 }
@@ -51,7 +71,12 @@ func (h *OrganizationHandler) List(c *gin.Context) {
 func (h *OrganizationHandler) Create(c *gin.Context) {
 	var req CreateOrganizationRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request body"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request body", "details": err.Error()})
+		return
+	}
+
+	if err := req.Validate(); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
@@ -71,15 +96,13 @@ func (h *OrganizationHandler) Create(c *gin.Context) {
 
 // Get retrieves detailed information about a specific organization by its ID.
 func (h *OrganizationHandler) Get(c *gin.Context) {
-	id := c.Param("id")
-
-	// Validate UUID format
-	if _, err := uuid.Parse(id); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid organization UUID"})
+	var req request.ByIDRequest
+	if err := c.ShouldBindUri(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request", "details": err.Error()})
 		return
 	}
 
-	org, err := h.service.GetByID(c.Request.Context(), id)
+	org, err := h.service.GetByID(c.Request.Context(), req.ID)
 	if err != nil {
 		switch {
 		case errors.Is(err, organization.ErrOrgNotFound):
@@ -98,18 +121,21 @@ func (h *OrganizationHandler) Get(c *gin.Context) {
 // It supports partial updates via a JSON body.
 // Access Control: System Admin only.
 func (h *OrganizationHandler) Update(c *gin.Context) {
-	id := c.Param("id")
-
-	// Validate UUID format
-	if _, err := uuid.Parse(id); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid organization UUID"})
+	var uri request.ByIDRequest
+	if err := c.ShouldBindUri(&uri); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request", "details": err.Error()})
 		return
 	}
 
 	// Bind to HTTP DTO
 	var body UpdateOrganizationRequest
 	if err := c.ShouldBindJSON(&body); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request body"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request body", "details": err.Error()})
+		return
+	}
+
+	if err := body.Validate(); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
@@ -119,7 +145,7 @@ func (h *OrganizationHandler) Update(c *gin.Context) {
 		IsActive: body.IsActive,
 	}
 
-	org, err := h.service.Update(c.Request.Context(), id, req)
+	org, err := h.service.Update(c.Request.Context(), uri.ID, req)
 	if err != nil {
 		switch {
 		case errors.Is(err, organization.ErrOrgNotFound):
@@ -138,15 +164,13 @@ func (h *OrganizationHandler) Update(c *gin.Context) {
 // Delete performs a soft delete on an organization, marking it as inactive.
 // Access Control: System Admin only.
 func (h *OrganizationHandler) Delete(c *gin.Context) {
-	id := c.Param("id")
-
-	// Validate UUID format
-	if _, err := uuid.Parse(id); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid organization UUID"})
+	var req request.ByIDRequest
+	if err := c.ShouldBindUri(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request", "details": err.Error()})
 		return
 	}
 
-	if err := h.service.Delete(c.Request.Context(), id); err != nil {
+	if err := h.service.Delete(c.Request.Context(), req.ID); err != nil {
 		switch {
 		case errors.Is(err, organization.ErrOrgNotFound):
 			c.JSON(http.StatusNotFound, gin.H{"error": "organization not found"})
@@ -161,23 +185,37 @@ func (h *OrganizationHandler) Delete(c *gin.Context) {
 
 // ListMembers retrieves members of an organization.
 func (h *OrganizationHandler) ListMembers(c *gin.Context) {
-	orgID := c.Param("id")
-
-	// Validate UUID format
-	if _, err := uuid.Parse(orgID); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid organization UUID"})
+	var uri request.ByIDRequest
+	if err := c.ShouldBindUri(&uri); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request", "details": err.Error()})
 		return
 	}
 
-	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
-	pageSize, _ := strconv.Atoi(c.DefaultQuery("page_size", "20"))
-
-	filter := organization.MemberFilter{
-		Page:     page,
-		PageSize: pageSize,
+	var req ListMembersRequest
+	if err := c.ShouldBindQuery(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid query parameters", "details": err.Error()})
+		return
 	}
 
-	members, total, err := h.service.ListMembers(c.Request.Context(), orgID, filter)
+	if err := req.Validate(); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	filter := organization.MemberFilter{
+		Page:      req.Page,
+		PageSize:  req.PageSize,
+		SortBy:    req.SortBy,
+		SortOrder: req.SortOrder,
+	}
+
+	if filter.SortOrder == "" {
+		filter.SortOrder = "DESC"
+	} else {
+		filter.SortOrder = strings.ToUpper(filter.SortOrder)
+	}
+
+	members, total, err := h.service.ListMembers(c.Request.Context(), uri.ID, filter)
 	if err != nil {
 		switch {
 		case errors.Is(err, organization.ErrOrgNotFound):
@@ -194,24 +232,27 @@ func (h *OrganizationHandler) ListMembers(c *gin.Context) {
 		items[i] = NewMemberResponse(m)
 	}
 
-	resp := response.NewPageResponse(items, page, pageSize, total)
+	resp := response.NewPageResponse(items, req.Page, req.PageSize, total)
 	c.JSON(http.StatusOK, resp)
 }
 
 // AddMember adds a user to an organization.
 // Access Control: System Admin (for now).
 func (h *OrganizationHandler) AddMember(c *gin.Context) {
-	orgID := c.Param("id")
-
-	// Validate UUID format
-	if _, err := uuid.Parse(orgID); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid organization UUID"})
+	var uri request.ByIDRequest
+	if err := c.ShouldBindUri(&uri); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request", "details": err.Error()})
 		return
 	}
 
 	var body AddMemberRequest
 	if err := c.ShouldBindJSON(&body); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request body"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request body", "details": err.Error()})
+		return
+	}
+
+	if err := body.Validate(); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
@@ -226,7 +267,7 @@ func (h *OrganizationHandler) AddMember(c *gin.Context) {
 		Role:   body.Role,
 	}
 
-	if err := h.service.AddMember(c.Request.Context(), orgID, req); err != nil {
+	if err := h.service.AddMember(c.Request.Context(), uri.ID, req); err != nil {
 		switch {
 		case errors.Is(err, organization.ErrOrgNotFound):
 			c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
@@ -249,29 +290,20 @@ func (h *OrganizationHandler) AddMember(c *gin.Context) {
 // UpdateMemberRole modifies a member's role.
 // Access Control: System Admin (for now).
 func (h *OrganizationHandler) UpdateMemberRole(c *gin.Context) {
-	orgID := c.Param("id")
-
-	// Validate UUID format
-	if _, err := uuid.Parse(orgID); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid organization UUID"})
-		return
-	}
-
-	userID := c.Param("user_id")
-	if userID == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid user id"})
-		return
-	}
-
-	// Validate UUID format
-	if _, err := uuid.Parse(userID); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid user UUID"})
+	var uri OrgMemberRequest
+	if err := c.ShouldBindUri(&uri); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request", "details": err.Error()})
 		return
 	}
 
 	var body UpdateMemberRequest
 	if err := c.ShouldBindJSON(&body); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request body"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request body", "details": err.Error()})
+		return
+	}
+
+	if err := body.Validate(); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
@@ -279,7 +311,7 @@ func (h *OrganizationHandler) UpdateMemberRole(c *gin.Context) {
 		Role: body.Role,
 	}
 
-	if err := h.service.UpdateMemberRole(c.Request.Context(), orgID, userID, req); err != nil {
+	if err := h.service.UpdateMemberRole(c.Request.Context(), uri.ID, uri.UserID, req); err != nil {
 		switch {
 		case errors.Is(err, organization.ErrOrgNotFound):
 			c.JSON(http.StatusNotFound, gin.H{"error": "organization not found"})
@@ -299,27 +331,13 @@ func (h *OrganizationHandler) UpdateMemberRole(c *gin.Context) {
 // RemoveMember removes a user from an organization.
 // Access Control: System Admin (for now).
 func (h *OrganizationHandler) RemoveMember(c *gin.Context) {
-	orgID := c.Param("id")
-
-	// Validate UUID format
-	if _, err := uuid.Parse(orgID); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid organization UUID"})
+	var req OrgMemberRequest
+	if err := c.ShouldBindUri(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request", "details": err.Error()})
 		return
 	}
 
-	userID := c.Param("user_id")
-	if userID == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid user id"})
-		return
-	}
-
-	// Validate UUID format
-	if _, err := uuid.Parse(userID); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid user UUID"})
-		return
-	}
-
-	if err := h.service.RemoveMember(c.Request.Context(), orgID, userID); err != nil {
+	if err := h.service.RemoveMember(c.Request.Context(), req.ID, req.UserID); err != nil {
 		switch {
 		case errors.Is(err, organization.ErrOrgNotFound):
 			c.JSON(http.StatusNotFound, gin.H{"error": "organization not found"})
