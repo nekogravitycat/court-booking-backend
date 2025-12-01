@@ -177,7 +177,7 @@
 
 ### 如何使用
 
-確保你已安裝 Node.js 環境，然後在專案根目錄執行：
+確保你已安裝 Node.js 環境，然後在專案根目錄執行：W
 
 ```bash
 npx repomix
@@ -201,46 +201,42 @@ npx repomix
 
 ### 2. 錯誤處理架構
 
-為確保系統穩定性並避免非預期的 500 Internal Server Error，本專案實施嚴格的錯誤處理分層策略。
+為確保系統穩定性並提供一致的 API 錯誤回應，本專案採用統一的錯誤處理策略。
 
 #### A. Model 層 (`internal/*/model.go`)
 
-  * **定義來源**：所有的「業務邏輯錯誤」必須在此層預先定義。
-  * **範例**:
+*   **定義錯誤**：使用 `apperror.New` 定義業務邏輯錯誤，並直接關聯 HTTP 狀態碼。
+*   **範例**:
     ```go
     var (
-      ErrNotFound      = errors.New("resource not found")
-      ErrNameRequired  = errors.New("name is required")
-      ErrOrgIDRequired = errors.New("organization_id is required")
+        ErrNotFound      = apperror.New(http.StatusNotFound, "resource not found")
+        ErrNameRequired  = apperror.New(http.StatusBadRequest, "name is required")
+        ErrOrgIDRequired = apperror.New(http.StatusBadRequest, "organization_id is required")
     )
     ```
 
 #### B. Service 層 (`internal/*/service.go`)
 
-  * **禁止動態錯誤**：嚴禁在業務邏輯判斷中使用 `errors.New()` 或 `fmt.Errorf()` 憑空創造錯誤。必須回傳 Model 層定義好的 `Err` 變數。
-  * **系統錯誤例外**：僅有底層系統錯誤（如 Password Hashing 失敗、DB 連線斷裂）才允許使用 `fmt.Errorf` 進行 wrap，這類錯誤最終應導致 HTTP 500。
-  * **預先檢查 (Pre-checks)**:
-      * 若操作涉及關聯資料（Foreign Key），**必須**透過 Dependency Injection 注入對應的 Service 進行存在性檢查。
-      * **禁止**依賴資料庫層級拋出的 Foreign Key Violation Error，這會導致錯誤代碼模糊不清。
-      * 範例：建立 `Location` 前，Service 需先呼叫 `orgService.GetByID` 確認組織存在，若不存在則回傳 `organization.ErrOrgNotFound`。
+*   **回傳錯誤**：業務邏輯檢查失敗時，直接回傳 Model 層定義的錯誤變數。
+*   **系統錯誤**：底層系統錯誤（如 DB 連線失敗）應直接回傳，Handler 層會將其視為 500 Internal Server Error。
+*   **範例**:
+    ```go
+    if name == "" {
+        return ErrNameRequired
+    }
+    ```
 
 #### C. Handler 層 (`internal/*/http/handler.go`)
 
-  * **統一判斷式**：嚴格禁止使用 `if err == model.ErrX`。必須統一使用 `switch` 搭配 `errors.Is`。
-  * **Default 500**：`switch` 的 `default` 分支必須處理所有未預期的錯誤，並回傳 `500 Internal Server Error`。
-  * **範例**:
+*   **統一回應**：使用 `response.Error(c, err)` 輔助函式處理所有錯誤回應。
+*   **自動映射**：`response.Error` 會自動判斷錯誤類型：
+    *   若是 `AppError`，則使用定義的狀態碼與訊息回傳。
+    *   若是其他錯誤，則回傳 `500 Internal Server Error` 並隱藏內部細節。
+*   **範例**:
     ```go
     if err := h.service.Delete(ctx, id); err != nil {
-      switch {
-      case errors.Is(err, location.ErrNotFound):
-        c.JSON(http.StatusNotFound, gin.H{"error": "location not found"})
-      case errors.Is(err, organization.ErrPermissionDenied):
-        c.JSON(http.StatusForbidden, gin.H{"error": "permission denied"})
-      default:
-        // 捕捉所有未列舉的錯誤 (包含 DB 連線錯誤、Hashing 錯誤等)
-        c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to delete location"})
-      }
-      return
+        response.Error(c, err)
+        return
     }
     ```
 
