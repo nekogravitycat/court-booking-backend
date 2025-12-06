@@ -6,20 +6,18 @@ ResourceResponse:
       format: uuid
     name:
       type: string
-    resource_type_id:
-      type: string
-      format: uuid
-    location_id:
-      type: string
-      format: uuid
+    resource_type:
+      $ref: "./resourcetype.yml#/ResourceTypeTag"
+    location:
+      $ref: "./location.yml#/LocationTag"
     created_at:
       type: string
       format: date-time
   required:
     - id
     - name
-    - resource_type_id
-    - location_id
+    - resource_type
+    - location
     - created_at
 
 CreateResourceRequest:
@@ -43,3 +41,15 @@ UpdateResourceRequest:
   properties:
     name:
       type: string
+
+ResourceTag:
+  type: object
+  properties:
+    id:
+      type: string
+      format: uuid
+    name:
+      type: string
+  required:
+    - id
+    - name

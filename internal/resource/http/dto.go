@@ -3,8 +3,10 @@ package http
 import (
 	"time"
 
+	locHttp "github.com/nekogravitycat/court-booking-backend/internal/location/http"
 	"github.com/nekogravitycat/court-booking-backend/internal/pkg/request"
 	"github.com/nekogravitycat/court-booking-backend/internal/resource"
+	rtHttp "github.com/nekogravitycat/court-booking-backend/internal/resourcetype/http"
 )
 
 type ListResourcesRequest struct {
@@ -20,20 +22,26 @@ func (r *ListResourcesRequest) Validate() error {
 }
 
 type ResourceResponse struct {
-	ID             string    `json:"id"`
-	Name           string    `json:"name"`
-	ResourceTypeID string    `json:"resource_type_id"`
-	LocationID     string    `json:"location_id"`
-	CreatedAt      time.Time `json:"created_at"`
+	ID           string                 `json:"id"`
+	Name         string                 `json:"name"`
+	ResourceType rtHttp.ResourceTypeTag `json:"resource_type"`
+	Location     locHttp.LocationTag    `json:"location"`
+	CreatedAt    time.Time              `json:"created_at"`
+}
+
+// ResourceTag is a brief representation of a resource.
+type ResourceTag struct {
+	ID   string `json:"id"`
+	Name string `json:"name"`
 }
 
 func NewResponse(r *resource.Resource) ResourceResponse {
 	return ResourceResponse{
-		ID:             r.ID,
-		Name:           r.Name,
-		ResourceTypeID: r.ResourceTypeID,
-		LocationID:     r.LocationID,
-		CreatedAt:      r.CreatedAt,
+		ID:           r.ID,
+		Name:         r.Name,
+		ResourceType: rtHttp.ResourceTypeTag{ID: r.ResourceTypeID, Name: r.ResourceTypeName},
+		Location:     locHttp.LocationTag{ID: r.LocationID, Name: r.LocationName},
+		CreatedAt:    r.CreatedAt,
 	}
 }
 

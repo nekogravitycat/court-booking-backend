@@ -26,16 +26,7 @@ UserResponse:
       type: array
       description: The list of organizations the user belongs to
       items:
-        type: object
-        properties:
-          id:
-            type: string
-            format: uuid
-          name:
-            type: string
-        required:
-          - id
-          - name
+        $ref: "./organization.yml#/OrganizationTag"
   required:
     - id
     - email
@@ -102,3 +93,15 @@ UpdateUserRequest:
       description: "設定為 false 可進行軟刪除 (或使用 DELETE API)"
     is_system_admin:
       type: boolean
+
+UserTag:
+  type: object
+  properties:
+    id:
+      type: string
+      format: uuid
+    name:
+      type: string
+  required:
+    - id
+    - name

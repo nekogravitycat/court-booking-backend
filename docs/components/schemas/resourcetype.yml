@@ -4,9 +4,8 @@ ResourceTypeResponse:
     id:
       type: string
       format: uuid
-    organization_id:
-      type: string
-      format: uuid
+    organization:
+      $ref: "./organization.yml#/OrganizationTag"
     name:
       type: string
     description:
@@ -16,7 +15,7 @@ ResourceTypeResponse:
       format: date-time
   required:
     - id
-    - organization_id
+    - organization
     - name
 
 CreateResourceTypeRequest:
@@ -40,3 +39,15 @@ UpdateResourceTypeBody:
       type: string
     description:
       type: string
+
+ResourceTypeTag:
+  type: object
+  properties:
+    id:
+      type: string
+      format: uuid
+    name:
+      type: string
+  required:
+    - id
+    - name

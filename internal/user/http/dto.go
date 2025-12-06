@@ -3,6 +3,7 @@ package http
 import (
 	"time"
 
+	orgHttp "github.com/nekogravitycat/court-booking-backend/internal/organization/http"
 	"github.com/nekogravitycat/court-booking-backend/internal/pkg/request"
 	"github.com/nekogravitycat/court-booking-backend/internal/user"
 )
@@ -23,14 +24,20 @@ func (r *ListUsersRequest) Validate() error {
 
 // UserResponse is the shape of user data returned in API responses.
 type UserResponse struct {
-	ID            string                      `json:"id"`
-	Email         string                      `json:"email"`
-	DisplayName   *string                     `json:"display_name"`
-	CreatedAt     time.Time                   `json:"created_at"`
-	LastLoginAt   *time.Time                  `json:"last_login_at"`
-	IsActive      bool                        `json:"is_active"`
-	IsSystemAdmin bool                        `json:"is_system_admin"`
-	Organizations []OrganizationBriefResponse `json:"organizations"`
+	ID            string                    `json:"id"`
+	Email         string                    `json:"email"`
+	DisplayName   *string                   `json:"display_name"`
+	CreatedAt     time.Time                 `json:"created_at"`
+	LastLoginAt   *time.Time                `json:"last_login_at"`
+	IsActive      bool                      `json:"is_active"`
+	IsSystemAdmin bool                      `json:"is_system_admin"`
+	Organizations []orgHttp.OrganizationTag `json:"organizations"`
+}
+
+// UserTag is a brief representation of a user.
+type UserTag struct {
+	ID   string `json:"id"`
+	Name string `json:"name"`
 }
 
 // NewUserResponse converts domain user.User to UserResponse used by the API.
@@ -44,10 +51,10 @@ func NewUserResponse(u *user.User) UserResponse {
 	}
 
 	// Map the organizations
-	orgs := make([]OrganizationBriefResponse, 0, len(u.Organizations))
+	orgs := make([]orgHttp.OrganizationTag, 0, len(u.Organizations))
 	if u.Organizations != nil {
 		for _, org := range u.Organizations {
-			orgs = append(orgs, OrganizationBriefResponse{
+			orgs = append(orgs, orgHttp.OrganizationTag{
 				ID:   org.ID,
 				Name: org.Name,
 			})
@@ -111,10 +118,4 @@ type LoginResponse struct {
 // MeResponse returns the current user info.
 type MeResponse struct {
 	User UserResponse `json:"user"`
-}
-
-// OrganizationBriefResponse is a nested struct for user list.
-type OrganizationBriefResponse struct {
-	ID   string `json:"id"`
-	Name string `json:"name"`
 }

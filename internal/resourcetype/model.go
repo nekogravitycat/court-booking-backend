@@ -15,11 +15,12 @@ var (
 
 // ResourceType represents a category of resources (e.g., Badminton Court).
 type ResourceType struct {
-	ID             string
-	OrganizationID string
-	Name           string
-	Description    string
-	CreatedAt      time.Time
+	ID               string
+	OrganizationID   string
+	Name             string
+	OrganizationName string
+	Description      string
+	CreatedAt        time.Time
 }
 
 // Filter defines parameters for listing resource types.

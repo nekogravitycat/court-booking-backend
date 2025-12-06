@@ -4,12 +4,10 @@ BookingResponse:
     id:
       type: string
       format: uuid
-    resource_id:
-      type: string
-      format: uuid
-    user_id:
-      type: string
-      format: uuid
+    resource:
+      $ref: "./resource.yml#/ResourceTag"
+    user:
+      $ref: "./user.yml#/UserTag"
     start_time:
       type: string
       format: date-time
@@ -27,8 +25,8 @@ BookingResponse:
       format: date-time
   required:
     - id
-    - resource_id
-    - user_id
+    - resource
+    - user
     - start_time
     - end_time
     - status

@@ -23,6 +23,7 @@ type Location struct {
 	ID                string
 	OrganizationID    string
 	Name              string
+	OrganizationName  string
 	CreatedAt         time.Time
 	Capacity          int64
 	OpeningHoursStart string // Format: HH:MM:SS

@@ -208,7 +208,7 @@ func TestResourceCRUDAndPermissions(t *testing.T) {
 		err := json.Unmarshal(w.Body.Bytes(), &resp)
 		require.NoError(t, err)
 		assert.Equal(t, "Badminton Court 1", resp.Name)
-		assert.Equal(t, locA_ID, resp.LocationID)
+		assert.Equal(t, locA_ID, resp.Location.ID)
 		assert.NotEmpty(t, resp.ID)
 
 		resourceID = resp.ID

@@ -42,14 +42,21 @@ func (r *pgxRepository) Create(ctx context.Context, b *Booking) error {
 
 func (r *pgxRepository) GetByID(ctx context.Context, id string) (*Booking, error) {
 	const query = `
-		SELECT id, resource_id, user_id, start_time, end_time, status, created_at, updated_at
-		FROM public.bookings
-		WHERE id = $1
+		SELECT
+			b.id, b.resource_id, r.name, b.user_id, u.display_name,
+			b.start_time, b.end_time, b.status, b.created_at, b.updated_at
+		FROM public.bookings b
+		JOIN public.resources r ON b.resource_id = r.id
+		JOIN public.users u ON b.user_id = u.id
+		WHERE b.id = $1
 	`
 	row := r.pool.QueryRow(ctx, query, id)
 
 	var b Booking
-	if err := row.Scan(&b.ID, &b.ResourceID, &b.UserID, &b.StartTime, &b.EndTime, &b.Status, &b.CreatedAt, &b.UpdatedAt); err != nil {
+	if err := row.Scan(
+		&b.ID, &b.ResourceID, &b.ResourceName, &b.UserID, &b.UserName,
+		&b.StartTime, &b.EndTime, &b.Status, &b.CreatedAt, &b.UpdatedAt,
+	); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, ErrNotFound
 		}
@@ -61,43 +68,48 @@ func (r *pgxRepository) GetByID(ctx context.Context, id string) (*Booking, error
 func (r *pgxRepository) List(ctx context.Context, filter Filter) ([]*Booking, int, error) {
 	var args []any
 	queryBase := `
-		SELECT id, resource_id, user_id, start_time, end_time, status, created_at, updated_at, count(*) OVER() as total_count
-		FROM public.bookings
+		SELECT
+			b.id, b.resource_id, r.name, b.user_id, u.display_name,
+			b.start_time, b.end_time, b.status, b.created_at, b.updated_at,
+			count(*) OVER() as total_count
+		FROM public.bookings b
+		JOIN public.resources r ON b.resource_id = r.id
+		JOIN public.users u ON b.user_id = u.id
 		WHERE 1=1
 	`
 	paramIndex := 1
 
 	if filter.UserID != "" {
-		queryBase += fmt.Sprintf(" AND user_id = $%d", paramIndex)
+		queryBase += fmt.Sprintf(" AND b.user_id = $%d", paramIndex)
 		args = append(args, filter.UserID)
 		paramIndex++
 	}
 	if filter.ResourceID != "" {
-		queryBase += fmt.Sprintf(" AND resource_id = $%d", paramIndex)
+		queryBase += fmt.Sprintf(" AND b.resource_id = $%d", paramIndex)
 		args = append(args, filter.ResourceID)
 		paramIndex++
 	}
 	if filter.Status != "" {
-		queryBase += fmt.Sprintf(" AND status = $%d", paramIndex)
+		queryBase += fmt.Sprintf(" AND b.status = $%d", paramIndex)
 		args = append(args, filter.Status)
 		paramIndex++
 	}
 	// Date range filtering (intersection logic)
 	if filter.StartTime != nil {
-		queryBase += fmt.Sprintf(" AND end_time >= $%d", paramIndex)
+		queryBase += fmt.Sprintf(" AND b.end_time >= $%d", paramIndex)
 		args = append(args, *filter.StartTime)
 		paramIndex++
 	}
 	if filter.EndTime != nil {
-		queryBase += fmt.Sprintf(" AND start_time <= $%d", paramIndex)
+		queryBase += fmt.Sprintf(" AND b.start_time <= $%d", paramIndex)
 		args = append(args, *filter.EndTime)
 		paramIndex++
 	}
 
 	// Sorting
-	orderBy := "start_time"
+	orderBy := "b.start_time"
 	if filter.SortBy != "" {
-		orderBy = filter.SortBy
+		orderBy = "b." + filter.SortBy
 	}
 
 	orderDir := "DESC"
@@ -131,7 +143,8 @@ func (r *pgxRepository) List(ctx context.Context, filter Filter) ([]*Booking, in
 	for rows.Next() {
 		var b Booking
 		if err := rows.Scan(
-			&b.ID, &b.ResourceID, &b.UserID, &b.StartTime, &b.EndTime, &b.Status, &b.CreatedAt, &b.UpdatedAt, &total,
+			&b.ID, &b.ResourceID, &b.ResourceName, &b.UserID, &b.UserName,
+			&b.StartTime, &b.EndTime, &b.Status, &b.CreatedAt, &b.UpdatedAt, &total,
 		); err != nil {
 			return nil, 0, fmt.Errorf("scan booking failed: %w", err)
 		}

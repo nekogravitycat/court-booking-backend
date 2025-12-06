@@ -277,8 +277,9 @@ func TestLocationCRUDAndPermissions(t *testing.T) {
 	})
 	t.Run("List Locations: Advanced Filtering and Sorting", func(t *testing.T) {
 		// Create 3 locations with distinct attributes
+
 		// Loc 1: Cap 10, 08:00-18:00, Open
-		executeRequest("POST", "/v1/locations", locHttp.CreateLocationRequest{
+		w1 := executeRequest("POST", "/v1/locations", locHttp.CreateLocationRequest{
 			OrganizationID:    orgA_ID,
 			Name:              "Filter Court 1",
 			Capacity:          10,
@@ -288,9 +289,10 @@ func TestLocationCRUDAndPermissions(t *testing.T) {
 			Opening:           true,
 			Longitude:         121.0, Latitude: 25.0,
 		}, adminAToken)
+		require.Equal(t, http.StatusCreated, w1.Code, "Failed to create Loc 1: %s", w1.Body.String())
 
 		// Loc 2: Cap 50, 10:00-22:00, Closed
-		executeRequest("POST", "/v1/locations", locHttp.CreateLocationRequest{
+		w2 := executeRequest("POST", "/v1/locations", locHttp.CreateLocationRequest{
 			OrganizationID:    orgA_ID,
 			Name:              "Filter Court 2",
 			Capacity:          50,
@@ -300,9 +302,10 @@ func TestLocationCRUDAndPermissions(t *testing.T) {
 			Opening:           false,
 			Longitude:         121.0, Latitude: 25.0,
 		}, adminAToken)
+		require.Equal(t, http.StatusCreated, w2.Code, "Failed to create Loc 2: %s", w2.Body.String())
 
 		// Loc 3: Cap 100, 06:00-14:00, Open
-		executeRequest("POST", "/v1/locations", locHttp.CreateLocationRequest{
+		w3 := executeRequest("POST", "/v1/locations", locHttp.CreateLocationRequest{
 			OrganizationID:    orgA_ID,
 			Name:              "Filter Court 3",
 			Capacity:          100,
@@ -312,9 +315,11 @@ func TestLocationCRUDAndPermissions(t *testing.T) {
 			Opening:           true,
 			Longitude:         121.0, Latitude: 25.0,
 		}, adminAToken)
+		require.Equal(t, http.StatusCreated, w3.Code, "Failed to create Loc 3: %s", w3.Body.String())
 
 		// 1. Filter by Name (Partial Match)
 		w := executeRequest("GET", fmt.Sprintf("/v1/locations?organization_id=%s&name=Filter Court", orgA_ID), nil, strangerToken)
+		assert.Equal(t, http.StatusOK, w.Code, "List 1 failed: %s", w.Body.String())
 		var listResp response.PageResponse[locHttp.LocationResponse]
 		json.Unmarshal(w.Body.Bytes(), &listResp)
 		// Should find all 3 "Filter Court X"
@@ -322,12 +327,14 @@ func TestLocationCRUDAndPermissions(t *testing.T) {
 
 		// 2. Filter by Opening (bool)
 		w = executeRequest("GET", fmt.Sprintf("/v1/locations?organization_id=%s&opening=false", orgA_ID), nil, strangerToken)
+		assert.Equal(t, http.StatusOK, w.Code, "List 2 failed: %s", w.Body.String())
 		json.Unmarshal(w.Body.Bytes(), &listResp)
 		assert.Equal(t, 1, listResp.Total)
 		assert.Equal(t, "Filter Court 2", listResp.Items[0].Name)
 
 		// 3. Filter by Capacity Range (10-60) -> Should get Loc 1 and Loc 2
 		w = executeRequest("GET", fmt.Sprintf("/v1/locations?organization_id=%s&capacity_min=10&capacity_max=60&sort_by=capacity&sort_order=asc", orgA_ID), nil, strangerToken)
+		assert.Equal(t, http.StatusOK, w.Code, "List 3 failed: %s", w.Body.String())
 		json.Unmarshal(w.Body.Bytes(), &listResp)
 		assert.Equal(t, 2, listResp.Total)
 		assert.Equal(t, "Filter Court 1", listResp.Items[0].Name)
@@ -335,12 +342,14 @@ func TestLocationCRUDAndPermissions(t *testing.T) {
 
 		// 4. Filter by Opening Hours Start (>= 09:00) -> Loc 2 (10:00)
 		w = executeRequest("GET", fmt.Sprintf("/v1/locations?organization_id=%s&opening_hours_start_min=09:00:00", orgA_ID), nil, strangerToken)
+		assert.Equal(t, http.StatusOK, w.Code, "List 4 failed: %s", w.Body.String())
 		json.Unmarshal(w.Body.Bytes(), &listResp)
 		assert.Equal(t, 1, listResp.Total)
 		assert.Equal(t, "Filter Court 2", listResp.Items[0].Name)
 
 		// 5. Sorting (Capacity DESC) -> Loc 3 (100), Loc 2 (50), Loc 1 (10)
 		w = executeRequest("GET", fmt.Sprintf("/v1/locations?organization_id=%s&sort_by=capacity&sort_order=desc", orgA_ID), nil, strangerToken)
+		assert.Equal(t, http.StatusOK, w.Code, "List 5 failed: %s", w.Body.String())
 		json.Unmarshal(w.Body.Bytes(), &listResp)
 		assert.Equal(t, 3, listResp.Total)
 		assert.Equal(t, "Filter Court 3", listResp.Items[0].Name)

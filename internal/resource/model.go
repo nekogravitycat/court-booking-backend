@@ -17,11 +17,13 @@ var (
 
 // Resource represents a bookable unit (e.g., Court A, Room 101).
 type Resource struct {
-	ID             string
-	ResourceTypeID string
-	LocationID     string
-	Name           string
-	CreatedAt      time.Time
+	ID               string
+	ResourceTypeID   string
+	ResourceTypeName string
+	LocationID       string
+	LocationName     string
+	Name             string
+	CreatedAt        time.Time
 }
 
 // Filter defines parameters for listing resources.

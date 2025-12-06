@@ -41,14 +41,15 @@ func (r *pgxRepository) Create(ctx context.Context, rt *ResourceType) error {
 
 func (r *pgxRepository) GetByID(ctx context.Context, id string) (*ResourceType, error) {
 	const query = `
-		SELECT id, organization_id, name, description, created_at
-		FROM public.resource_types
-		WHERE id = $1
+		SELECT rt.id, rt.organization_id, o.name, rt.name, rt.description, rt.created_at
+		FROM public.resource_types rt
+		JOIN public.organizations o ON rt.organization_id = o.id
+		WHERE rt.id = $1
 	`
 	row := r.pool.QueryRow(ctx, query, id)
 
 	var rt ResourceType
-	if err := row.Scan(&rt.ID, &rt.OrganizationID, &rt.Name, &rt.Description, &rt.CreatedAt); err != nil {
+	if err := row.Scan(&rt.ID, &rt.OrganizationID, &rt.OrganizationName, &rt.Name, &rt.Description, &rt.CreatedAt); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, ErrNotFound
 		}
@@ -60,14 +61,15 @@ func (r *pgxRepository) GetByID(ctx context.Context, id string) (*ResourceType, 
 func (r *pgxRepository) List(ctx context.Context, filter Filter) ([]*ResourceType, int, error) {
 	var args []any
 	queryBase := `
-		SELECT id, organization_id, name, description, created_at, count(*) OVER() as total_count
-		FROM public.resource_types
+		SELECT rt.id, rt.organization_id, o.name, rt.name, rt.description, rt.created_at, count(*) OVER() as total_count
+		FROM public.resource_types rt
+		JOIN public.organizations o ON rt.organization_id = o.id
 		WHERE 1=1
 	`
 
 	paramIndex := 1
 	if filter.OrganizationID != "" {
-		queryBase += fmt.Sprintf(" AND organization_id = $%d", paramIndex)
+		queryBase += fmt.Sprintf(" AND rt.organization_id = $%d", paramIndex)
 		args = append(args, filter.OrganizationID)
 		paramIndex++
 	}
@@ -109,7 +111,7 @@ func (r *pgxRepository) List(ctx context.Context, filter Filter) ([]*ResourceTyp
 	for rows.Next() {
 		var rt ResourceType
 		if err := rows.Scan(
-			&rt.ID, &rt.OrganizationID, &rt.Name, &rt.Description, &rt.CreatedAt, &total,
+			&rt.ID, &rt.OrganizationID, &rt.OrganizationName, &rt.Name, &rt.Description, &rt.CreatedAt, &total,
 		); err != nil {
 			return nil, 0, fmt.Errorf("scan resource type failed: %w", err)
 		}

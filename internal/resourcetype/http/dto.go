@@ -3,6 +3,7 @@ package http
 import (
 	"time"
 
+	orgHttp "github.com/nekogravitycat/court-booking-backend/internal/organization/http"
 	"github.com/nekogravitycat/court-booking-backend/internal/pkg/request"
 	"github.com/nekogravitycat/court-booking-backend/internal/resourcetype"
 )
@@ -20,20 +21,26 @@ func (r *ListResourceTypesRequest) Validate() error {
 }
 
 type ResourceTypeResponse struct {
-	ID             string    `json:"id"`
-	OrganizationID string    `json:"organization_id"`
-	Name           string    `json:"name"`
-	Description    string    `json:"description"`
-	CreatedAt      time.Time `json:"created_at"`
+	ID           string                  `json:"id"`
+	Organization orgHttp.OrganizationTag `json:"organization"`
+	Name         string                  `json:"name"`
+	Description  string                  `json:"description"`
+	CreatedAt    time.Time               `json:"created_at"`
+}
+
+// ResourceTypeTag is a brief representation of a resource type.
+type ResourceTypeTag struct {
+	ID   string `json:"id"`
+	Name string `json:"name"`
 }
 
 func NewResponse(rt *resourcetype.ResourceType) ResourceTypeResponse {
 	return ResourceTypeResponse{
-		ID:             rt.ID,
-		OrganizationID: rt.OrganizationID,
-		Name:           rt.Name,
-		Description:    rt.Description,
-		CreatedAt:      rt.CreatedAt,
+		ID:           rt.ID,
+		Organization: orgHttp.OrganizationTag{ID: rt.OrganizationID, Name: rt.OrganizationName},
+		Name:         rt.Name,
+		Description:  rt.Description,
+		CreatedAt:    rt.CreatedAt,
 	}
 }
 

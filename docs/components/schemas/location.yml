@@ -4,9 +4,8 @@ LocationResponse:
     id:
       type: string
       format: uuid
-    organization_id:
-      type: string
-      format: uuid
+    organization:
+      $ref: "./organization.yml#/OrganizationTag"
     name:
       type: string
     created_at:
@@ -41,7 +40,7 @@ LocationResponse:
       format: double
   required:
     - id
-    - organization_id
+    - organization
     - name
     - opening_hours_start
     - opening_hours_end
@@ -116,7 +115,17 @@ UpdateLocationRequest:
       type: string
     description:
       type: string
-    longitude:
-      type: number
     latitude:
       type: number
+
+LocationTag:
+  type: object
+  properties:
+    id:
+      type: string
+      format: uuid
+    name:
+      type: string
+  required:
+    - id
+    - name

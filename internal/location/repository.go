@@ -52,11 +52,12 @@ func (r *pgxRepository) Create(ctx context.Context, loc *Location) error {
 func (r *pgxRepository) GetByID(ctx context.Context, id string) (*Location, error) {
 	const query = `
 		SELECT
-			id, organization_id, name, created_at, capacity,
-			opening_hours_start::text, opening_hours_end::text,
-			location_info, opening, rule, facility, description, longitude, latitude
-		FROM public.locations
-		WHERE id = $1
+			l.id, l.organization_id, o.name, l.name, l.created_at, l.capacity,
+			l.opening_hours_start::text, l.opening_hours_end::text,
+			l.location_info, l.opening, l.rule, l.facility, l.description, l.longitude, l.latitude
+		FROM public.locations l
+		JOIN public.organizations o ON l.organization_id = o.id
+		WHERE l.id = $1
 	`
 	// We cast TIME to ::text to scan into string easily.
 
@@ -64,7 +65,7 @@ func (r *pgxRepository) GetByID(ctx context.Context, id string) (*Location, erro
 
 	var l Location
 	err := row.Scan(
-		&l.ID, &l.OrganizationID, &l.Name, &l.CreatedAt, &l.Capacity,
+		&l.ID, &l.OrganizationID, &l.OrganizationName, &l.Name, &l.CreatedAt, &l.Capacity,
 		&l.OpeningHoursStart, &l.OpeningHoursEnd,
 		&l.LocationInfo, &l.Opening, &l.Rule, &l.Facility, &l.Description, &l.Longitude, &l.Latitude,
 	)
@@ -81,75 +82,77 @@ func (r *pgxRepository) List(ctx context.Context, filter LocationFilter) ([]*Loc
 	var args []any
 	queryBase := `
 		SELECT
-			id, organization_id, name, created_at, capacity,
-			opening_hours_start::text, opening_hours_end::text,
-			location_info, opening, rule, facility, description, longitude, latitude,
+			l.id, l.organization_id, o.name, l.name, l.created_at, l.capacity,
+			l.opening_hours_start::text, l.opening_hours_end::text,
+			l.location_info, l.opening, l.rule, l.facility, l.description, l.longitude, l.latitude,
 			count(*) OVER() as total_count
-		FROM public.locations
+		FROM public.locations l
+		JOIN public.organizations o ON l.organization_id = o.id
 		WHERE 1=1
 	`
 
 	// Dynamic Filtering
 	paramIndex := 1
 	if filter.OrganizationID != "" {
-		queryBase += fmt.Sprintf(" AND organization_id = $%d", paramIndex)
+		queryBase += fmt.Sprintf(" AND l.organization_id = $%d", paramIndex)
 		args = append(args, filter.OrganizationID)
 		paramIndex++
 	}
 	if filter.Name != "" {
-		queryBase += fmt.Sprintf(" AND name ILIKE $%d", paramIndex)
+		queryBase += fmt.Sprintf(" AND l.name ILIKE $%d", paramIndex)
 		args = append(args, "%"+filter.Name+"%")
 		paramIndex++
 	}
 	if filter.Opening != nil {
-		queryBase += fmt.Sprintf(" AND opening = $%d", paramIndex)
+		queryBase += fmt.Sprintf(" AND l.opening = $%d", paramIndex)
 		args = append(args, *filter.Opening)
 		paramIndex++
 	}
 	if filter.CapacityMin != nil {
-		queryBase += fmt.Sprintf(" AND capacity >= $%d", paramIndex)
+		queryBase += fmt.Sprintf(" AND l.capacity >= $%d", paramIndex)
 		args = append(args, *filter.CapacityMin)
 		paramIndex++
 	}
 	if filter.CapacityMax != nil {
-		queryBase += fmt.Sprintf(" AND capacity <= $%d", paramIndex)
+		queryBase += fmt.Sprintf(" AND l.capacity <= $%d", paramIndex)
 		args = append(args, *filter.CapacityMax)
 		paramIndex++
 	}
 	if filter.OpeningHoursStartMin != "" {
-		queryBase += fmt.Sprintf(" AND opening_hours_start >= $%d", paramIndex)
+		queryBase += fmt.Sprintf(" AND l.opening_hours_start >= $%d", paramIndex)
 		args = append(args, filter.OpeningHoursStartMin)
 		paramIndex++
 	}
 	if filter.OpeningHoursStartMax != "" {
-		queryBase += fmt.Sprintf(" AND opening_hours_start <= $%d", paramIndex)
+		queryBase += fmt.Sprintf(" AND l.opening_hours_start <= $%d", paramIndex)
 		args = append(args, filter.OpeningHoursStartMax)
 		paramIndex++
 	}
 	if filter.OpeningHoursEndMin != "" {
-		queryBase += fmt.Sprintf(" AND opening_hours_end >= $%d", paramIndex)
+		queryBase += fmt.Sprintf(" AND l.opening_hours_end >= $%d", paramIndex)
 		args = append(args, filter.OpeningHoursEndMin)
 		paramIndex++
 	}
 	if filter.OpeningHoursEndMax != "" {
-		queryBase += fmt.Sprintf(" AND opening_hours_end <= $%d", paramIndex)
+		queryBase += fmt.Sprintf(" AND l.opening_hours_end <= $%d", paramIndex)
 		args = append(args, filter.OpeningHoursEndMax)
 		paramIndex++
 	}
 	if !filter.CreatedAtFrom.IsZero() {
-		queryBase += fmt.Sprintf(" AND created_at >= $%d", paramIndex)
+		queryBase += fmt.Sprintf(" AND l.created_at >= $%d", paramIndex)
 		args = append(args, filter.CreatedAtFrom)
 		paramIndex++
 	}
 	if !filter.CreatedAtTo.IsZero() {
-		queryBase += fmt.Sprintf(" AND created_at <= $%d", paramIndex)
+		queryBase += fmt.Sprintf(" AND l.created_at <= $%d", paramIndex)
 		args = append(args, filter.CreatedAtTo)
 		paramIndex++
 	}
 
-	orderBy := "created_at"
+	orderBy := "l.created_at"
 	if filter.SortBy != "" {
-		orderBy = filter.SortBy
+		// Safe to prepend l. as we only allow specific fields in the handler validation
+		orderBy = "l." + filter.SortBy
 	}
 
 	orderDir := "DESC"
@@ -183,7 +186,7 @@ func (r *pgxRepository) List(ctx context.Context, filter LocationFilter) ([]*Loc
 	for rows.Next() {
 		var l Location
 		if err := rows.Scan(
-			&l.ID, &l.OrganizationID, &l.Name, &l.CreatedAt, &l.Capacity,
+			&l.ID, &l.OrganizationID, &l.OrganizationName, &l.Name, &l.CreatedAt, &l.Capacity,
 			&l.OpeningHoursStart, &l.OpeningHoursEnd,
 			&l.LocationInfo, &l.Opening, &l.Rule, &l.Facility, &l.Description, &l.Longitude, &l.Latitude,
 			&total,

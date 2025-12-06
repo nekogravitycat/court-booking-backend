@@ -41,14 +41,17 @@ func (r *pgxRepository) Create(ctx context.Context, res *Resource) error {
 
 func (r *pgxRepository) GetByID(ctx context.Context, id string) (*Resource, error) {
 	const query = `
-		SELECT id, resource_type_id, location_id, name, created_at
-		FROM public.resources
-		WHERE id = $1
+		SELECT
+			r.id, r.resource_type_id, rt.name, r.location_id, l.name, r.name, r.created_at
+		FROM public.resources r
+		JOIN public.resource_types rt ON r.resource_type_id = rt.id
+		JOIN public.locations l ON r.location_id = l.id
+		WHERE r.id = $1
 	`
 	row := r.pool.QueryRow(ctx, query, id)
 
 	var res Resource
-	if err := row.Scan(&res.ID, &res.ResourceTypeID, &res.LocationID, &res.Name, &res.CreatedAt); err != nil {
+	if err := row.Scan(&res.ID, &res.ResourceTypeID, &res.ResourceTypeName, &res.LocationID, &res.LocationName, &res.Name, &res.CreatedAt); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, ErrNotFound
 		}
@@ -60,27 +63,31 @@ func (r *pgxRepository) GetByID(ctx context.Context, id string) (*Resource, erro
 func (r *pgxRepository) List(ctx context.Context, filter Filter) ([]*Resource, int, error) {
 	var args []any
 	queryBase := `
-		SELECT id, resource_type_id, location_id, name, created_at, count(*) OVER() as total_count
-		FROM public.resources
+		SELECT
+			r.id, r.resource_type_id, rt.name, r.location_id, l.name, r.name, r.created_at,
+			count(*) OVER() as total_count
+		FROM public.resources r
+		JOIN public.resource_types rt ON r.resource_type_id = rt.id
+		JOIN public.locations l ON r.location_id = l.id
 		WHERE 1=1
 	`
 	paramIndex := 1
 
 	if filter.LocationID != "" {
-		queryBase += fmt.Sprintf(" AND location_id = $%d", paramIndex)
+		queryBase += fmt.Sprintf(" AND r.location_id = $%d", paramIndex)
 		args = append(args, filter.LocationID)
 		paramIndex++
 	}
 	if filter.ResourceTypeID != "" {
-		queryBase += fmt.Sprintf(" AND resource_type_id = $%d", paramIndex)
+		queryBase += fmt.Sprintf(" AND r.resource_type_id = $%d", paramIndex)
 		args = append(args, filter.ResourceTypeID)
 		paramIndex++
 	}
 
 	// Sorting
-	orderBy := "created_at"
+	orderBy := "r.created_at"
 	if filter.SortBy != "" {
-		orderBy = filter.SortBy
+		orderBy = "r." + filter.SortBy
 	}
 
 	orderDir := "DESC"
@@ -114,7 +121,8 @@ func (r *pgxRepository) List(ctx context.Context, filter Filter) ([]*Resource, i
 	for rows.Next() {
 		var res Resource
 		if err := rows.Scan(
-			&res.ID, &res.ResourceTypeID, &res.LocationID, &res.Name, &res.CreatedAt, &total,
+			&res.ID, &res.ResourceTypeID, &res.ResourceTypeName, &res.LocationID, &res.LocationName,
+			&res.Name, &res.CreatedAt, &total,
 		); err != nil {
 			return nil, 0, fmt.Errorf("scan resource failed: %w", err)
 		}

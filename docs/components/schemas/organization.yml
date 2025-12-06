@@ -29,3 +29,15 @@ UpdateOrganizationRequest:
       type: string
     is_active:
       type: boolean
+
+OrganizationTag:
+  type: object
+  properties:
+    id:
+      type: string
+      format: uuid
+    name:
+      type: string
+  required:
+    - id
+    - name

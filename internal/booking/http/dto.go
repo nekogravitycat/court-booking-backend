@@ -5,6 +5,8 @@ import (
 
 	"github.com/nekogravitycat/court-booking-backend/internal/booking"
 	"github.com/nekogravitycat/court-booking-backend/internal/pkg/request"
+	resHttp "github.com/nekogravitycat/court-booking-backend/internal/resource/http"
+	userHttp "github.com/nekogravitycat/court-booking-backend/internal/user/http"
 )
 
 // ListBookingsRequest defines query parameters for listing bookings.
@@ -29,26 +31,26 @@ func (r *ListBookingsRequest) Validate() error {
 }
 
 type BookingResponse struct {
-	ID         string    `json:"id"`
-	ResourceID string    `json:"resource_id"`
-	UserID     string    `json:"user_id"`
-	StartTime  time.Time `json:"start_time"`
-	EndTime    time.Time `json:"end_time"`
-	Status     string    `json:"status"`
-	CreatedAt  time.Time `json:"created_at"`
-	UpdatedAt  time.Time `json:"updated_at"`
+	ID        string              `json:"id"`
+	Resource  resHttp.ResourceTag `json:"resource"`
+	User      userHttp.UserTag    `json:"user"`
+	StartTime time.Time           `json:"start_time"`
+	EndTime   time.Time           `json:"end_time"`
+	Status    string              `json:"status"`
+	CreatedAt time.Time           `json:"created_at"`
+	UpdatedAt time.Time           `json:"updated_at"`
 }
 
 func NewBookingResponse(b *booking.Booking) BookingResponse {
 	return BookingResponse{
-		ID:         b.ID,
-		ResourceID: b.ResourceID,
-		UserID:     b.UserID,
-		StartTime:  b.StartTime,
-		EndTime:    b.EndTime,
-		Status:     string(b.Status),
-		CreatedAt:  b.CreatedAt,
-		UpdatedAt:  b.UpdatedAt,
+		ID:        b.ID,
+		Resource:  resHttp.ResourceTag{ID: b.ResourceID, Name: b.ResourceName},
+		User:      userHttp.UserTag{ID: b.UserID, Name: b.UserName},
+		StartTime: b.StartTime,
+		EndTime:   b.EndTime,
+		Status:    string(b.Status),
+		CreatedAt: b.CreatedAt,
+		UpdatedAt: b.UpdatedAt,
 	}
 }
 

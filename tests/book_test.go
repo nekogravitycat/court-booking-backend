@@ -176,8 +176,8 @@ func TestBookingCRUDAndPermissions(t *testing.T) {
 		err := json.Unmarshal(w.Body.Bytes(), &resp)
 		require.NoError(t, err)
 		assert.NotEmpty(t, resp.ID)
-		assert.Equal(t, resourceID, resp.ResourceID)
-		assert.Equal(t, booker.ID, resp.UserID)
+		assert.Equal(t, resourceID, resp.Resource.ID)
+		assert.Equal(t, booker.ID, resp.User.ID)
 		assert.Equal(t, "pending", resp.Status)
 
 		bookingID = resp.ID
