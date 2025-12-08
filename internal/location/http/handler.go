@@ -12,38 +12,21 @@ import (
 	"github.com/nekogravitycat/court-booking-backend/internal/organization"
 	"github.com/nekogravitycat/court-booking-backend/internal/pkg/request"
 	"github.com/nekogravitycat/court-booking-backend/internal/pkg/response"
+	"github.com/nekogravitycat/court-booking-backend/internal/user"
 )
 
 type LocationHandler struct {
-	service    location.Service
-	orgService organization.Service
+	service     location.Service
+	userService user.Service
+	orgService  organization.Service
 }
 
-func NewHandler(service location.Service, orgService organization.Service) *LocationHandler {
+func NewHandler(service location.Service, userService user.Service, orgService organization.Service) *LocationHandler {
 	return &LocationHandler{
-		service:    service,
-		orgService: orgService,
+		service:     service,
+		userService: userService,
+		orgService:  orgService,
 	}
-}
-
-// checkPermission is a helper function to verify if the authenticated user
-// is an Owner or Admin of the specified organization.
-func (h *LocationHandler) checkPermission(c *gin.Context, orgID string) bool {
-	userID := auth.GetUserID(c)
-	if userID == "" {
-		return false
-	}
-
-	// Call Organization Service to query the user's role within the organization.
-	member, err := h.orgService.GetMember(c.Request.Context(), orgID, userID)
-	if err != nil {
-		// If the member record is not found (ErrNotFound) or any other error occurs,
-		// treat the user as unauthorized.
-		return false
-	}
-
-	// Check if the role is Owner or Admin.
-	return member.Role == organization.RoleOwner || member.Role == organization.RoleAdmin
 }
 
 // List retrieves a paginated list of locations with optional filtering.
@@ -122,7 +105,12 @@ func (h *LocationHandler) Create(c *gin.Context) {
 	}
 
 	// Permission check: The user must be an Admin or Owner of the target organization.
-	if !h.checkPermission(c, body.OrganizationID) {
+	allowed, err := h.orgService.CheckPermission(c.Request.Context(), body.OrganizationID, auth.GetUserID(c))
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+	if !allowed {
 		c.JSON(http.StatusForbidden, gin.H{"error": "forbidden: only organization admins can create locations"})
 		return
 	}
@@ -191,7 +179,12 @@ func (h *LocationHandler) Update(c *gin.Context) {
 	}
 
 	// Permission check: The user must be an Admin or Owner of that organization.
-	if !h.checkPermission(c, existingLoc.OrganizationID) {
+	allowed, err := h.orgService.CheckPermission(c.Request.Context(), existingLoc.OrganizationID, auth.GetUserID(c))
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+	if !allowed {
 		c.JSON(http.StatusForbidden, gin.H{"error": "forbidden: you do not have permission to update this location"})
 		return
 	}
@@ -243,7 +236,12 @@ func (h *LocationHandler) Delete(c *gin.Context) {
 	}
 
 	// Permission check: The user must be an Admin or Owner of that organization.
-	if !h.checkPermission(c, existingLoc.OrganizationID) {
+	allowed, err := h.orgService.CheckPermission(c.Request.Context(), existingLoc.OrganizationID, auth.GetUserID(c))
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+	if !allowed {
 		c.JSON(http.StatusForbidden, gin.H{"error": "forbidden: you do not have permission to delete this location"})
 		return
 	}

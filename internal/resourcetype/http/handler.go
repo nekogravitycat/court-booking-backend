@@ -24,21 +24,6 @@ func NewHandler(service resourcetype.Service, orgService organization.Service) *
 	}
 }
 
-// checkPermission checks if the user is an admin or owner of the organization.
-func (h *Handler) checkPermission(c *gin.Context, orgID string) bool {
-	userID := auth.GetUserID(c)
-	if userID == "" {
-		return false
-	}
-
-	member, err := h.orgService.GetMember(c.Request.Context(), orgID, userID)
-	if err != nil {
-		return false
-	}
-
-	return member.Role == organization.RoleOwner || member.Role == organization.RoleAdmin
-}
-
 func (h *Handler) List(c *gin.Context) {
 	var req ListResourceTypesRequest
 	if err := c.ShouldBindQuery(&req); err != nil {
@@ -96,7 +81,12 @@ func (h *Handler) Create(c *gin.Context) {
 	}
 
 	// Permission check
-	if !h.checkPermission(c, body.OrganizationID) {
+	allowed, err := h.orgService.CheckPermission(c.Request.Context(), body.OrganizationID, auth.GetUserID(c))
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+	if !allowed {
 		c.JSON(http.StatusForbidden, gin.H{"error": "forbidden: only organization admins can create resource types"})
 		return
 	}
@@ -139,19 +129,6 @@ func (h *Handler) Update(c *gin.Context) {
 		return
 	}
 
-	// Fetch existing to check Org ID for permissions
-	existingRT, err := h.service.GetByID(c.Request.Context(), uri.ID)
-	if err != nil {
-		response.Error(c, err)
-		return
-	}
-
-	// Permission check
-	if !h.checkPermission(c, existingRT.OrganizationID) {
-		c.JSON(http.StatusForbidden, gin.H{"error": "forbidden: permission denied"})
-		return
-	}
-
 	var body UpdateRequest
 	if err := c.ShouldBindJSON(&body); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request body", "details": err.Error()})
@@ -160,6 +137,24 @@ func (h *Handler) Update(c *gin.Context) {
 
 	if err := body.Validate(); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	// Fetch existing to check Org ID for permissions
+	existingRT, err := h.service.GetByID(c.Request.Context(), uri.ID)
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+
+	// Check permission
+	allowed, err := h.orgService.CheckPermission(c.Request.Context(), existingRT.OrganizationID, auth.GetUserID(c))
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+	if !allowed {
+		c.JSON(http.StatusForbidden, gin.H{"error": "forbidden: only organization admins can update resource types"})
 		return
 	}
 
@@ -192,8 +187,13 @@ func (h *Handler) Delete(c *gin.Context) {
 	}
 
 	// Permission check
-	if !h.checkPermission(c, existingRT.OrganizationID) {
-		c.JSON(http.StatusForbidden, gin.H{"error": "forbidden: permission denied"})
+	allowed, err := h.orgService.CheckPermission(c.Request.Context(), existingRT.OrganizationID, auth.GetUserID(c))
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+	if !allowed {
+		c.JSON(http.StatusForbidden, gin.H{"error": "forbidden: only organization admins can delete resource types"})
 		return
 	}
 

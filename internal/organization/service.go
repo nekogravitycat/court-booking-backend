@@ -39,6 +39,8 @@ type Service interface {
 	RemoveMember(ctx context.Context, orgID string, userID string) error
 	UpdateMemberRole(ctx context.Context, orgID string, userID string, req UpdateMemberRequest) error
 	ListMembers(ctx context.Context, orgID string, filter MemberFilter) ([]*Member, int, error)
+	// Permission methods
+	CheckPermission(ctx context.Context, orgID string, userID string) (bool, error)
 }
 
 type service struct {
@@ -195,4 +197,43 @@ func isValidRole(r string) bool {
 		return true
 	}
 	return false
+}
+
+// ------------------------
+//     Permission methods
+// ------------------------
+
+// CheckPermission verifies if the user has necessary permissions for the organization.
+// It returns true if the user is a System Admin or an Organization Owner/Admin.
+func (s *service) CheckPermission(ctx context.Context, orgID string, userID string) (bool, error) {
+	if userID == "" {
+		return false, nil
+	}
+
+	// Check System Admin
+	user, err := s.userService.GetByID(ctx, userID)
+	if err != nil {
+		// If obtaining user fails, we cannot verify permission.
+		return false, err
+	}
+	if user.IsSystemAdmin {
+		// System Admin has all permissions
+		return true, nil
+	}
+
+	// Check Organization Role
+	member, err := s.repo.GetMember(ctx, orgID, userID)
+	if err != nil {
+		if errors.Is(err, ErrUserNotMember) {
+			// User exists but is not a member of the organization
+			return false, nil
+		}
+		return false, err
+	}
+
+	if member.Role == RoleOwner || member.Role == RoleAdmin {
+		return true, nil
+	}
+
+	return false, nil
 }

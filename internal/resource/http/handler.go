@@ -27,21 +27,6 @@ func NewHandler(service resource.Service, locService location.Service, orgServic
 	}
 }
 
-// checkPermission checks if the user is an admin or owner of the organization.
-func (h *Handler) checkPermission(c *gin.Context, orgID string) bool {
-	userID := auth.GetUserID(c)
-	if userID == "" {
-		return false
-	}
-
-	member, err := h.orgService.GetMember(c.Request.Context(), orgID, userID)
-	if err != nil {
-		return false
-	}
-
-	return member.Role == organization.RoleOwner || member.Role == organization.RoleAdmin
-}
-
 func (h *Handler) List(c *gin.Context) {
 	var req ListResourcesRequest
 	if err := c.ShouldBindQuery(&req); err != nil {
@@ -108,7 +93,12 @@ func (h *Handler) Create(c *gin.Context) {
 	}
 
 	// 2. Check User Permission for that Org
-	if !h.checkPermission(c, loc.OrganizationID) {
+	allowed, err := h.orgService.CheckPermission(c.Request.Context(), loc.OrganizationID, auth.GetUserID(c))
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+	if !allowed {
 		c.JSON(http.StatusForbidden, gin.H{"error": "forbidden: only organization admins can create resources"})
 		return
 	}
@@ -167,7 +157,12 @@ func (h *Handler) Update(c *gin.Context) {
 	}
 
 	// 3. Check Permissions
-	if !h.checkPermission(c, loc.OrganizationID) {
+	allowed, err := h.orgService.CheckPermission(c.Request.Context(), loc.OrganizationID, auth.GetUserID(c))
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+	if !allowed {
 		c.JSON(http.StatusForbidden, gin.H{"error": "forbidden: permission denied"})
 		return
 	}
@@ -216,7 +211,12 @@ func (h *Handler) Delete(c *gin.Context) {
 		return
 	}
 
-	if !h.checkPermission(c, loc.OrganizationID) {
+	allowed, err := h.orgService.CheckPermission(c.Request.Context(), loc.OrganizationID, auth.GetUserID(c))
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+	if !allowed {
 		c.JSON(http.StatusForbidden, gin.H{"error": "forbidden: permission denied"})
 		return
 	}

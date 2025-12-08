@@ -93,7 +93,7 @@ func NewRouter(cfg Config) *gin.Engine {
 	// Initialize Handlers (Injecting Services from cfg)
 	userHandler := userHttp.NewHandler(cfg.UserService, cfg.JWTManager)
 	orgHandler := orgHttp.NewHandler(cfg.OrgService)
-	locHandler := locHttp.NewHandler(cfg.LocService, cfg.OrgService)
+	locHandler := locHttp.NewHandler(cfg.LocService, cfg.UserService, cfg.OrgService)
 	rtHandler := rtHttp.NewHandler(cfg.RTService, cfg.OrgService)
 	resHandler := resHttp.NewHandler(cfg.ResService, cfg.LocService, cfg.OrgService)
 	bookingHandler := bookingHttp.NewHandler(cfg.BookingService, cfg.UserService, cfg.ResService, cfg.LocService, cfg.OrgService)
