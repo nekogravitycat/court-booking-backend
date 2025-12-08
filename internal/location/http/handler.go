@@ -12,20 +12,17 @@ import (
 	"github.com/nekogravitycat/court-booking-backend/internal/organization"
 	"github.com/nekogravitycat/court-booking-backend/internal/pkg/request"
 	"github.com/nekogravitycat/court-booking-backend/internal/pkg/response"
-	"github.com/nekogravitycat/court-booking-backend/internal/user"
 )
 
 type LocationHandler struct {
-	service     location.Service
-	userService user.Service
-	orgService  organization.Service
+	service    location.Service
+	orgService organization.Service
 }
 
-func NewHandler(service location.Service, userService user.Service, orgService organization.Service) *LocationHandler {
+func NewHandler(service location.Service, orgService organization.Service) *LocationHandler {
 	return &LocationHandler{
-		service:     service,
-		userService: userService,
-		orgService:  orgService,
+		service:    service,
+		orgService: orgService,
 	}
 }
 
