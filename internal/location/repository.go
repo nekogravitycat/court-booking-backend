@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/Masterminds/squirrel"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -27,21 +28,24 @@ func NewPgxRepository(pool *pgxpool.Pool) Repository {
 }
 
 func (r *pgxRepository) Create(ctx context.Context, loc *Location) error {
-	const query = `
-		INSERT INTO public.locations (
-			organization_id, name, capacity, opening_hours_start, opening_hours_end,
-			location_info, opening, rule, facility, description, longitude, latitude
-		)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
-		RETURNING id, created_at
-	`
+	psql := squirrel.StatementBuilder.PlaceholderFormat(squirrel.Dollar)
+	query, args, err := psql.Insert("public.locations").
+		Columns(
+			"organization_id", "name", "capacity", "opening_hours_start", "opening_hours_end",
+			"location_info", "opening", "rule", "facility", "description", "longitude", "latitude",
+		).
+		Values(
+			loc.OrganizationID, loc.Name, loc.Capacity, loc.OpeningHoursStart, loc.OpeningHoursEnd,
+			loc.LocationInfo, loc.Opening, loc.Rule, loc.Facility, loc.Description, loc.Longitude, loc.Latitude,
+		).
+		Suffix("RETURNING id, created_at").
+		ToSql()
+	if err != nil {
+		return fmt.Errorf("build create location query failed: %w", err)
+	}
 
 	// Note: Postgres handles casting string "HH:MM:SS" to TIME automatically in most cases.
-	err := r.pool.QueryRow(
-		ctx, query,
-		loc.OrganizationID, loc.Name, loc.Capacity, loc.OpeningHoursStart, loc.OpeningHoursEnd,
-		loc.LocationInfo, loc.Opening, loc.Rule, loc.Facility, loc.Description, loc.Longitude, loc.Latitude,
-	).Scan(&loc.ID, &loc.CreatedAt)
+	err = r.pool.QueryRow(ctx, query, args...).Scan(&loc.ID, &loc.CreatedAt)
 
 	if err != nil {
 		return fmt.Errorf("create location failed: %w", err)
@@ -50,21 +54,26 @@ func (r *pgxRepository) Create(ctx context.Context, loc *Location) error {
 }
 
 func (r *pgxRepository) GetByID(ctx context.Context, id string) (*Location, error) {
-	const query = `
-		SELECT
-			l.id, l.organization_id, o.name, l.name, l.created_at, l.capacity,
-			l.opening_hours_start::text, l.opening_hours_end::text,
-			l.location_info, l.opening, l.rule, l.facility, l.description, l.longitude, l.latitude
-		FROM public.locations l
-		JOIN public.organizations o ON l.organization_id = o.id
-		WHERE l.id = $1
-	`
+	psql := squirrel.StatementBuilder.PlaceholderFormat(squirrel.Dollar)
+	query, args, err := psql.Select(
+		"l.id", "l.organization_id", "o.name", "l.name", "l.created_at", "l.capacity",
+		"l.opening_hours_start::text", "l.opening_hours_end::text",
+		"l.location_info", "l.opening", "l.rule", "l.facility", "l.description", "l.longitude", "l.latitude",
+	).
+		From("public.locations l").
+		Join("public.organizations o ON l.organization_id = o.id").
+		Where(squirrel.Eq{"l.id": id}).
+		ToSql()
+	if err != nil {
+		return nil, fmt.Errorf("build get location query failed: %w", err)
+	}
+
 	// We cast TIME to ::text to scan into string easily.
 
-	row := r.pool.QueryRow(ctx, query, id)
+	row := r.pool.QueryRow(ctx, query, args...)
 
 	var l Location
-	err := row.Scan(
+	err = row.Scan(
 		&l.ID, &l.OrganizationID, &l.OrganizationName, &l.Name, &l.CreatedAt, &l.Capacity,
 		&l.OpeningHoursStart, &l.OpeningHoursEnd,
 		&l.LocationInfo, &l.Opening, &l.Rule, &l.Facility, &l.Description, &l.Longitude, &l.Latitude,
@@ -79,74 +88,49 @@ func (r *pgxRepository) GetByID(ctx context.Context, id string) (*Location, erro
 }
 
 func (r *pgxRepository) List(ctx context.Context, filter LocationFilter) ([]*Location, int, error) {
-	var args []any
-	queryBase := `
-		SELECT
-			l.id, l.organization_id, o.name, l.name, l.created_at, l.capacity,
-			l.opening_hours_start::text, l.opening_hours_end::text,
-			l.location_info, l.opening, l.rule, l.facility, l.description, l.longitude, l.latitude,
-			count(*) OVER() as total_count
-		FROM public.locations l
-		JOIN public.organizations o ON l.organization_id = o.id
-		WHERE 1=1
-	`
+	psql := squirrel.StatementBuilder.PlaceholderFormat(squirrel.Dollar)
+	query := psql.Select(
+		"l.id", "l.organization_id", "o.name", "l.name", "l.created_at", "l.capacity",
+		"l.opening_hours_start::text", "l.opening_hours_end::text",
+		"l.location_info", "l.opening", "l.rule", "l.facility", "l.description", "l.longitude", "l.latitude",
+		"count(*) OVER() as total_count",
+	).
+		From("public.locations l").
+		Join("public.organizations o ON l.organization_id = o.id")
 
 	// Dynamic Filtering
-	paramIndex := 1
 	if filter.OrganizationID != "" {
-		queryBase += fmt.Sprintf(" AND l.organization_id = $%d", paramIndex)
-		args = append(args, filter.OrganizationID)
-		paramIndex++
+		query = query.Where(squirrel.Eq{"l.organization_id": filter.OrganizationID})
 	}
 	if filter.Name != "" {
-		queryBase += fmt.Sprintf(" AND l.name ILIKE $%d", paramIndex)
-		args = append(args, "%"+filter.Name+"%")
-		paramIndex++
+		query = query.Where(squirrel.ILike{"l.name": "%" + filter.Name + "%"})
 	}
 	if filter.Opening != nil {
-		queryBase += fmt.Sprintf(" AND l.opening = $%d", paramIndex)
-		args = append(args, *filter.Opening)
-		paramIndex++
+		query = query.Where(squirrel.Eq{"l.opening": filter.Opening})
 	}
 	if filter.CapacityMin != nil {
-		queryBase += fmt.Sprintf(" AND l.capacity >= $%d", paramIndex)
-		args = append(args, *filter.CapacityMin)
-		paramIndex++
+		query = query.Where(squirrel.GtOrEq{"l.capacity": filter.CapacityMin})
 	}
 	if filter.CapacityMax != nil {
-		queryBase += fmt.Sprintf(" AND l.capacity <= $%d", paramIndex)
-		args = append(args, *filter.CapacityMax)
-		paramIndex++
+		query = query.Where(squirrel.LtOrEq{"l.capacity": filter.CapacityMax})
 	}
 	if filter.OpeningHoursStartMin != "" {
-		queryBase += fmt.Sprintf(" AND l.opening_hours_start >= $%d", paramIndex)
-		args = append(args, filter.OpeningHoursStartMin)
-		paramIndex++
+		query = query.Where(squirrel.GtOrEq{"l.opening_hours_start": filter.OpeningHoursStartMin})
 	}
 	if filter.OpeningHoursStartMax != "" {
-		queryBase += fmt.Sprintf(" AND l.opening_hours_start <= $%d", paramIndex)
-		args = append(args, filter.OpeningHoursStartMax)
-		paramIndex++
+		query = query.Where(squirrel.LtOrEq{"l.opening_hours_start": filter.OpeningHoursStartMax})
 	}
 	if filter.OpeningHoursEndMin != "" {
-		queryBase += fmt.Sprintf(" AND l.opening_hours_end >= $%d", paramIndex)
-		args = append(args, filter.OpeningHoursEndMin)
-		paramIndex++
+		query = query.Where(squirrel.GtOrEq{"l.opening_hours_end": filter.OpeningHoursEndMin})
 	}
 	if filter.OpeningHoursEndMax != "" {
-		queryBase += fmt.Sprintf(" AND l.opening_hours_end <= $%d", paramIndex)
-		args = append(args, filter.OpeningHoursEndMax)
-		paramIndex++
+		query = query.Where(squirrel.LtOrEq{"l.opening_hours_end": filter.OpeningHoursEndMax})
 	}
 	if !filter.CreatedAtFrom.IsZero() {
-		queryBase += fmt.Sprintf(" AND l.created_at >= $%d", paramIndex)
-		args = append(args, filter.CreatedAtFrom)
-		paramIndex++
+		query = query.Where(squirrel.GtOrEq{"l.created_at": filter.CreatedAtFrom})
 	}
 	if !filter.CreatedAtTo.IsZero() {
-		queryBase += fmt.Sprintf(" AND l.created_at <= $%d", paramIndex)
-		args = append(args, filter.CreatedAtTo)
-		paramIndex++
+		query = query.Where(squirrel.LtOrEq{"l.created_at": filter.CreatedAtTo})
 	}
 
 	orderBy := "l.created_at"
@@ -160,7 +144,7 @@ func (r *pgxRepository) List(ctx context.Context, filter LocationFilter) ([]*Loc
 		orderDir = "ASC"
 	}
 
-	queryBase += fmt.Sprintf(" ORDER BY %s %s", orderBy, orderDir)
+	query = query.OrderBy(orderBy + " " + orderDir)
 
 	// Pagination
 	if filter.Page < 1 {
@@ -171,10 +155,14 @@ func (r *pgxRepository) List(ctx context.Context, filter LocationFilter) ([]*Loc
 	}
 	offset := (filter.Page - 1) * filter.PageSize
 
-	queryBase += fmt.Sprintf(" LIMIT $%d OFFSET $%d", paramIndex, paramIndex+1)
-	args = append(args, filter.PageSize, offset)
+	query = query.Limit(uint64(filter.PageSize)).Offset(uint64(offset))
 
-	rows, err := r.pool.Query(ctx, queryBase, args...)
+	sql, args, err := query.ToSql()
+	if err != nil {
+		return nil, 0, fmt.Errorf("build list locations query failed: %w", err)
+	}
+
+	rows, err := r.pool.Query(ctx, sql, args...)
 	if err != nil {
 		return nil, 0, fmt.Errorf("list locations failed: %w", err)
 	}
@@ -200,19 +188,26 @@ func (r *pgxRepository) List(ctx context.Context, filter LocationFilter) ([]*Loc
 }
 
 func (r *pgxRepository) Update(ctx context.Context, loc *Location) error {
-	const query = `
-		UPDATE public.locations
-		SET name=$1, capacity=$2, opening_hours_start=$3, opening_hours_end=$4,
-			location_info=$5, opening=$6, rule=$7, facility=$8, description=$9,
-			longitude=$10, latitude=$11
-		WHERE id = $12
-	`
-	ct, err := r.pool.Exec(
-		ctx, query,
-		loc.Name, loc.Capacity, loc.OpeningHoursStart, loc.OpeningHoursEnd,
-		loc.LocationInfo, loc.Opening, loc.Rule, loc.Facility, loc.Description,
-		loc.Longitude, loc.Latitude, loc.ID,
-	)
+	psql := squirrel.StatementBuilder.PlaceholderFormat(squirrel.Dollar)
+	query, args, err := psql.Update("public.locations").
+		Set("name", loc.Name).
+		Set("capacity", loc.Capacity).
+		Set("opening_hours_start", loc.OpeningHoursStart).
+		Set("opening_hours_end", loc.OpeningHoursEnd).
+		Set("location_info", loc.LocationInfo).
+		Set("opening", loc.Opening).
+		Set("rule", loc.Rule).
+		Set("facility", loc.Facility).
+		Set("description", loc.Description).
+		Set("longitude", loc.Longitude).
+		Set("latitude", loc.Latitude).
+		Where(squirrel.Eq{"id": loc.ID}).
+		ToSql()
+	if err != nil {
+		return fmt.Errorf("build update location query failed: %w", err)
+	}
+
+	ct, err := r.pool.Exec(ctx, query, args...)
 	if err != nil {
 		return fmt.Errorf("update location failed: %w", err)
 	}
@@ -223,8 +218,15 @@ func (r *pgxRepository) Update(ctx context.Context, loc *Location) error {
 }
 
 func (r *pgxRepository) Delete(ctx context.Context, id string) error {
-	const query = `DELETE FROM public.locations WHERE id = $1`
-	ct, err := r.pool.Exec(ctx, query, id)
+	psql := squirrel.StatementBuilder.PlaceholderFormat(squirrel.Dollar)
+	query, args, err := psql.Delete("public.locations").
+		Where(squirrel.Eq{"id": id}).
+		ToSql()
+	if err != nil {
+		return fmt.Errorf("build delete location query failed: %w", err)
+	}
+
+	ct, err := r.pool.Exec(ctx, query, args...)
 	if err != nil {
 		return fmt.Errorf("delete location failed: %w", err)
 	}

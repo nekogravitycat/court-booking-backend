@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/Masterminds/squirrel"
 	"github.com/jackc/pgerrcode"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
@@ -41,24 +42,34 @@ func NewPgxRepository(pool *pgxpool.Pool) Repository {
 // ------------------------
 
 func (r *pgxRepository) Create(ctx context.Context, org *Organization) error {
-	const query = `
-		INSERT INTO public.organizations (name, is_active)
-		VALUES ($1, $2)
-		RETURNING id, created_at
-	`
+	psql := squirrel.StatementBuilder.PlaceholderFormat(squirrel.Dollar)
+	query, args, err := psql.Insert("public.organizations").
+		Columns("name", "is_active").
+		Values(org.Name, org.IsActive).
+		Suffix("RETURNING id, created_at").
+		ToSql()
+	if err != nil {
+		return fmt.Errorf("build create organization query failed: %w", err)
+	}
+
 	// Default is_active to true if not handled by caller,
 	// though DB default is also true.
-	return r.pool.QueryRow(ctx, query, org.Name, org.IsActive).
+	return r.pool.QueryRow(ctx, query, args...).
 		Scan(&org.ID, &org.CreatedAt)
 }
 
 func (r *pgxRepository) GetByID(ctx context.Context, id string) (*Organization, error) {
-	const query = `
-		SELECT id, name, created_at, is_active
-		FROM public.organizations
-		WHERE id = $1 AND is_active = true
-	`
-	row := r.pool.QueryRow(ctx, query, id)
+	psql := squirrel.StatementBuilder.PlaceholderFormat(squirrel.Dollar)
+	query, args, err := psql.Select("id", "name", "created_at", "is_active").
+		From("public.organizations").
+		Where(squirrel.Eq{"id": id}).
+		Where(squirrel.Eq{"is_active": true}).
+		ToSql()
+	if err != nil {
+		return nil, fmt.Errorf("build get organization query failed: %w", err)
+	}
+
+	row := r.pool.QueryRow(ctx, query, args...)
 
 	var org Organization
 	if err := row.Scan(&org.ID, &org.Name, &org.CreatedAt, &org.IsActive); err != nil {
@@ -72,11 +83,11 @@ func (r *pgxRepository) GetByID(ctx context.Context, id string) (*Organization, 
 
 func (r *pgxRepository) List(ctx context.Context, filter OrganizationFilter) ([]*Organization, int, error) {
 	// Base query with window function for total count
-	const queryBase = `
-		SELECT id, name, created_at, is_active, count(*) OVER() AS total_count
-		FROM public.organizations
-		WHERE is_active = true
-	`
+	psql := squirrel.StatementBuilder.PlaceholderFormat(squirrel.Dollar)
+	queryBuilder := psql.Select("id", "name", "created_at", "is_active", "count(*) OVER() AS total_count").
+		From("public.organizations").
+		Where(squirrel.Eq{"is_active": true})
+
 	orderBy := "id"
 	if filter.SortBy != "" {
 		orderBy = filter.SortBy
@@ -87,6 +98,8 @@ func (r *pgxRepository) List(ctx context.Context, filter OrganizationFilter) ([]
 		orderDir = filter.SortOrder
 	}
 
+	queryBuilder = queryBuilder.OrderBy(orderBy + " " + orderDir)
+
 	// Pagination
 	if filter.Page < 1 {
 		filter.Page = 1
@@ -96,9 +109,14 @@ func (r *pgxRepository) List(ctx context.Context, filter OrganizationFilter) ([]
 	}
 	offset := (filter.Page - 1) * filter.PageSize
 
-	query := queryBase + " ORDER BY " + orderBy + " " + orderDir + " LIMIT $1 OFFSET $2"
+	queryBuilder = queryBuilder.Limit(uint64(filter.PageSize)).Offset(uint64(offset))
 
-	rows, err := r.pool.Query(ctx, query, filter.PageSize, offset)
+	sql, args, err := queryBuilder.ToSql()
+	if err != nil {
+		return nil, 0, fmt.Errorf("build list organizations query failed: %w", err)
+	}
+
+	rows, err := r.pool.Query(ctx, sql, args...)
 	if err != nil {
 		return nil, 0, fmt.Errorf("List failed: %w", err)
 	}
@@ -119,12 +137,17 @@ func (r *pgxRepository) List(ctx context.Context, filter OrganizationFilter) ([]
 }
 
 func (r *pgxRepository) Update(ctx context.Context, org *Organization) error {
-	const query = `
-		UPDATE public.organizations
-		SET name = $1, is_active = $2
-		WHERE id = $3
-	`
-	ct, err := r.pool.Exec(ctx, query, org.Name, org.IsActive, org.ID)
+	psql := squirrel.StatementBuilder.PlaceholderFormat(squirrel.Dollar)
+	query, args, err := psql.Update("public.organizations").
+		Set("name", org.Name).
+		Set("is_active", org.IsActive).
+		Where(squirrel.Eq{"id": org.ID}).
+		ToSql()
+	if err != nil {
+		return fmt.Errorf("build update organization query failed: %w", err)
+	}
+
+	ct, err := r.pool.Exec(ctx, query, args...)
 	if err != nil {
 		return fmt.Errorf("Update failed: %w", err)
 	}
@@ -136,12 +159,17 @@ func (r *pgxRepository) Update(ctx context.Context, org *Organization) error {
 
 func (r *pgxRepository) Delete(ctx context.Context, id string) error {
 	// Soft delete implementation
-	const query = `
-		UPDATE public.organizations
-		SET is_active = false
-		WHERE id = $1
-	`
-	ct, err := r.pool.Exec(ctx, query, id)
+	// Soft delete implementation
+	psql := squirrel.StatementBuilder.PlaceholderFormat(squirrel.Dollar)
+	query, args, err := psql.Update("public.organizations").
+		Set("is_active", false).
+		Where(squirrel.Eq{"id": id}).
+		ToSql()
+	if err != nil {
+		return fmt.Errorf("build delete (soft) organization query failed: %w", err)
+	}
+
+	ct, err := r.pool.Exec(ctx, query, args...)
 	if err != nil {
 		return fmt.Errorf("Delete (soft) failed: %w", err)
 	}
@@ -158,18 +186,20 @@ func (r *pgxRepository) Delete(ctx context.Context, id string) error {
 // GetMember retrieves a member's details from organization_permissions.
 // Returns ErrNotFound if the user is not a member of the organization.
 func (r *pgxRepository) GetMember(ctx context.Context, orgID string, userID string) (*Member, error) {
-	const query = `
-		SELECT
-				u.id,
-				u.email,
-				u.display_name,
-				op.role
-		FROM public.organization_permissions op
-		JOIN public.users u ON op.user_id = u.id
-		WHERE op.organization_id = $1 AND op.user_id = $2
-	`
+	psql := squirrel.StatementBuilder.PlaceholderFormat(squirrel.Dollar)
+	query, args, err := psql.Select(
+		"u.id", "u.email", "u.display_name", "op.role",
+	).
+		From("public.organization_permissions op").
+		Join("public.users u ON op.user_id = u.id").
+		Where(squirrel.Eq{"op.organization_id": orgID}).
+		Where(squirrel.Eq{"op.user_id": userID}).
+		ToSql()
+	if err != nil {
+		return nil, fmt.Errorf("build get member query failed: %w", err)
+	}
 
-	row := r.pool.QueryRow(ctx, query, orgID, userID)
+	row := r.pool.QueryRow(ctx, query, args...)
 
 	var m Member
 	if err := row.Scan(&m.UserID, &m.Email, &m.DisplayName, &m.Role); err != nil {
@@ -184,11 +214,16 @@ func (r *pgxRepository) GetMember(ctx context.Context, orgID string, userID stri
 
 // AddMember inserts a new record into organization_permissions.
 func (r *pgxRepository) AddMember(ctx context.Context, orgID string, userID string, role string) error {
-	const query = `
-		INSERT INTO public.organization_permissions (organization_id, user_id, role)
-		VALUES ($1, $2, $3)
-	`
-	_, err := r.pool.Exec(ctx, query, orgID, userID, role)
+	psql := squirrel.StatementBuilder.PlaceholderFormat(squirrel.Dollar)
+	query, args, err := psql.Insert("public.organization_permissions").
+		Columns("organization_id", "user_id", "role").
+		Values(orgID, userID, role).
+		ToSql()
+	if err != nil {
+		return fmt.Errorf("build add member query failed: %w", err)
+	}
+
+	_, err = r.pool.Exec(ctx, query, args...)
 	if err != nil {
 		var pgErr *pgconn.PgError
 		if errors.As(err, &pgErr) {
@@ -204,11 +239,16 @@ func (r *pgxRepository) AddMember(ctx context.Context, orgID string, userID stri
 
 // RemoveMember deletes a record from organization_permissions.
 func (r *pgxRepository) RemoveMember(ctx context.Context, orgID string, userID string) error {
-	const query = `
-		DELETE FROM public.organization_permissions
-		WHERE organization_id = $1 AND user_id = $2
-	`
-	ct, err := r.pool.Exec(ctx, query, orgID, userID)
+	psql := squirrel.StatementBuilder.PlaceholderFormat(squirrel.Dollar)
+	query, args, err := psql.Delete("public.organization_permissions").
+		Where(squirrel.Eq{"organization_id": orgID}).
+		Where(squirrel.Eq{"user_id": userID}).
+		ToSql()
+	if err != nil {
+		return fmt.Errorf("build remove member query failed: %w", err)
+	}
+
+	ct, err := r.pool.Exec(ctx, query, args...)
 	if err != nil {
 		return fmt.Errorf("RemoveMember failed: %w", err)
 	}
@@ -220,12 +260,17 @@ func (r *pgxRepository) RemoveMember(ctx context.Context, orgID string, userID s
 
 // UpdateMemberRole updates the role in organization_permissions.
 func (r *pgxRepository) UpdateMemberRole(ctx context.Context, orgID string, userID string, role string) error {
-	const query = `
-		UPDATE public.organization_permissions
-		SET role = $3
-		WHERE organization_id = $1 AND user_id = $2
-	`
-	ct, err := r.pool.Exec(ctx, query, orgID, userID, role)
+	psql := squirrel.StatementBuilder.PlaceholderFormat(squirrel.Dollar)
+	query, args, err := psql.Update("public.organization_permissions").
+		Set("role", role).
+		Where(squirrel.Eq{"organization_id": orgID}).
+		Where(squirrel.Eq{"user_id": userID}).
+		ToSql()
+	if err != nil {
+		return fmt.Errorf("build update member role query failed: %w", err)
+	}
+
+	ct, err := r.pool.Exec(ctx, query, args...)
 	if err != nil {
 		return fmt.Errorf("UpdateMemberRole failed: %w", err)
 	}
@@ -238,17 +283,16 @@ func (r *pgxRepository) UpdateMemberRole(ctx context.Context, orgID string, user
 // ListMembers retrieves members with their user details.
 func (r *pgxRepository) ListMembers(ctx context.Context, orgID string, filter MemberFilter) ([]*Member, int, error) {
 	// We count based on the organization_permissions table
-	const queryBase = `
-		SELECT
-			u.id,
-			u.email,
-			u.display_name,
-			op.role,
-			count(*) OVER() AS total_count
-		FROM public.organization_permissions op
-		JOIN public.users u ON op.user_id = u.id
-		WHERE op.organization_id = $1
-	`
+	// We count based on the organization_permissions table
+	psql := squirrel.StatementBuilder.PlaceholderFormat(squirrel.Dollar)
+	queryBuilder := psql.Select(
+		"u.id", "u.email", "u.display_name", "op.role",
+		"count(*) OVER() AS total_count",
+	).
+		From("public.organization_permissions op").
+		Join("public.users u ON op.user_id = u.id").
+		Where(squirrel.Eq{"op.organization_id": orgID})
+
 	orderDir := "DESC"
 	if filter.SortOrder != "" {
 		orderDir = filter.SortOrder
@@ -263,18 +307,23 @@ func (r *pgxRepository) ListMembers(ctx context.Context, orgID string, filter Me
 	}
 	offset := (filter.Page - 1) * filter.PageSize
 
-	query := queryBase
 	if filter.SortBy != "" {
 		orderBy := "op.id"
 		switch filter.SortBy {
 		case "role":
 			orderBy = "op.role"
 		}
-		query += " ORDER BY " + orderBy + " " + orderDir
+		queryBuilder = queryBuilder.OrderBy(orderBy + " " + orderDir)
 	}
-	query += " LIMIT $2 OFFSET $3"
+	// Implicitly limit/offset
+	queryBuilder = queryBuilder.Limit(uint64(filter.PageSize)).Offset(uint64(offset))
 
-	rows, err := r.pool.Query(ctx, query, orgID, filter.PageSize, offset)
+	sql, args, err := queryBuilder.ToSql()
+	if err != nil {
+		return nil, 0, fmt.Errorf("build list members query failed: %w", err)
+	}
+
+	rows, err := r.pool.Query(ctx, sql, args...)
 	if err != nil {
 		return nil, 0, fmt.Errorf("ListMembers failed: %w", err)
 	}

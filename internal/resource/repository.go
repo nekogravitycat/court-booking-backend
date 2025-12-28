@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/Masterminds/squirrel"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -26,12 +27,17 @@ func NewPgxRepository(pool *pgxpool.Pool) Repository {
 }
 
 func (r *pgxRepository) Create(ctx context.Context, res *Resource) error {
-	const query = `
-		INSERT INTO public.resources (resource_type_id, location_id, name)
-		VALUES ($1, $2, $3)
-		RETURNING id, created_at
-	`
-	err := r.pool.QueryRow(ctx, query, res.ResourceTypeID, res.LocationID, res.Name).
+	psql := squirrel.StatementBuilder.PlaceholderFormat(squirrel.Dollar)
+	query, args, err := psql.Insert("public.resources").
+		Columns("resource_type_id", "location_id", "name").
+		Values(res.ResourceTypeID, res.LocationID, res.Name).
+		Suffix("RETURNING id, created_at").
+		ToSql()
+	if err != nil {
+		return fmt.Errorf("build create resource query failed: %w", err)
+	}
+
+	err = r.pool.QueryRow(ctx, query, args...).
 		Scan(&res.ID, &res.CreatedAt)
 	if err != nil {
 		return fmt.Errorf("create resource failed: %w", err)
@@ -40,15 +46,20 @@ func (r *pgxRepository) Create(ctx context.Context, res *Resource) error {
 }
 
 func (r *pgxRepository) GetByID(ctx context.Context, id string) (*Resource, error) {
-	const query = `
-		SELECT
-			r.id, r.resource_type_id, rt.name, r.location_id, l.name, r.name, r.created_at
-		FROM public.resources r
-		JOIN public.resource_types rt ON r.resource_type_id = rt.id
-		JOIN public.locations l ON r.location_id = l.id
-		WHERE r.id = $1
-	`
-	row := r.pool.QueryRow(ctx, query, id)
+	psql := squirrel.StatementBuilder.PlaceholderFormat(squirrel.Dollar)
+	query, args, err := psql.Select(
+		"r.id", "r.resource_type_id", "rt.name", "r.location_id", "l.name", "r.name", "r.created_at",
+	).
+		From("public.resources r").
+		Join("public.resource_types rt ON r.resource_type_id = rt.id").
+		Join("public.locations l ON r.location_id = l.id").
+		Where(squirrel.Eq{"r.id": id}).
+		ToSql()
+	if err != nil {
+		return nil, fmt.Errorf("build get resource query failed: %w", err)
+	}
+
+	row := r.pool.QueryRow(ctx, query, args...)
 
 	var res Resource
 	if err := row.Scan(&res.ID, &res.ResourceTypeID, &res.ResourceTypeName, &res.LocationID, &res.LocationName, &res.Name, &res.CreatedAt); err != nil {
@@ -61,27 +72,20 @@ func (r *pgxRepository) GetByID(ctx context.Context, id string) (*Resource, erro
 }
 
 func (r *pgxRepository) List(ctx context.Context, filter Filter) ([]*Resource, int, error) {
-	var args []any
-	queryBase := `
-		SELECT
-			r.id, r.resource_type_id, rt.name, r.location_id, l.name, r.name, r.created_at,
-			count(*) OVER() as total_count
-		FROM public.resources r
-		JOIN public.resource_types rt ON r.resource_type_id = rt.id
-		JOIN public.locations l ON r.location_id = l.id
-		WHERE 1=1
-	`
-	paramIndex := 1
+	psql := squirrel.StatementBuilder.PlaceholderFormat(squirrel.Dollar)
+	query := psql.Select(
+		"r.id", "r.resource_type_id", "rt.name", "r.location_id", "l.name", "r.name", "r.created_at",
+		"count(*) OVER() as total_count",
+	).
+		From("public.resources r").
+		Join("public.resource_types rt ON r.resource_type_id = rt.id").
+		Join("public.locations l ON r.location_id = l.id")
 
 	if filter.LocationID != "" {
-		queryBase += fmt.Sprintf(" AND r.location_id = $%d", paramIndex)
-		args = append(args, filter.LocationID)
-		paramIndex++
+		query = query.Where(squirrel.Eq{"r.location_id": filter.LocationID})
 	}
 	if filter.ResourceTypeID != "" {
-		queryBase += fmt.Sprintf(" AND r.resource_type_id = $%d", paramIndex)
-		args = append(args, filter.ResourceTypeID)
-		paramIndex++
+		query = query.Where(squirrel.Eq{"r.resource_type_id": filter.ResourceTypeID})
 	}
 
 	// Sorting
@@ -95,7 +99,7 @@ func (r *pgxRepository) List(ctx context.Context, filter Filter) ([]*Resource, i
 		orderDir = filter.SortOrder
 	}
 
-	queryBase += " ORDER BY " + orderBy + " " + orderDir
+	query = query.OrderBy(orderBy + " " + orderDir)
 
 	// Pagination
 	if filter.Page < 1 {
@@ -106,10 +110,14 @@ func (r *pgxRepository) List(ctx context.Context, filter Filter) ([]*Resource, i
 	}
 	offset := (filter.Page - 1) * filter.PageSize
 
-	queryBase += fmt.Sprintf(" LIMIT $%d OFFSET $%d", paramIndex, paramIndex+1)
-	args = append(args, filter.PageSize, offset)
+	query = query.Limit(uint64(filter.PageSize)).Offset(uint64(offset))
 
-	rows, err := r.pool.Query(ctx, queryBase, args...)
+	sql, args, err := query.ToSql()
+	if err != nil {
+		return nil, 0, fmt.Errorf("build list resources query failed: %w", err)
+	}
+
+	rows, err := r.pool.Query(ctx, sql, args...)
 	if err != nil {
 		return nil, 0, fmt.Errorf("list resources failed: %w", err)
 	}
@@ -133,12 +141,16 @@ func (r *pgxRepository) List(ctx context.Context, filter Filter) ([]*Resource, i
 }
 
 func (r *pgxRepository) Update(ctx context.Context, res *Resource) error {
-	const query = `
-		UPDATE public.resources
-		SET name = $1
-		WHERE id = $2
-	`
-	ct, err := r.pool.Exec(ctx, query, res.Name, res.ID)
+	psql := squirrel.StatementBuilder.PlaceholderFormat(squirrel.Dollar)
+	query, args, err := psql.Update("public.resources").
+		Set("name", res.Name).
+		Where(squirrel.Eq{"id": res.ID}).
+		ToSql()
+	if err != nil {
+		return fmt.Errorf("build update resource query failed: %w", err)
+	}
+
+	ct, err := r.pool.Exec(ctx, query, args...)
 	if err != nil {
 		return fmt.Errorf("update resource failed: %w", err)
 	}
@@ -149,8 +161,15 @@ func (r *pgxRepository) Update(ctx context.Context, res *Resource) error {
 }
 
 func (r *pgxRepository) Delete(ctx context.Context, id string) error {
-	const query = `DELETE FROM public.resources WHERE id = $1`
-	ct, err := r.pool.Exec(ctx, query, id)
+	psql := squirrel.StatementBuilder.PlaceholderFormat(squirrel.Dollar)
+	query, args, err := psql.Delete("public.resources").
+		Where(squirrel.Eq{"id": id}).
+		ToSql()
+	if err != nil {
+		return fmt.Errorf("build delete resource query failed: %w", err)
+	}
+
+	ct, err := r.pool.Exec(ctx, query, args...)
 	if err != nil {
 		return fmt.Errorf("delete resource failed: %w", err)
 	}

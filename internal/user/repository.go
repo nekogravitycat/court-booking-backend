@@ -1,15 +1,14 @@
 package user
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"log"
-	"strconv"
 	"time"
 
+	"github.com/Masterminds/squirrel"
 	"github.com/jackc/pgerrcode"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
@@ -39,17 +38,11 @@ func NewPgxRepository(pool *pgxpool.Pool) Repository {
 }
 
 func (r *pgxUserRepository) GetByEmail(ctx context.Context, email string) (*User, error) {
-	const query = `
-		SELECT
-			u.id,
-			u.email,
-			u.password_hash,
-			u.display_name,
-			u.created_at,
-			u.last_login_at,
-			u.is_active,
-			u.is_system_admin,
-			COALESCE(
+	psql := squirrel.StatementBuilder.PlaceholderFormat(squirrel.Dollar)
+	query, args, err := psql.Select(
+		"u.id", "u.email", "u.password_hash", "u.display_name", "u.created_at",
+		"u.last_login_at", "u.is_active", "u.is_system_admin",
+		`COALESCE(
 				(
 					SELECT json_agg(json_build_object('id', o.id, 'name', o.name))
 					FROM public.organization_permissions op
@@ -57,12 +50,16 @@ func (r *pgxUserRepository) GetByEmail(ctx context.Context, email string) (*User
 					WHERE op.user_id = u.id AND o.is_active = true
 				),
 				'[]'::json
-			) AS organizations
-		FROM public.users u
-		WHERE u.email = $1
-	`
+			) AS organizations`,
+	).
+		From("public.users u").
+		Where(squirrel.Eq{"u.email": email}).
+		ToSql()
+	if err != nil {
+		return nil, fmt.Errorf("build get user by email query failed: %w", err)
+	}
 
-	row := r.pool.QueryRow(ctx, query, email)
+	row := r.pool.QueryRow(ctx, query, args...)
 
 	var u User
 	var orgsJSON []byte
@@ -95,17 +92,11 @@ func (r *pgxUserRepository) GetByEmail(ctx context.Context, email string) (*User
 }
 
 func (r *pgxUserRepository) GetByID(ctx context.Context, id string) (*User, error) {
-	const query = `
-		SELECT
-			u.id,
-			u.email,
-			u.password_hash,
-			u.display_name,
-			u.created_at,
-			u.last_login_at,
-			u.is_active,
-			u.is_system_admin,
-			COALESCE(
+	psql := squirrel.StatementBuilder.PlaceholderFormat(squirrel.Dollar)
+	query, args, err := psql.Select(
+		"u.id", "u.email", "u.password_hash", "u.display_name", "u.created_at",
+		"u.last_login_at", "u.is_active", "u.is_system_admin",
+		`COALESCE(
 				(
 					SELECT json_agg(json_build_object('id', o.id, 'name', o.name))
 					FROM public.organization_permissions op
@@ -113,12 +104,16 @@ func (r *pgxUserRepository) GetByID(ctx context.Context, id string) (*User, erro
 					WHERE op.user_id = u.id AND o.is_active = true
 				),
 				'[]'::json
-			) AS organizations
-		FROM public.users u
-		WHERE u.id = $1
-	`
+			) AS organizations`,
+	).
+		From("public.users u").
+		Where(squirrel.Eq{"u.id": id}).
+		ToSql()
+	if err != nil {
+		return nil, fmt.Errorf("build get user by id query failed: %w", err)
+	}
 
-	row := r.pool.QueryRow(ctx, query, id)
+	row := r.pool.QueryRow(ctx, query, args...)
 
 	var u User
 	var orgsJSON []byte
@@ -151,21 +146,17 @@ func (r *pgxUserRepository) GetByID(ctx context.Context, id string) (*User, erro
 }
 
 func (r *pgxUserRepository) Create(ctx context.Context, u *User) error {
-	const query = `
-		INSERT INTO public.users (email, password_hash, display_name, is_active, is_system_admin)
-		VALUES ($1, $2, $3, $4, $5)
-		RETURNING id, created_at
-	`
+	psql := squirrel.StatementBuilder.PlaceholderFormat(squirrel.Dollar)
+	query, args, err := psql.Insert("public.users").
+		Columns("email", "password_hash", "display_name", "is_active", "is_system_admin").
+		Values(u.Email, u.PasswordHash, u.DisplayName, u.IsActive, u.IsSystemAdmin).
+		Suffix("RETURNING id, created_at").
+		ToSql()
+	if err != nil {
+		return fmt.Errorf("build create user query failed: %w", err)
+	}
 
-	if err := r.pool.QueryRow(
-		ctx,
-		query,
-		u.Email,
-		u.PasswordHash,
-		u.DisplayName,
-		u.IsActive,
-		u.IsSystemAdmin,
-	).Scan(&u.ID, &u.CreatedAt); err != nil {
+	if err := r.pool.QueryRow(ctx, query, args...).Scan(&u.ID, &u.CreatedAt); err != nil {
 		var e *pgconn.PgError
 		if errors.As(err, &e) && e.Code == pgerrcode.UniqueViolation {
 			return ErrEmailAlreadyUsed
@@ -177,13 +168,16 @@ func (r *pgxUserRepository) Create(ctx context.Context, u *User) error {
 }
 
 func (r *pgxUserRepository) UpdateLastLogin(ctx context.Context, id string, t time.Time) error {
-	const query = `
-		UPDATE public.users
-		SET last_login_at = $1
-		WHERE id = $2
-	`
+	psql := squirrel.StatementBuilder.PlaceholderFormat(squirrel.Dollar)
+	query, args, err := psql.Update("public.users").
+		Set("last_login_at", t).
+		Where(squirrel.Eq{"id": id}).
+		ToSql()
+	if err != nil {
+		return fmt.Errorf("build update last login query failed: %w", err)
+	}
 
-	ct, err := r.pool.Exec(ctx, query, t, id)
+	ct, err := r.pool.Exec(ctx, query, args...)
 	if err != nil {
 		return fmt.Errorf("UpdateLastLogin failed: %w", err)
 	}
@@ -196,20 +190,12 @@ func (r *pgxUserRepository) UpdateLastLogin(ctx context.Context, id string, t ti
 }
 
 func (r *pgxUserRepository) List(ctx context.Context, filter UserFilter) ([]*User, int, error) {
-	var args []any
-	// We use a Correlated Subquery to fetch organizations as a JSON array.
-	queryBuilder := bytes.NewBufferString(`
-		SELECT
-			u.id,
-			u.email,
-			u.password_hash,
-			u.display_name,
-			u.created_at,
-			u.last_login_at,
-			u.is_active,
-			u.is_system_admin,
-			count(*) OVER() AS total_count,
-			COALESCE(
+	psql := squirrel.StatementBuilder.PlaceholderFormat(squirrel.Dollar)
+	queryBuilder := psql.Select(
+		"u.id", "u.email", "u.password_hash", "u.display_name", "u.created_at",
+		"u.last_login_at", "u.is_active", "u.is_system_admin",
+		"count(*) OVER() AS total_count",
+		`COALESCE(
 				(
 					SELECT json_agg(json_build_object('id', o.id, 'name', o.name))
 					FROM public.organization_permissions op
@@ -217,23 +203,19 @@ func (r *pgxUserRepository) List(ctx context.Context, filter UserFilter) ([]*Use
 					WHERE op.user_id = u.id AND o.is_active = true
 				),
 				'[]'::json
-			) AS organizations
-		FROM public.users u
-		WHERE 1=1
-	`)
+			) AS organizations`,
+	).
+		From("public.users u")
 
 	// Dynamic filtering
 	if filter.Email != "" {
-		args = append(args, "%"+filter.Email+"%")
-		queryBuilder.WriteString(" AND email ILIKE $" + strconv.Itoa(len(args)))
+		queryBuilder = queryBuilder.Where(squirrel.ILike{"email": "%" + filter.Email + "%"})
 	}
 	if filter.DisplayName != "" {
-		args = append(args, "%"+filter.DisplayName+"%")
-		queryBuilder.WriteString(" AND display_name ILIKE $" + strconv.Itoa(len(args)))
+		queryBuilder = queryBuilder.Where(squirrel.ILike{"display_name": "%" + filter.DisplayName + "%"})
 	}
 	if filter.IsActive != nil {
-		args = append(args, *filter.IsActive)
-		queryBuilder.WriteString(" AND is_active = $" + strconv.Itoa(len(args)))
+		queryBuilder = queryBuilder.Where(squirrel.Eq{"is_active": *filter.IsActive})
 	}
 
 	// Sorting
@@ -247,7 +229,7 @@ func (r *pgxUserRepository) List(ctx context.Context, filter UserFilter) ([]*Use
 		orderDir = filter.SortOrder
 	}
 
-	queryBuilder.WriteString(" ORDER BY " + orderBy + " " + orderDir)
+	queryBuilder = queryBuilder.OrderBy(orderBy + " " + orderDir)
 
 	// Pagination
 	if filter.Page < 1 {
@@ -258,10 +240,14 @@ func (r *pgxUserRepository) List(ctx context.Context, filter UserFilter) ([]*Use
 	}
 	offset := (filter.Page - 1) * filter.PageSize
 
-	args = append(args, filter.PageSize, offset)
-	queryBuilder.WriteString(" LIMIT $" + strconv.Itoa(len(args)-1) + " OFFSET $" + strconv.Itoa(len(args)))
+	queryBuilder = queryBuilder.Limit(uint64(filter.PageSize)).Offset(uint64(offset))
 
-	rows, err := r.pool.Query(ctx, queryBuilder.String(), args...)
+	sql, args, err := queryBuilder.ToSql()
+	if err != nil {
+		return nil, 0, fmt.Errorf("build list users query failed: %w", err)
+	}
+
+	rows, err := r.pool.Query(ctx, sql, args...)
 	if err != nil {
 		return nil, 0, fmt.Errorf("list users failed: %w", err)
 	}
@@ -306,13 +292,18 @@ func (r *pgxUserRepository) List(ctx context.Context, filter UserFilter) ([]*Use
 }
 
 func (r *pgxUserRepository) Update(ctx context.Context, u *User) error {
-	const query = `
-		UPDATE public.users
-		SET display_name = $1, is_active = $2, is_system_admin = $3
-		WHERE id = $4
-	`
+	psql := squirrel.StatementBuilder.PlaceholderFormat(squirrel.Dollar)
+	query, args, err := psql.Update("public.users").
+		Set("display_name", u.DisplayName).
+		Set("is_active", u.IsActive).
+		Set("is_system_admin", u.IsSystemAdmin).
+		Where(squirrel.Eq{"id": u.ID}).
+		ToSql()
+	if err != nil {
+		return fmt.Errorf("build update user query failed: %w", err)
+	}
 
-	ct, err := r.pool.Exec(ctx, query, u.DisplayName, u.IsActive, u.IsSystemAdmin, u.ID)
+	ct, err := r.pool.Exec(ctx, query, args...)
 	if err != nil {
 		return fmt.Errorf("update user failed: %w", err)
 	}
@@ -325,13 +316,16 @@ func (r *pgxUserRepository) Update(ctx context.Context, u *User) error {
 }
 
 func (r *pgxUserRepository) Delete(ctx context.Context, id string) error {
-	const query = `
-		UPDATE public.users
-		SET is_active = false
-		WHERE id = $1
-	`
+	psql := squirrel.StatementBuilder.PlaceholderFormat(squirrel.Dollar)
+	query, args, err := psql.Update("public.users").
+		Set("is_active", false).
+		Where(squirrel.Eq{"id": id}).
+		ToSql()
+	if err != nil {
+		return fmt.Errorf("build delete user query failed: %w", err)
+	}
 
-	ct, err := r.pool.Exec(ctx, query, id)
+	ct, err := r.pool.Exec(ctx, query, args...)
 	if err != nil {
 		return fmt.Errorf("delete user failed: %w", err)
 	}
