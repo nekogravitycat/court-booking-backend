@@ -198,11 +198,11 @@ func TestUserOrganizationResponse(t *testing.T) {
 
 	// Setup: Add targetUser to organizations
 	// Add to active Org A
-	addMemberToOrg(t, orgA_ID, targetUser.ID, "member")
+	addMemberToOrg(t, orgA_ID, targetUser.ID, "manager")
 	// Add to active Org B
-	addMemberToOrg(t, orgB_ID, targetUser.ID, "admin")
+	addMemberToOrg(t, orgB_ID, targetUser.ID, "manager")
 	// Add to inactive Org (should be filtered out)
-	addMemberToOrg(t, orgInactive_ID, targetUser.ID, "member")
+	addMemberToOrg(t, orgInactive_ID, targetUser.ID, "manager")
 
 	// Test Case: Check /me endpoint (should include multiple organizations and filter inactive ones)
 	t.Run("Get Me Includes Active Organizations Only", func(t *testing.T) {

@@ -72,7 +72,7 @@
   - 系統管理員 (System Admin) 與一般使用者區分。
 - **多租戶組織架構 (Organizations)**
   - 支援建立多個組織 (Organization)。
-  - 組織內角色權限：Owner (擁有者), Admin (管理員), Member (成員)。
+  - 組織內角色權限：Owner (擁有者), Manager (管理員)。
 - **場館與資源管理**
   - 場館 (Locations)：支援經緯度、營業時間。
   - 資源 (Resources)：球場、會議室等具體可預約單位。
@@ -188,16 +188,16 @@ npx repomix
 執行完畢後，會在根目錄產生 `codebase-for-llm.xml`。
 你可以直接將此檔案上傳給 LLM，讓其進行程式碼審查、重構建議或是功能開發輔助。
 
-  - **設定檔**：`repomix.config.json`
-  - **安全檢查**：Repomix 會自動掃描並排除潛在的敏感資訊 (Secret/API Key)。
+- **設定檔**：`repomix.config.json`
+- **安全檢查**：Repomix 會自動掃描並排除潛在的敏感資訊 (Secret/API Key)。
 
 ## 📋 開發規範
 
 ### 1. 程式碼風格
 
-  * **格式化**：嚴格遵守 Go 標準格式 (`go fmt`)。
-  * **註解**：所有註解必須使用**英文**撰寫。
-  * **禁止 Emojis**：程式碼與註解中不得出現 Emoji。
+- **格式化**：嚴格遵守 Go 標準格式 (`go fmt`)。
+- **註解**：所有註解必須使用**英文**撰寫。
+- **禁止 Emojis**：程式碼與註解中不得出現 Emoji。
 
 ### 2. 錯誤處理架構
 
@@ -205,73 +205,73 @@ npx repomix
 
 #### A. Model 層 (`internal/*/model.go`)
 
-*   **定義錯誤**：使用 `apperror.New` 定義業務邏輯錯誤，並直接關聯 HTTP 狀態碼。
-*   **範例**:
-    ```go
-    var (
-        ErrNotFound      = apperror.New(http.StatusNotFound, "resource not found")
-        ErrNameRequired  = apperror.New(http.StatusBadRequest, "name is required")
-        ErrOrgIDRequired = apperror.New(http.StatusBadRequest, "organization_id is required")
-    )
-    ```
+- **定義錯誤**：使用 `apperror.New` 定義業務邏輯錯誤，並直接關聯 HTTP 狀態碼。
+- **範例**:
+  ```go
+  var (
+      ErrNotFound      = apperror.New(http.StatusNotFound, "resource not found")
+      ErrNameRequired  = apperror.New(http.StatusBadRequest, "name is required")
+      ErrOrgIDRequired = apperror.New(http.StatusBadRequest, "organization_id is required")
+  )
+  ```
 
 #### B. Service 層 (`internal/*/service.go`)
 
-*   **回傳錯誤**：業務邏輯檢查失敗時，直接回傳 Model 層定義的錯誤變數。
-*   **系統錯誤**：底層系統錯誤（如 DB 連線失敗）應直接回傳，Handler 層會將其視為 500 Internal Server Error。
-*   **範例**:
-    ```go
-    if name == "" {
-        return ErrNameRequired
-    }
-    ```
+- **回傳錯誤**：業務邏輯檢查失敗時，直接回傳 Model 層定義的錯誤變數。
+- **系統錯誤**：底層系統錯誤（如 DB 連線失敗）應直接回傳，Handler 層會將其視為 500 Internal Server Error。
+- **範例**:
+  ```go
+  if name == "" {
+      return ErrNameRequired
+  }
+  ```
 
 #### C. Handler 層 (`internal/*/http/handler.go`)
 
-*   **統一回應**：使用 `response.Error(c, err)` 輔助函式處理所有錯誤回應。
-*   **自動映射**：`response.Error` 會自動判斷錯誤類型：
-    *   若是 `AppError`，則使用定義的狀態碼與訊息回傳。
-    *   若是其他錯誤，則回傳 `500 Internal Server Error` 並隱藏內部細節。
-*   **範例**:
-    ```go
-    if err := h.service.Delete(ctx, id); err != nil {
-        response.Error(c, err)
-        return
-    }
-    ```
+- **統一回應**：使用 `response.Error(c, err)` 輔助函式處理所有錯誤回應。
+- **自動映射**：`response.Error` 會自動判斷錯誤類型：
+  - 若是 `AppError`，則使用定義的狀態碼與訊息回傳。
+  - 若是其他錯誤，則回傳 `500 Internal Server Error` 並隱藏內部細節。
+- **範例**:
+  ```go
+  if err := h.service.Delete(ctx, id); err != nil {
+      response.Error(c, err)
+      return
+  }
+  ```
 
 ### 3. 架構分層職責
 
-  * **Handler Layer (`http`)**:
-      * 負責解析 HTTP Request (Body, Query, Param)。
-      * 負責權限檢查 (Middleware 或 Service 輔助)。
-      * **不包含業務邏輯**。
-      * 負責將 Service 回傳的 Go error 映射為 HTTP Status Code。
-  * **Service Layer**:
-      * 核心業務邏輯中心。
-      * 負責跨模組的邏輯串接 (e.g., Booking Service 呼叫 Location Service)。
-      * **不包含 HTTP 相關依賴** (如 `gin.Context`)。
-  * **Repository Layer**:
-      * 負責 Raw SQL 執行與資料庫互動。
-      * 負責將 SQL Row Scan 轉為 Go Struct。
-      * 使用 `pgx` driver。
+- **Handler Layer (`http`)**:
+  - 負責解析 HTTP Request (Body, Query, Param)。
+  - 負責權限檢查 (Middleware 或 Service 輔助)。
+  - **不包含業務邏輯**。
+  - 負責將 Service 回傳的 Go error 映射為 HTTP Status Code。
+- **Service Layer**:
+  - 核心業務邏輯中心。
+  - 負責跨模組的邏輯串接 (e.g., Booking Service 呼叫 Location Service)。
+  - **不包含 HTTP 相關依賴** (如 `gin.Context`)。
+- **Repository Layer**:
+  - 負責 Raw SQL 執行與資料庫互動。
+  - 負責將 SQL Row Scan 轉為 Go Struct。
+  - 使用 `pgx` driver。
 
 ### 4. 資料庫規範
 
-  * **Raw SQL**：本專案不使用 ORM，請撰寫乾淨的 SQL 語句。
-  * **Soft Delete**：對於主要實體（Organization, User 等），優先採用 `is_active` 機制，避免實體資料刪除。
-  * **Schema**：變更需同步更新 `db/schema.sql`。
+- **Raw SQL**：本專案不使用 ORM，請撰寫乾淨的 SQL 語句。
+- **Soft Delete**：對於主要實體（Organization, User 等），優先採用 `is_active` 機制，避免實體資料刪除。
+- **Schema**：變更需同步更新 `db/schema.sql`。
 
 ### 5. API 回應格式
 
-  * **成功**：回傳 JSON 物件。
-  * **列表**：必須包含分頁資訊。
-    ```json
-    {
-      "items": [],
-      "page": 1,
-      "page_size": 20,
-      "total": 100
-    }
-    ```
-  * **錯誤**：必須回傳 `{"error": "description"}` 格式。
+- **成功**：回傳 JSON 物件。
+- **列表**：必須包含分頁資訊。
+  ```json
+  {
+    "items": [],
+    "page": 1,
+    "page_size": 20,
+    "total": 100
+  }
+  ```
+- **錯誤**：必須回傳 `{"error": "description"}` 格式。

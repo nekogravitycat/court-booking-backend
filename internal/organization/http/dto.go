@@ -93,7 +93,7 @@ func (r *ListMembersRequest) Validate() error {
 // AddMemberRequest defines payload for adding a member.
 type AddMemberRequest struct {
 	UserID string `json:"user_id" binding:"required,uuid"`
-	Role   string `json:"role" binding:"required,oneof=owner admin member"`
+	Role   string `json:"role" binding:"required,oneof=manager"`
 }
 
 // Validate performs custom validation for AddMemberRequest.
@@ -103,7 +103,7 @@ func (r *AddMemberRequest) Validate() error {
 
 // UpdateMemberRequest defines payload for updating a member role.
 type UpdateMemberRequest struct {
-	Role string `json:"role" binding:"required,oneof=owner admin member"`
+	Role string `json:"role" binding:"required,oneof=manager"`
 }
 
 // Validate performs custom validation for UpdateMemberRequest.

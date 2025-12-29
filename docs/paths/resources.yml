@@ -2,7 +2,12 @@ listResources:
   get:
     tags:
       - Resources
-    summary: "列出資源 (如：球場、會議室)"
+    summary: "查詢 Resource 列表"
+    description: |
+      查詢符合條件的 Resource (如：球場、會議室)。
+
+      **權限 Access Control**:
+      - **Login Required**: 任何已登入的使用者皆可存取。
     security:
       - bearerAuth: []
     parameters:
@@ -37,7 +42,13 @@ listResources:
   post:
     tags:
       - Resources
-    summary: "建立資源 (Organization Owner/Admin)"
+    summary: "新增 Resource"
+    description: |
+      建立一個新的 Resource。
+
+      **權限 Access Control**:
+      - **System Admin**: 完全存取權限。
+      - **Organization Owner / Manager**: 可管理所屬 Organization 下的 Resource。
     security:
       - bearerAuth: []
     requestBody:
@@ -62,7 +73,12 @@ resourceDetail:
   get:
     tags:
       - Resources
-    summary: "取得資源詳情"
+    summary: "查詢 Resource 詳情"
+    description: |
+      取得特定 Resource 的詳細資訊。
+
+      **權限 Access Control**:
+      - **Login Required**: 任何已登入的使用者皆可存取。
     security:
       - bearerAuth: []
     parameters: &idParams
@@ -84,7 +100,13 @@ resourceDetail:
   patch:
     tags:
       - Resources
-    summary: "更新資源 (Organization Owner/Admin)"
+    summary: "修改 Resource 資訊"
+    description: |
+      更新 Resource 的基本資料。
+
+      **權限 Access Control**:
+      - **System Admin**: 完全存取權限。
+      - **Organization Owner / Manager**: 可管理所屬 Organization 下的 Resource。
     security:
       - bearerAuth: []
     parameters: *idParams
@@ -107,7 +129,13 @@ resourceDetail:
   delete:
     tags:
       - Resources
-    summary: "刪除資源 (Organization Owner/Admin)"
+    summary: "刪除 Resource"
+    description: |
+      刪除 Resource (軟刪除)。
+
+      **權限 Access Control**:
+      - **System Admin**: 完全存取權限。
+      - **Organization Owner / Manager**: 可管理所屬 Organization 下的 Resource。
     security:
       - bearerAuth: []
     parameters: *idParams

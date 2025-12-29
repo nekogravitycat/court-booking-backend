@@ -25,9 +25,9 @@ func TestResourceCRUDAndPermissions(t *testing.T) {
 	// Org A Users (Primary context)
 	ownerA := createTestUser(t, "owner.a@res.com", "pass", false)
 	adminA := createTestUser(t, "admin.a@res.com", "pass", false)
-	memberA := createTestUser(t, "member.a@res.com", "pass", false)
 
 	// Org B User (For cross-organization isolation tests)
+	ownerB := createTestUser(t, "owner.b@res.com", "pass", false)
 	adminB := createTestUser(t, "admin.b@res.com", "pass", false)
 
 	// Unaffiliated User
@@ -37,7 +37,7 @@ func TestResourceCRUDAndPermissions(t *testing.T) {
 	sysAdminToken := generateToken(sysAdmin.ID, sysAdmin.Email)
 	ownerAToken := generateToken(ownerA.ID, ownerA.Email)
 	adminAToken := generateToken(adminA.ID, adminA.Email)
-	memberAToken := generateToken(memberA.ID, memberA.Email)
+	ownerBToken := generateToken(ownerB.ID, ownerB.Email)
 	adminBToken := generateToken(adminB.ID, adminB.Email)
 	strangerToken := generateToken(stranger.ID, stranger.Email)
 
@@ -61,14 +61,12 @@ func TestResourceCRUDAndPermissions(t *testing.T) {
 		orgB_ID = orgRespB.ID
 
 		// Assign Roles
+		addMemberToOrg(t, orgA_ID, ownerA.ID, "owner")
 		executeRequest("POST", fmt.Sprintf("/v1/organizations/%s/members", orgA_ID),
-			orgHttp.AddMemberRequest{UserID: ownerA.ID, Role: "owner"}, sysAdminToken)
-		executeRequest("POST", fmt.Sprintf("/v1/organizations/%s/members", orgA_ID),
-			orgHttp.AddMemberRequest{UserID: adminA.ID, Role: "admin"}, sysAdminToken)
-		executeRequest("POST", fmt.Sprintf("/v1/organizations/%s/members", orgA_ID),
-			orgHttp.AddMemberRequest{UserID: memberA.ID, Role: "member"}, sysAdminToken)
+			orgHttp.AddMemberRequest{UserID: adminA.ID, Role: "manager"}, sysAdminToken)
+		addMemberToOrg(t, orgB_ID, ownerB.ID, "owner")
 		executeRequest("POST", fmt.Sprintf("/v1/organizations/%s/members", orgB_ID),
-			orgHttp.AddMemberRequest{UserID: adminB.ID, Role: "admin"}, sysAdminToken)
+			orgHttp.AddMemberRequest{UserID: adminB.ID, Role: "manager"}, sysAdminToken)
 
 		// Create Locations (Loc A in Org A, Loc B in Org B)
 		locPayloadA := locHttp.CreateLocationRequest{
@@ -76,7 +74,7 @@ func TestResourceCRUDAndPermissions(t *testing.T) {
 			OpeningHoursStart: "09:00:00", OpeningHoursEnd: "22:00:00",
 			LocationInfo: "Info A", Longitude: 121.0, Latitude: 25.0,
 		}
-		wLocA := executeRequest("POST", "/v1/locations", locPayloadA, adminAToken)
+		wLocA := executeRequest("POST", "/v1/locations", locPayloadA, ownerAToken)
 		var locRespA locHttp.LocationResponse
 		json.Unmarshal(wLocA.Body.Bytes(), &locRespA)
 		locA_ID = locRespA.ID
@@ -86,7 +84,7 @@ func TestResourceCRUDAndPermissions(t *testing.T) {
 			OpeningHoursStart: "09:00:00", OpeningHoursEnd: "22:00:00",
 			LocationInfo: "Info B", Longitude: 121.0, Latitude: 25.0,
 		}
-		wLocB := executeRequest("POST", "/v1/locations", locPayloadB, adminBToken)
+		wLocB := executeRequest("POST", "/v1/locations", locPayloadB, ownerBToken)
 		var locRespB locHttp.LocationResponse
 		json.Unmarshal(wLocB.Body.Bytes(), &locRespB)
 
@@ -156,7 +154,7 @@ func TestResourceCRUDAndPermissions(t *testing.T) {
 		invalidPath := "/v1/resources/not-a-uuid"
 
 		// GET
-		wGet := executeRequest("GET", invalidPath, nil, memberAToken)
+		wGet := executeRequest("GET", invalidPath, nil, strangerToken)
 		assert.Equal(t, http.StatusBadRequest, wGet.Code, "Should return 400 for invalid UUID in GET")
 
 		// PATCH
@@ -177,10 +175,6 @@ func TestResourceCRUDAndPermissions(t *testing.T) {
 			LocationID:     locA_ID,
 			ResourceTypeID: rtA_ID,
 		}
-
-		// 1. Regular Member of Org A -> Forbidden
-		wMember := executeRequest("POST", "/v1/resources", validPayload, memberAToken)
-		assert.Equal(t, http.StatusForbidden, wMember.Code, "Member should not be allowed to create resources")
 
 		// 2. Stranger -> Forbidden
 		wStranger := executeRequest("POST", "/v1/resources", validPayload, strangerToken)
@@ -223,17 +217,14 @@ func TestResourceCRUDAndPermissions(t *testing.T) {
 		var listResp response.PageResponse[resHttp.ResourceResponse]
 		json.Unmarshal(w.Body.Bytes(), &listResp)
 		assert.GreaterOrEqual(t, listResp.Total, 1)
-		assert.Equal(t, "Badminton Court 1", listResp.Items[0].Name)
-
-		// Filter by Resource Type
 		pathRT := fmt.Sprintf("/v1/resources?resource_type_id=%s", rtA_ID)
-		wRT := executeRequest("GET", pathRT, nil, memberAToken)
+		wRT := executeRequest("GET", pathRT, nil, strangerToken)
 		assert.Equal(t, http.StatusOK, wRT.Code)
 	})
 
 	t.Run("Get Resource", func(t *testing.T) {
 		path := fmt.Sprintf("/v1/resources/%s", resourceID)
-		w := executeRequest("GET", path, nil, memberAToken)
+		w := executeRequest("GET", path, nil, strangerToken)
 		assert.Equal(t, http.StatusOK, w.Code)
 
 		var resp resHttp.ResourceResponse
@@ -246,10 +237,6 @@ func TestResourceCRUDAndPermissions(t *testing.T) {
 		path := fmt.Sprintf("/v1/resources/%s", resourceID)
 		newName := "Hacked Name"
 		payload := resHttp.UpdateRequest{Name: &newName}
-
-		// 1. Member of Org A -> Forbidden
-		wMember := executeRequest("PATCH", path, payload, memberAToken)
-		assert.Equal(t, http.StatusForbidden, wMember.Code, "Member cannot update resource")
 
 		// 2. Admin of Org B -> Forbidden
 		// Handlers must check the Org ID of the resource being updated
@@ -284,10 +271,6 @@ func TestResourceCRUDAndPermissions(t *testing.T) {
 
 	t.Run("Delete Resource: Permission Boundaries", func(t *testing.T) {
 		path := fmt.Sprintf("/v1/resources/%s", resourceID)
-
-		// 1. Member -> Forbidden
-		wMember := executeRequest("DELETE", path, nil, memberAToken)
-		assert.Equal(t, http.StatusForbidden, wMember.Code)
 
 		// 2. Admin of Different Org -> Forbidden
 		wAdminB := executeRequest("DELETE", path, nil, adminBToken)

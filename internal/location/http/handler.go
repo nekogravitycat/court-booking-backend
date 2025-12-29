@@ -93,7 +93,7 @@ func (h *LocationHandler) List(c *gin.Context) {
 }
 
 // Create adds a new location.
-// It enforces strict permission checks: only Organization Admins or Owners can create locations.
+// It enforces strict permission checks: only Organization Managers or Owners can create locations.
 func (h *LocationHandler) Create(c *gin.Context) {
 	var body CreateLocationRequest
 	if err := c.ShouldBindJSON(&body); err != nil {
@@ -101,14 +101,14 @@ func (h *LocationHandler) Create(c *gin.Context) {
 		return
 	}
 
-	// Permission check: The user must be an Admin or Owner of the target organization.
+	// Permission check: Organization Manager or Owner (or System Admin) can create locations.
 	allowed, err := h.orgService.CheckPermission(c.Request.Context(), body.OrganizationID, auth.GetUserID(c))
 	if err != nil {
 		response.Error(c, err)
 		return
 	}
 	if !allowed {
-		c.JSON(http.StatusForbidden, gin.H{"error": "forbidden: only organization admins can create locations"})
+		c.JSON(http.StatusForbidden, gin.H{"error": "forbidden: only organization owners can create locations"})
 		return
 	}
 
@@ -154,7 +154,7 @@ func (h *LocationHandler) Get(c *gin.Context) {
 }
 
 // Update modifies specific attributes of a location.
-// It enforces strict permission checks: only Organization Admins or Owners can update locations.
+// It enforces strict permission checks: only Organization Managers or Owners can update locations.
 func (h *LocationHandler) Update(c *gin.Context) {
 	var uri request.ByIDRequest
 	if err := c.ShouldBindUri(&uri); err != nil {
@@ -175,8 +175,8 @@ func (h *LocationHandler) Update(c *gin.Context) {
 		}
 	}
 
-	// Permission check: The user must be an Admin or Owner of that organization.
-	allowed, err := h.orgService.CheckPermission(c.Request.Context(), existingLoc.OrganizationID, auth.GetUserID(c))
+	// Permission check: The user must be a Manager (assigned to this location) or Owner.
+	allowed, err := h.orgService.CheckLocationPermission(c.Request.Context(), existingLoc.OrganizationID, existingLoc.ID, auth.GetUserID(c))
 	if err != nil {
 		response.Error(c, err)
 		return
@@ -217,7 +217,7 @@ func (h *LocationHandler) Update(c *gin.Context) {
 }
 
 // Delete removes a location.
-// It enforces strict permission checks: only Organization Admins or Owners can delete locations.
+// It enforces strict permission checks: only Organization Managers or Owners can delete locations.
 func (h *LocationHandler) Delete(c *gin.Context) {
 	var req request.ByIDRequest
 	if err := c.ShouldBindUri(&req); err != nil {
@@ -232,7 +232,8 @@ func (h *LocationHandler) Delete(c *gin.Context) {
 		return
 	}
 
-	// Permission check: The user must be an Admin or Owner of that organization.
+	// Permission check: Only Organization Manager or Owner can delete locations.
+	// Location Managers cannot delete.
 	allowed, err := h.orgService.CheckPermission(c.Request.Context(), existingLoc.OrganizationID, auth.GetUserID(c))
 	if err != nil {
 		response.Error(c, err)
@@ -245,6 +246,87 @@ func (h *LocationHandler) Delete(c *gin.Context) {
 
 	// Execute deletion.
 	if err := h.service.Delete(c.Request.Context(), req.ID); err != nil {
+		response.Error(c, err)
+		return
+	}
+
+	c.Status(http.StatusNoContent)
+}
+
+// AddManager assigns an user as manager to a location.
+// Only Organization Owner can assign managers to locations (or System Admin).
+func (h *LocationHandler) AddManager(c *gin.Context) {
+	var body struct {
+		UserID string `json:"user_id" binding:"required,uuid"`
+	}
+	if err := c.ShouldBindJSON(&body); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request body", "details": err.Error()})
+		return
+	}
+
+	var uri request.ByIDRequest
+	if err := c.ShouldBindUri(&uri); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request", "details": err.Error()})
+		return
+	}
+
+	// Fetch location to check Org Owner permission
+	loc, err := h.service.GetByID(c.Request.Context(), uri.ID)
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+
+	// Permission: Owner or Org Manager can assign location managers
+	allowed, err := h.orgService.CheckPermission(c.Request.Context(), loc.OrganizationID, auth.GetUserID(c))
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+	if !allowed {
+		c.JSON(http.StatusForbidden, gin.H{"error": "forbidden: only organization owners can assign location managers"})
+		return
+	}
+
+	if err := h.orgService.AddLocationManager(c.Request.Context(), uri.ID, body.UserID); err != nil {
+		response.Error(c, err)
+		return
+	}
+
+	c.Status(http.StatusCreated)
+}
+
+// RemoveManager removes a manager from a location.
+// Only Organization Owner can remove managers from locations.
+func (h *LocationHandler) RemoveManager(c *gin.Context) {
+	var uri struct {
+		ID     string `uri:"id" binding:"required,uuid"`
+		UserID string `uri:"user_id" binding:"required,uuid"`
+	}
+	if err := c.ShouldBindUri(&uri); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request", "details": err.Error()})
+		return
+	}
+
+	// Fetch location
+	loc, err := h.service.GetByID(c.Request.Context(), uri.ID)
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+
+	// Permission: Owner or Org Admin
+	allowed, err := h.orgService.CheckPermission(c.Request.Context(), loc.OrganizationID, auth.GetUserID(c))
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+	if !allowed {
+		c.JSON(http.StatusForbidden, gin.H{"error": "forbidden: only organization owners can remove location managers"})
+		return
+	}
+
+	if err := h.orgService.RemoveLocationManager(c.Request.Context(), uri.ID, uri.UserID); err != nil {
 		response.Error(c, err)
 		return
 	}

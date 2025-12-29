@@ -2,7 +2,12 @@ listResourceTypes:
   get:
     tags:
       - ResourceTypes
-    summary: "列出 Resource Types"
+    summary: "查詢 Resource Type 列表"
+    description: |
+      查詢 Organization 下定義的 Resource Type。
+
+      **權限 Access Control**:
+      - **Login Required**: 任何已登入的使用者皆可存取。
     security:
       - bearerAuth: []
     parameters:
@@ -32,7 +37,13 @@ listResourceTypes:
   post:
     tags:
       - ResourceTypes
-    summary: "建立 Resource Type (Organization Owner/Admin)"
+    summary: "新增 Resource Type"
+    description: |
+      在 Organization 下建立新的 Resource Type。
+
+      **權限 Access Control**:
+      - **System Admin**: 完全存取權限。
+      - **Organization Owner / Manager**: 可管理所屬 Organization 下的 Resource Type。
     security:
       - bearerAuth: []
     requestBody:
@@ -55,7 +66,12 @@ resourceTypeDetail:
   get:
     tags:
       - ResourceTypes
-    summary: "取得 Resource Type 詳情"
+    summary: "查詢 Resource Type 詳情"
+    description: |
+      取得特定 Resource Type 的詳細資訊。
+
+      **權限 Access Control**:
+      - **Login Required**: 任何已登入的使用者皆可存取。
     security:
       - bearerAuth: []
     parameters: &idParams
@@ -77,7 +93,13 @@ resourceTypeDetail:
   patch:
     tags:
       - ResourceTypes
-    summary: "更新 Resource Type (Organization Owner/Admin)"
+    summary: "修改 Resource Type 資訊"
+    description: |
+      更新 Resource Type 的名稱或描述。
+
+      **權限 Access Control**:
+      - **System Admin**: 完全存取權限。
+      - **Organization Owner / Manager**: 可管理所屬 Organization 下的 Resource Type。
     security:
       - bearerAuth: []
     parameters: *idParams
@@ -100,7 +122,13 @@ resourceTypeDetail:
   delete:
     tags:
       - ResourceTypes
-    summary: "刪除 Resource Type (Organization Owner/Admin)"
+    summary: "刪除 Resource Type"
+    description: |
+      刪除 Resource Type (軟刪除)。
+
+      **權限 Access Control**:
+      - **System Admin**: 完全存取權限。
+      - **Organization Owner / Manager**: 可管理所屬 Organization 下的 Resource Type。
     security:
       - bearerAuth: []
     parameters: *idParams

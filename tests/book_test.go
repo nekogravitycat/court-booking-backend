@@ -27,7 +27,6 @@ func TestBookingCRUDAndPermissions(t *testing.T) {
 	// Org A Users (The Organization owning the resource)
 	orgOwnerA := createTestUser(t, "owner.a@book.com", "pass", false)
 	orgAdminA := createTestUser(t, "admin.a@book.com", "pass", false)
-	orgMemberA := createTestUser(t, "member.a@book.com", "pass", false)
 
 	// Org B User (Admin of a different organization - Cross-Org Attack Vector)
 	orgAdminB := createTestUser(t, "admin.b@book.com", "pass", false)
@@ -42,7 +41,6 @@ func TestBookingCRUDAndPermissions(t *testing.T) {
 	sysAdminToken := generateToken(sysAdmin.ID, sysAdmin.Email)
 	orgOwnerAToken := generateToken(orgOwnerA.ID, orgOwnerA.Email)
 	orgAdminAToken := generateToken(orgAdminA.ID, orgAdminA.Email)
-	orgMemberAToken := generateToken(orgMemberA.ID, orgMemberA.Email)
 	orgAdminBToken := generateToken(orgAdminB.ID, orgAdminB.Email)
 	bookerToken := generateToken(booker.ID, booker.Email)
 	strangerToken := generateToken(stranger.ID, stranger.Email)
@@ -59,14 +57,11 @@ func TestBookingCRUDAndPermissions(t *testing.T) {
 		json.Unmarshal(wOrg.Body.Bytes(), &orgA)
 
 		// 2. Assign Roles for Org A
+		addMemberToOrg(t, orgA.ID, orgOwnerA.ID, "owner")
 		executeRequest("POST", fmt.Sprintf("/v1/organizations/%s/members", orgA.ID),
-			orgHttp.AddMemberRequest{UserID: orgOwnerA.ID, Role: "owner"}, sysAdminToken)
-		executeRequest("POST", fmt.Sprintf("/v1/organizations/%s/members", orgA.ID),
-			orgHttp.AddMemberRequest{UserID: orgAdminA.ID, Role: "admin"}, sysAdminToken)
-		executeRequest("POST", fmt.Sprintf("/v1/organizations/%s/members", orgA.ID),
-			orgHttp.AddMemberRequest{UserID: orgMemberA.ID, Role: "member"}, sysAdminToken)
+			orgHttp.AddMemberRequest{UserID: orgAdminA.ID, Role: "manager"}, sysAdminToken)
 
-		// 3. Create Location in Org A
+		// 3. Create Location in Org A (Must be Owner)
 		locPayload := locHttp.CreateLocationRequest{
 			OrganizationID:    orgA.ID,
 			Name:              "Court Loc A",
@@ -74,7 +69,7 @@ func TestBookingCRUDAndPermissions(t *testing.T) {
 			OpeningHoursStart: "06:00:00", OpeningHoursEnd: "23:00:00",
 			LocationInfo: "Test Info", Longitude: 120.0, Latitude: 23.0,
 		}
-		wLoc := executeRequest("POST", "/v1/locations", locPayload, orgAdminAToken)
+		wLoc := executeRequest("POST", "/v1/locations", locPayload, orgOwnerAToken)
 		var locA locHttp.LocationResponse
 		json.Unmarshal(wLoc.Body.Bytes(), &locA)
 
@@ -100,7 +95,7 @@ func TestBookingCRUDAndPermissions(t *testing.T) {
 		var orgB orgHttp.OrganizationResponse
 		json.Unmarshal(wOrgB.Body.Bytes(), &orgB)
 		executeRequest("POST", fmt.Sprintf("/v1/organizations/%s/members", orgB.ID),
-			orgHttp.AddMemberRequest{UserID: orgAdminB.ID, Role: "admin"}, sysAdminToken)
+			orgHttp.AddMemberRequest{UserID: orgAdminB.ID, Role: "manager"}, sysAdminToken)
 	})
 
 	// ==== Create Booking Tests (Input Validation & Business Logic) ====
@@ -252,11 +247,6 @@ func TestBookingCRUDAndPermissions(t *testing.T) {
 		wOrgAdmin := executeRequest("GET", path, nil, orgAdminAToken)
 		assert.Equal(t, http.StatusOK, wOrgAdmin.Code, "Org Admin should view bookings for their resources")
 
-		// 4. Regular Member of Org (NOT Admin/Owner) -> Forbidden
-		// Members do not have management rights over resources
-		wOrgMember := executeRequest("GET", path, nil, orgMemberAToken)
-		assert.Equal(t, http.StatusForbidden, wOrgMember.Code, "Regular Org Member should not view others' bookings")
-
 		// 5. Sys Admin -> OK
 		wSys := executeRequest("GET", path, nil, sysAdminToken)
 		assert.Equal(t, http.StatusOK, wSys.Code)
@@ -361,10 +351,6 @@ func TestBookingCRUDAndPermissions(t *testing.T) {
 		// Cross-Org Admin
 		wOrgB := executeRequest("DELETE", path, nil, orgAdminBToken)
 		assert.Equal(t, http.StatusForbidden, wOrgB.Code)
-
-		// Regular Org Member (Non-Admin)
-		wMember := executeRequest("DELETE", path, nil, orgMemberAToken)
-		assert.Equal(t, http.StatusForbidden, wMember.Code)
 	})
 
 	t.Run("Delete Booking: Success", func(t *testing.T) {

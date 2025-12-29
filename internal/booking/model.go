@@ -15,6 +15,7 @@ var (
 	ErrResourceNotFound = apperror.New(http.StatusNotFound, "resource not found")
 	ErrPermissionDenied = apperror.New(http.StatusForbidden, "permission denied")
 	ErrStartTimePast    = apperror.New(http.StatusBadRequest, "cannot create booking in the past")
+	ErrInvalidInput     = apperror.New(http.StatusBadRequest, "invalid input parameters")
 )
 
 type Status string

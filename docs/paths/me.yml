@@ -3,6 +3,11 @@ me:
     tags:
       - Me
     summary: "取得目前使用者資訊"
+    description: |
+      取得當前登入使用者的個人資料。
+
+      **權限 Access Control**:
+      - **Login Required**: 任何已登入的使用者皆可存取。
     operationId: getCurrentUser
     security:
       - bearerAuth: []

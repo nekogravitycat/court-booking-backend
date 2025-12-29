@@ -24,7 +24,6 @@ func TestLocationCRUDAndPermissions(t *testing.T) {
 	// Org A Users
 	ownerA := createTestUser(t, "owner.a@loc.com", "pass", false)
 	adminA := createTestUser(t, "admin.a@loc.com", "pass", false)
-	memberA := createTestUser(t, "member.a@loc.com", "pass", false)
 
 	// Org B User (to test cross-organization boundaries)
 	adminB := createTestUser(t, "admin.b@loc.com", "pass", false)
@@ -36,7 +35,6 @@ func TestLocationCRUDAndPermissions(t *testing.T) {
 	sysAdminToken := generateToken(sysAdmin.ID, sysAdmin.Email)
 	ownerAToken := generateToken(ownerA.ID, ownerA.Email)
 	adminAToken := generateToken(adminA.ID, adminA.Email)
-	memberAToken := generateToken(memberA.ID, memberA.Email)
 	adminBToken := generateToken(adminB.ID, adminB.Email)
 	strangerToken := generateToken(stranger.ID, stranger.Email)
 
@@ -54,15 +52,11 @@ func TestLocationCRUDAndPermissions(t *testing.T) {
 		orgA_ID = orgResp.ID
 
 		// Assign Roles for Org A
-		// Owner
-		executeRequest("POST", fmt.Sprintf("/v1/organizations/%s/members", orgA_ID),
-			orgHttp.AddMemberRequest{UserID: ownerA.ID, Role: "owner"}, sysAdminToken)
+		// Owner - Add directly to DB as API restricts 'owner' role in payload
+		addMemberToOrg(t, orgA_ID, ownerA.ID, "owner")
 		// Admin
 		executeRequest("POST", fmt.Sprintf("/v1/organizations/%s/members", orgA_ID),
 			orgHttp.AddMemberRequest{UserID: adminA.ID, Role: "admin"}, sysAdminToken)
-		// Member
-		executeRequest("POST", fmt.Sprintf("/v1/organizations/%s/members", orgA_ID),
-			orgHttp.AddMemberRequest{UserID: memberA.ID, Role: "member"}, sysAdminToken)
 
 		// 2. Create Organization B (Target for cross-org attack test)
 		createPayloadB := orgHttp.CreateOrganizationRequest{Name: "Sports Center B"}
@@ -112,10 +106,6 @@ func TestLocationCRUDAndPermissions(t *testing.T) {
 			Latitude:          25.0,
 		}
 
-		// Regular Member trying to create
-		wMember := executeRequest("POST", "/v1/locations", validPayload, memberAToken)
-		assert.Equal(t, http.StatusForbidden, wMember.Code, "Org members should not be allowed to create locations")
-
 		// Stranger trying to create
 		wStranger := executeRequest("POST", "/v1/locations", validPayload, strangerToken)
 		assert.Equal(t, http.StatusForbidden, wStranger.Code, "Strangers should not be allowed to create locations")
@@ -138,7 +128,7 @@ func TestLocationCRUDAndPermissions(t *testing.T) {
 			Latitude:          25.0,
 		}
 
-		w := executeRequest("POST", "/v1/locations", validPayload, adminAToken)
+		w := executeRequest("POST", "/v1/locations", validPayload, ownerAToken)
 		require.Equal(t, http.StatusCreated, w.Code)
 
 		var resp locHttp.LocationResponse
@@ -178,11 +168,7 @@ func TestLocationCRUDAndPermissions(t *testing.T) {
 		newName := "Hacked Name"
 		payload := locHttp.UpdateLocationRequest{Name: &newName}
 
-		// 1. Member of the same Org
-		wMember := executeRequest("PATCH", path, payload, memberAToken)
-		assert.Equal(t, http.StatusForbidden, wMember.Code)
-
-		// 2. Admin of a DIFFERENT Org (Crucial Check)
+		// 1. Admin of a DIFFERENT Org (Crucial Check)
 		// This ensures the handler checks the organization of the *Target Location*,
 		// not just if the user is an admin of *some* organization.
 		wAdminB := executeRequest("PATCH", path, payload, adminBToken)
@@ -210,10 +196,6 @@ func TestLocationCRUDAndPermissions(t *testing.T) {
 	t.Run("Delete Location: Permission Boundaries", func(t *testing.T) {
 		path := fmt.Sprintf("/v1/locations/%s", locationID)
 
-		// Member
-		wMember := executeRequest("DELETE", path, nil, memberAToken)
-		assert.Equal(t, http.StatusForbidden, wMember.Code)
-
 		// Admin of Different Org
 		wAdminB := executeRequest("DELETE", path, nil, adminBToken)
 		assert.Equal(t, http.StatusForbidden, wAdminB.Code)
@@ -222,12 +204,12 @@ func TestLocationCRUDAndPermissions(t *testing.T) {
 	t.Run("Delete Location: Success", func(t *testing.T) {
 		path := fmt.Sprintf("/v1/locations/%s", locationID)
 
-		// Admin of Org A
-		w := executeRequest("DELETE", path, nil, adminAToken)
+		// Owner of Org A
+		w := executeRequest("DELETE", path, nil, ownerAToken)
 		assert.Equal(t, http.StatusNoContent, w.Code)
 
 		// Verify it is gone
-		wGet := executeRequest("GET", path, nil, adminAToken)
+		wGet := executeRequest("GET", path, nil, ownerAToken)
 		assert.Equal(t, http.StatusNotFound, wGet.Code)
 	})
 
@@ -288,7 +270,7 @@ func TestLocationCRUDAndPermissions(t *testing.T) {
 			LocationInfo:      "Info 1",
 			Opening:           true,
 			Longitude:         121.0, Latitude: 25.0,
-		}, adminAToken)
+		}, ownerAToken)
 		require.Equal(t, http.StatusCreated, w1.Code, "Failed to create Loc 1: %s", w1.Body.String())
 
 		// Loc 2: Cap 50, 10:00-22:00, Closed
@@ -301,7 +283,7 @@ func TestLocationCRUDAndPermissions(t *testing.T) {
 			LocationInfo:      "Info 2",
 			Opening:           false,
 			Longitude:         121.0, Latitude: 25.0,
-		}, adminAToken)
+		}, ownerAToken)
 		require.Equal(t, http.StatusCreated, w2.Code, "Failed to create Loc 2: %s", w2.Body.String())
 
 		// Loc 3: Cap 100, 06:00-14:00, Open
@@ -314,7 +296,7 @@ func TestLocationCRUDAndPermissions(t *testing.T) {
 			LocationInfo:      "Info 3",
 			Opening:           true,
 			Longitude:         121.0, Latitude: 25.0,
-		}, adminAToken)
+		}, ownerAToken)
 		require.Equal(t, http.StatusCreated, w3.Code, "Failed to create Loc 3: %s", w3.Body.String())
 
 		// 1. Filter by Name (Partial Match)

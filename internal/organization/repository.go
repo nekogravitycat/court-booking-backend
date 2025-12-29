@@ -26,6 +26,15 @@ type Repository interface {
 	RemoveMember(ctx context.Context, orgID string, userID string) error
 	UpdateMemberRole(ctx context.Context, orgID string, userID string, role string) error
 	ListMembers(ctx context.Context, orgID string, filter MemberFilter) ([]*Member, int, error)
+	// Location Manager methods
+	AddLocationManager(ctx context.Context, locationID string, userID string) error
+	RemoveLocationManager(ctx context.Context, locationID string, userID string) error
+	IsLocationManager(ctx context.Context, locationID string, userID string) (bool, error)
+	ListLocationManagers(ctx context.Context, locationID string) ([]string, error)
+	GetOrgIDByLocationID(ctx context.Context, locationID string) (string, error)
+	IsLocationManagerInOrg(ctx context.Context, orgID string, userID string) (bool, error)
+	// Helpers
+	RemoveAllLocationManagersForUser(ctx context.Context, userID string) error
 }
 
 type pgxRepository struct {
@@ -280,25 +289,9 @@ func (r *pgxRepository) UpdateMemberRole(ctx context.Context, orgID string, user
 	return nil
 }
 
-// ListMembers retrieves members with their user details.
+// ListMembers retrieves members with their user details, including Owners, Org Admins, and Location Admins.
 func (r *pgxRepository) ListMembers(ctx context.Context, orgID string, filter MemberFilter) ([]*Member, int, error) {
-	// We count based on the organization_permissions table
-	// We count based on the organization_permissions table
-	psql := squirrel.StatementBuilder.PlaceholderFormat(squirrel.Dollar)
-	queryBuilder := psql.Select(
-		"u.id", "u.email", "u.display_name", "op.role",
-		"count(*) OVER() AS total_count",
-	).
-		From("public.organization_permissions op").
-		Join("public.users u ON op.user_id = u.id").
-		Where(squirrel.Eq{"op.organization_id": orgID})
-
-	orderDir := "DESC"
-	if filter.SortOrder != "" {
-		orderDir = filter.SortOrder
-	}
-
-	// Pagination
+	// Defaults
 	if filter.Page < 1 {
 		filter.Page = 1
 	}
@@ -307,23 +300,48 @@ func (r *pgxRepository) ListMembers(ctx context.Context, orgID string, filter Me
 	}
 	offset := (filter.Page - 1) * filter.PageSize
 
-	if filter.SortBy != "" {
-		orderBy := "op.id"
-		switch filter.SortBy {
-		case "role":
-			orderBy = "op.role"
-		}
-		queryBuilder = queryBuilder.OrderBy(orderBy + " " + orderDir)
-	}
-	// Implicitly limit/offset
-	queryBuilder = queryBuilder.Limit(uint64(filter.PageSize)).Offset(uint64(offset))
-
-	sql, args, err := queryBuilder.ToSql()
-	if err != nil {
-		return nil, 0, fmt.Errorf("build list members query failed: %w", err)
+	// Sort validation
+	orderBy := "id"
+	switch filter.SortBy {
+	case "role":
+		orderBy = "role"
+	case "email":
+		orderBy = "email"
+	case "display_name":
+		orderBy = "display_name"
 	}
 
-	rows, err := r.pool.Query(ctx, sql, args...)
+	orderDir := "DESC"
+	if filter.SortOrder == "ASC" || filter.SortOrder == "asc" {
+		orderDir = "ASC"
+	}
+
+	// Complex query with CTEs for Unified List and Total Count
+	query := fmt.Sprintf(`
+	WITH unified_members AS (
+		SELECT u.id, u.email, u.display_name, op.role::text
+		FROM public.organization_permissions op
+		JOIN public.users u ON op.user_id = u.id
+		WHERE op.organization_id = $1
+
+		UNION
+
+		SELECT u.id, u.email, u.display_name, 'location_manager' as role
+		FROM public.location_admins la
+		JOIN public.locations l ON la.location_id = l.id
+		JOIN public.users u ON la.user_id = u.id
+		WHERE l.organization_id = $1
+	),
+	total_count AS (
+		SELECT count(*) as total FROM unified_members
+	)
+	SELECT id, email, display_name, role, (SELECT total FROM total_count)
+	FROM unified_members
+	ORDER BY "%s" %s
+	LIMIT $2 OFFSET $3
+	`, orderBy, orderDir)
+
+	rows, err := r.pool.Query(ctx, query, orgID, filter.PageSize, offset)
 	if err != nil {
 		return nil, 0, fmt.Errorf("ListMembers failed: %w", err)
 	}
@@ -334,12 +352,164 @@ func (r *pgxRepository) ListMembers(ctx context.Context, orgID string, filter Me
 
 	for rows.Next() {
 		var m Member
-		// Scan total from the window function
+		// Scan total from the window function (simulated via subquery selection)
 		if err := rows.Scan(&m.UserID, &m.Email, &m.DisplayName, &m.Role, &total); err != nil {
 			return nil, 0, fmt.Errorf("scan member failed: %w", err)
 		}
 		members = append(members, &m)
 	}
 
+	if err := rows.Err(); err != nil {
+		return nil, 0, fmt.Errorf("rows iteration failed: %w", err)
+	}
+
 	return members, total, nil
+}
+
+// ------------------------
+//   Location Manager methods
+// ------------------------
+
+func (r *pgxRepository) AddLocationManager(ctx context.Context, locationID string, userID string) error {
+	psql := squirrel.StatementBuilder.PlaceholderFormat(squirrel.Dollar)
+	query, args, err := psql.Insert("public.location_admins").
+		Columns("location_id", "user_id").
+		Values(locationID, userID).
+		Suffix("ON CONFLICT DO NOTHING").
+		ToSql()
+	if err != nil {
+		return fmt.Errorf("build add location admin query failed: %w", err)
+	}
+
+	_, err = r.pool.Exec(ctx, query, args...)
+	if err != nil {
+		return fmt.Errorf("AddLocationManager failed: %w", err)
+	}
+	return nil
+}
+
+func (r *pgxRepository) RemoveLocationManager(ctx context.Context, locationID string, userID string) error {
+	psql := squirrel.StatementBuilder.PlaceholderFormat(squirrel.Dollar)
+	query, args, err := psql.Delete("public.location_admins").
+		Where(squirrel.Eq{"location_id": locationID}).
+		Where(squirrel.Eq{"user_id": userID}).
+		ToSql()
+	if err != nil {
+		return fmt.Errorf("build remove location admin query failed: %w", err)
+	}
+
+	_, err = r.pool.Exec(ctx, query, args...)
+	if err != nil {
+		return fmt.Errorf("RemoveLocationManager failed: %w", err)
+	}
+	return nil
+}
+
+func (r *pgxRepository) IsLocationManager(ctx context.Context, locationID string, userID string) (bool, error) {
+	psql := squirrel.StatementBuilder.PlaceholderFormat(squirrel.Dollar)
+	query, args, err := psql.Select("1").
+		From("public.location_admins").
+		Where(squirrel.Eq{"location_id": locationID}).
+		Where(squirrel.Eq{"user_id": userID}).
+		ToSql()
+	if err != nil {
+		return false, fmt.Errorf("build check location admin query failed: %w", err)
+	}
+
+	var one int
+	err = r.pool.QueryRow(ctx, query, args...).Scan(&one)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return false, nil
+		}
+		return false, fmt.Errorf("IsLocationManager failed: %w", err)
+	}
+	return true, nil
+}
+
+func (r *pgxRepository) ListLocationManagers(ctx context.Context, locationID string) ([]string, error) {
+	psql := squirrel.StatementBuilder.PlaceholderFormat(squirrel.Dollar)
+	query, args, err := psql.Select("user_id").
+		From("public.location_admins").
+		Where(squirrel.Eq{"location_id": locationID}).
+		ToSql()
+	if err != nil {
+		return nil, fmt.Errorf("build list location admins query failed: %w", err)
+	}
+
+	rows, err := r.pool.Query(ctx, query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("ListLocationManagers failed: %w", err)
+	}
+	defer rows.Close()
+
+	var userIDs []string
+	for rows.Next() {
+		var uid string
+		if err := rows.Scan(&uid); err != nil {
+			return nil, fmt.Errorf("scan failed: %w", err)
+		}
+		userIDs = append(userIDs, uid)
+	}
+	return userIDs, nil
+}
+
+func (r *pgxRepository) GetOrgIDByLocationID(ctx context.Context, locationID string) (string, error) {
+	psql := squirrel.StatementBuilder.PlaceholderFormat(squirrel.Dollar)
+	query, args, err := psql.Select("organization_id").
+		From("public.locations").
+		Where(squirrel.Eq{"id": locationID}).
+		ToSql()
+	if err != nil {
+		return "", fmt.Errorf("build get org id by location id query failed: %w", err)
+	}
+
+	var orgID string
+	err = r.pool.QueryRow(ctx, query, args...).Scan(&orgID)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return "", errors.New("location not found")
+		}
+		return "", fmt.Errorf("GetOrgIDByLocationID failed: %w", err)
+	}
+	return orgID, nil
+}
+
+func (r *pgxRepository) IsLocationManagerInOrg(ctx context.Context, orgID string, userID string) (bool, error) {
+	psql := squirrel.StatementBuilder.PlaceholderFormat(squirrel.Dollar)
+	query, args, err := psql.Select("1").
+		From("public.location_admins la").
+		Join("public.locations l ON la.location_id = l.id").
+		Where(squirrel.Eq{"l.organization_id": orgID}).
+		Where(squirrel.Eq{"la.user_id": userID}).
+		ToSql()
+	if err != nil {
+		return false, fmt.Errorf("build check is location manager in org query failed: %w", err)
+	}
+
+	var one int
+	err = r.pool.QueryRow(ctx, query, args...).Scan(&one)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return false, nil
+		}
+		return false, fmt.Errorf("IsLocationManagerInOrg failed: %w", err)
+	}
+	return true, nil
+}
+
+func (r *pgxRepository) RemoveAllLocationManagersForUser(ctx context.Context, userID string) error {
+	psql := squirrel.StatementBuilder.PlaceholderFormat(squirrel.Dollar)
+	query, args, err := psql.Delete("public.location_admins").
+		Where(squirrel.Eq{"user_id": userID}).
+		ToSql()
+	if err != nil {
+		return fmt.Errorf("build remove all location admins query failed: %w", err)
+	}
+
+	_, err = r.pool.Exec(ctx, query, args...)
+	if err != nil {
+		return fmt.Errorf("RemoveAllLocationManagersForUser failed: %w", err)
+	}
+	return nil
 }

@@ -6,6 +6,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
+	"github.com/nekogravitycat/court-booking-backend/internal/auth"
 	"github.com/nekogravitycat/court-booking-backend/internal/organization"
 	"github.com/nekogravitycat/court-booking-backend/internal/pkg/request"
 	"github.com/nekogravitycat/court-booking-backend/internal/pkg/response"
@@ -191,6 +192,17 @@ func (h *OrganizationHandler) ListMembers(c *gin.Context) {
 		filter.SortOrder = strings.ToUpper(filter.SortOrder)
 	}
 
+	userID := auth.GetUserID(c)
+	hasPerm, err := h.service.CheckPermission(c.Request.Context(), uri.ID, userID)
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+	if !hasPerm {
+		c.JSON(http.StatusForbidden, gin.H{"error": "permission denied"})
+		return
+	}
+
 	members, total, err := h.service.ListMembers(c.Request.Context(), uri.ID, filter)
 	if err != nil {
 		response.Error(c, err)
@@ -237,6 +249,17 @@ func (h *OrganizationHandler) AddMember(c *gin.Context) {
 		Role:   body.Role,
 	}
 
+	actorID := auth.GetUserID(c)
+	hasPerm, err := h.service.CheckPermission(c.Request.Context(), uri.ID, actorID)
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+	if !hasPerm {
+		c.JSON(http.StatusForbidden, gin.H{"error": "permission denied"})
+		return
+	}
+
 	if err := h.service.AddMember(c.Request.Context(), uri.ID, req); err != nil {
 		response.Error(c, err)
 		return
@@ -269,6 +292,17 @@ func (h *OrganizationHandler) UpdateMemberRole(c *gin.Context) {
 		Role: body.Role,
 	}
 
+	actorID := auth.GetUserID(c)
+	hasPerm, err := h.service.CheckPermission(c.Request.Context(), uri.ID, actorID)
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+	if !hasPerm {
+		c.JSON(http.StatusForbidden, gin.H{"error": "permission denied"})
+		return
+	}
+
 	if err := h.service.UpdateMemberRole(c.Request.Context(), uri.ID, uri.UserID, req); err != nil {
 		response.Error(c, err)
 		return
@@ -283,6 +317,17 @@ func (h *OrganizationHandler) RemoveMember(c *gin.Context) {
 	var req OrgMemberRequest
 	if err := c.ShouldBindUri(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request", "details": err.Error()})
+		return
+	}
+
+	actorID := auth.GetUserID(c)
+	hasPerm, err := h.service.CheckPermission(c.Request.Context(), req.ID, actorID)
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+	if !hasPerm {
+		c.JSON(http.StatusForbidden, gin.H{"error": "permission denied"})
 		return
 	}
 

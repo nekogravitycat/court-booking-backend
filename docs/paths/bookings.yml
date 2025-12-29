@@ -2,7 +2,16 @@ listBookings:
   get:
     tags:
       - Bookings
-    summary: "列出預約記錄"
+    summary: "查詢預約紀錄"
+    description: |
+      查詢預約紀錄清單。
+
+      **權限 Access Control**:
+      - **System Admin**: 可查詢所有預約。
+      - **Organization Owner**: 可查詢自己 Organization 下所有 Location 的預約。
+      - **Organization Manager**: 可查詢自己 Organization 下所有 Location 的預約，或負責 Location 的預約。
+      - **Location Manager**: 可查詢自己負責 Location 的預約。
+      - **User**: 僅能查詢自己的預約。
     security:
       - bearerAuth: []
     parameters:
@@ -50,7 +59,12 @@ listBookings:
   post:
     tags:
       - Bookings
-    summary: "建立預約 (User)"
+    summary: "新增預約"
+    description: |
+      建立一筆新的預約。
+
+      **權限 Access Control**:
+      - **Login Required**: 任何已登入的使用者皆可存取。
     security:
       - bearerAuth: []
     requestBody:
@@ -83,7 +97,14 @@ bookingDetail:
   get:
     tags:
       - Bookings
-    summary: "取得預約詳情"
+    summary: "查詢預約詳情"
+    description: |
+      取得特定預約的詳細資料。
+
+      **權限 Access Control**:
+      - **System Admin**: 完全存取權限。
+      - **Organization Owner / Manager**: 可查詢轄下資源的預約。
+      - **User**: 僅能查詢自己的預約。
     security:
       - bearerAuth: []
     parameters: &idParams
@@ -107,7 +128,18 @@ bookingDetail:
   patch:
     tags:
       - Bookings
-    summary: "更新預約 (時間或狀態)"
+    summary: "修改預約"
+    description: |
+      更新預約內容或狀態。
+
+      **注意 Note**:
+      - **User**: 僅能執行 **取消** (Cancelled)。
+      - **Admin / Manager**: 可修改時間或狀態。
+
+      **權限 Access Control**:
+      - **System Admin**: 完全存取權限。
+      - **Organization Owner / Manager**: 可管理轄下資源的預約。
+      - **User**: 僅能取消自己的預約。
     security:
       - bearerAuth: []
     parameters: *idParams
@@ -134,6 +166,13 @@ bookingDetail:
     tags:
       - Bookings
     summary: "刪除 / 取消預約"
+    description: |
+      取消或刪除預約 (視實作而定，通常為軟刪除或同 Patch Cancelled)。
+
+      **權限 Access Control**:
+      - **System Admin**: 完全存取權限。
+      - **Organization Owner / Manager**: 可刪除轄下資源的預約。
+      - **User**: 僅能取消自己的預約。
     security:
       - bearerAuth: []
     parameters: *idParams

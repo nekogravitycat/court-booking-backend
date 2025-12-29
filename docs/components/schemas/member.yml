@@ -11,7 +11,7 @@ MemberResponse:
       nullable: true
     role:
       type: string
-      enum: [owner, admin, member]
+      enum: [owner, manager]
   required:
     - user_id
     - email
@@ -25,7 +25,7 @@ AddMemberRequest:
       format: uuid
     role:
       type: string
-      enum: [owner, admin, member]
+      enum: [manager]
   required:
     - user_id
     - role
@@ -35,6 +35,6 @@ UpdateMemberRequest:
   properties:
     role:
       type: string
-      enum: [owner, admin, member]
+      enum: [manager]
   required:
     - role

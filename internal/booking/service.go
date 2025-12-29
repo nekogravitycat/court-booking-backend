@@ -66,7 +66,7 @@ func (s *service) isOrgManager(ctx context.Context, resourceID string, userID st
 		return false, nil // Treat error as "not a manager" for permission check
 	}
 
-	return member.Role == organization.RoleOwner || member.Role == organization.RoleAdmin, nil
+	return member.Role == organization.RoleOwner || member.Role == organization.RoleOrganizationManager, nil
 }
 
 func (s *service) Create(ctx context.Context, req CreateRequest) (*Booking, error) {

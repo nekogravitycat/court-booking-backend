@@ -2,7 +2,12 @@ listOrganizations:
   get:
     tags:
       - Organizations
-    summary: "列出所有組織 (Active Only)"
+    summary: "查詢 Organization 列表"
+    description: |
+      分頁查詢所有 Active 的 Organization。
+
+      **權限 Access Control**:
+      - **Login Required**: 任何已登入的使用者皆可存取。
     security:
       - bearerAuth: []
     parameters:
@@ -27,7 +32,12 @@ listOrganizations:
   post:
     tags:
       - Organizations
-    summary: "建立新組織 (System Admin)"
+    summary: "新增 Organization"
+    description: |
+      建立一個新的 Organization。
+
+      **權限 Access Control**:
+      - **System Admin Only**: 僅系統管理員可使用。
     security:
       - bearerAuth: []
     requestBody:
@@ -50,7 +60,12 @@ organizationDetail:
   get:
     tags:
       - Organizations
-    summary: "取得組織詳情"
+    summary: "查詢 Organization 詳情"
+    description: |
+      取得特定 Organization 的詳細資料。
+
+      **權限 Access Control**:
+      - **Login Required**: 任何已登入的使用者皆可存取。
     security:
       - bearerAuth: []
     parameters: &idParam
@@ -72,7 +87,12 @@ organizationDetail:
   patch:
     tags:
       - Organizations
-    summary: "更新組織資訊 (System Admin)"
+    summary: "修改 Organization 資訊"
+    description: |
+      更新 Organization 的基本資料。
+
+      **權限 Access Control**:
+      - **System Admin Only**: 僅系統管理員可使用。
     security:
       - bearerAuth: []
     parameters: *idParam
@@ -94,7 +114,12 @@ organizationDetail:
   delete:
     tags:
       - Organizations
-    summary: "刪除組織 (Soft Delete - System Admin)"
+    summary: "刪除 Organization"
+    description: |
+      刪除 Organization (軟刪除)。
+
+      **權限 Access Control**:
+      - **System Admin Only**: 僅系統管理員可使用。
     security:
       - bearerAuth: []
     parameters: *idParam

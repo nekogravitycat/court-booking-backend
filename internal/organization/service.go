@@ -5,6 +5,7 @@ import (
 	"errors"
 	"strings"
 
+	"github.com/nekogravitycat/court-booking-backend/internal/pkg/apperror"
 	"github.com/nekogravitycat/court-booking-backend/internal/user"
 )
 
@@ -41,6 +42,12 @@ type Service interface {
 	ListMembers(ctx context.Context, orgID string, filter MemberFilter) ([]*Member, int, error)
 	// Permission methods
 	CheckPermission(ctx context.Context, orgID string, userID string) (bool, error)
+	CheckLocationPermission(ctx context.Context, orgID string, locationID string, userID string) (bool, error)
+	CheckIsOwner(ctx context.Context, orgID string, userID string) (bool, error)
+	// Location Manager management
+	AddLocationManager(ctx context.Context, locationID string, userID string) error
+	RemoveLocationManager(ctx context.Context, locationID string, userID string) error
+	ListLocationManagers(ctx context.Context, locationID string) ([]string, error)
 }
 
 type service struct {
@@ -139,8 +146,8 @@ func (s *service) AddMember(ctx context.Context, orgID string, req AddMemberRequ
 	}
 
 	req.Role = strings.ToLower(strings.TrimSpace(req.Role))
-	if !isValidRole(req.Role) {
-		return ErrInvalidRole
+	if req.Role != RoleOrganizationManager {
+		return apperror.New(400, "invalid role: only 'manager' can be assigned via this endpoint")
 	}
 
 	// Verify organization exists
@@ -158,6 +165,15 @@ func (s *service) AddMember(ctx context.Context, orgID string, req AddMemberRequ
 		}
 	}
 
+	// Mutual Exclusion Check: User cannot be both Org Admin/Owner and Location Admin
+	isLoAdmin, err := s.repo.IsLocationManagerInOrg(ctx, orgID, req.UserID)
+	if err != nil {
+		return err
+	}
+	if isLoAdmin {
+		return apperror.New(409, "user is already a location manager in this organization; remove location manager privileges first")
+	}
+
 	return s.repo.AddMember(ctx, orgID, req.UserID, req.Role)
 }
 
@@ -171,8 +187,8 @@ func (s *service) RemoveMember(ctx context.Context, orgID string, userID string)
 
 func (s *service) UpdateMemberRole(ctx context.Context, orgID string, userID string, req UpdateMemberRequest) error {
 	req.Role = strings.ToLower(strings.TrimSpace(req.Role))
-	if !isValidRole(req.Role) {
-		return ErrInvalidRole
+	if req.Role != RoleOrganizationManager {
+		return apperror.New(400, "invalid role: only 'manager' can be assigned via this endpoint")
 	}
 
 	// Verify organization exists
@@ -191,20 +207,12 @@ func (s *service) ListMembers(ctx context.Context, orgID string, filter MemberFi
 	return s.repo.ListMembers(ctx, orgID, filter)
 }
 
-func isValidRole(r string) bool {
-	switch r {
-	case RoleOwner, RoleAdmin, RoleMember:
-		return true
-	}
-	return false
-}
-
 // ------------------------
 //     Permission methods
 // ------------------------
 
-// CheckPermission verifies if the user has necessary permissions for the organization.
-// It returns true if the user is a System Admin or an Organization Owner/Admin.
+// CheckPermission verifies if the user is an Owner or Manager of the organization.
+// This checks general organization membership.
 func (s *service) CheckPermission(ctx context.Context, orgID string, userID string) (bool, error) {
 	if userID == "" {
 		return false, nil
@@ -213,11 +221,9 @@ func (s *service) CheckPermission(ctx context.Context, orgID string, userID stri
 	// Check System Admin
 	user, err := s.userService.GetByID(ctx, userID)
 	if err != nil {
-		// If obtaining user fails, we cannot verify permission.
 		return false, err
 	}
 	if user.IsSystemAdmin {
-		// System Admin has all permissions
 		return true, nil
 	}
 
@@ -225,15 +231,116 @@ func (s *service) CheckPermission(ctx context.Context, orgID string, userID stri
 	member, err := s.repo.GetMember(ctx, orgID, userID)
 	if err != nil {
 		if errors.Is(err, ErrUserNotMember) {
-			// User exists but is not a member of the organization
 			return false, nil
 		}
 		return false, err
 	}
 
-	if member.Role == RoleOwner || member.Role == RoleAdmin {
+	// Both Owner and Admin are valid members of the Org.
+	// However, for specific location actions, CheckLocationPermission should be used.
+	if member.Role == RoleOwner || member.Role == RoleOrganizationManager {
 		return true, nil
 	}
 
 	return false, nil
+}
+
+// CheckLocationPermission verifies if the user has permission for a specific location.
+// Owner: Has access to all locations.
+// Manager: Has access only if assigned to the location.
+func (s *service) CheckLocationPermission(ctx context.Context, orgID string, locationID string, userID string) (bool, error) {
+	if userID == "" {
+		return false, nil
+	}
+
+	// 1. Check System Admin
+	user, err := s.userService.GetByID(ctx, userID)
+	if err != nil {
+		return false, err
+	}
+	if user.IsSystemAdmin {
+		return true, nil
+	}
+
+	// 2. Check Org Level Permission (Owner or Admin)
+	// Owners and Org Admins have full access to all locations.
+	isOrgStaff, err := s.CheckPermission(ctx, orgID, userID)
+	if err != nil {
+		return false, err
+	}
+	if isOrgStaff {
+		return true, nil
+	}
+
+	// 3. Check Location Manager
+	// If not Org Staff, check if assigned specifically to this location.
+	if locationID == "" {
+		return false, nil
+	}
+	isAdmin, err := s.repo.IsLocationManager(ctx, locationID, userID)
+	if err != nil {
+		return false, err
+	}
+	return isAdmin, nil
+}
+
+// CheckIsOwner verifies if the user is an Owner of the organization.
+func (s *service) CheckIsOwner(ctx context.Context, orgID string, userID string) (bool, error) {
+	if userID == "" {
+		return false, nil
+	}
+
+	// 1. Check System Admin (God mode)
+	user, err := s.userService.GetByID(ctx, userID)
+	if err != nil {
+		return false, err
+	}
+	if user.IsSystemAdmin {
+		return true, nil
+	}
+
+	// 2. Check Member Role
+	member, err := s.repo.GetMember(ctx, orgID, userID)
+	if err != nil {
+		if errors.Is(err, ErrUserNotMember) {
+			return false, nil
+		}
+		return false, err
+	}
+
+	if member.Role == RoleOwner {
+		return true, nil
+	}
+
+	return false, nil
+}
+
+// AddLocationManager assigns a manager to a location
+func (s *service) AddLocationManager(ctx context.Context, locationID string, userID string) error {
+	// Get Org ID to check for conflicts
+	orgID, err := s.repo.GetOrgIDByLocationID(ctx, locationID)
+	if err != nil {
+		return err
+	}
+
+	// Mutual Exclusion Check: User cannot be Org Admin/Owner and Location Admin
+	isOrgStaff, err := s.CheckPermission(ctx, orgID, userID)
+	if err != nil {
+		return err
+	}
+	if isOrgStaff {
+		return apperror.New(409, "user is already an organization manager or owner; cannot add as location manager")
+	}
+
+	return s.repo.AddLocationManager(ctx, locationID, userID)
+}
+
+// RemoveLocationManager removes a manager from a location
+func (s *service) RemoveLocationManager(ctx context.Context, locationID string, userID string) error {
+	return s.repo.RemoveLocationManager(ctx, locationID, userID)
+}
+
+// ListLocationManagers lists users who are managers of a location
+func (s *service) ListLocationManagers(ctx context.Context, locationID string) ([]string, error) {
+	return s.repo.ListLocationManagers(ctx, locationID)
 }

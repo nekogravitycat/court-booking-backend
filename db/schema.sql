@@ -10,7 +10,7 @@ CREATE EXTENSION IF NOT EXISTS "pgcrypto";
 DO $$
 BEGIN
     IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'organization_role') THEN
-        CREATE TYPE organization_role AS ENUM ('owner', 'admin', 'member');
+        CREATE TYPE organization_role AS ENUM ('owner', 'manager');
     END IF;
 END
 $$;
@@ -139,10 +139,8 @@ CREATE TABLE IF NOT EXISTS public.bookings (
   id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),      -- Booking ID (UUID)
   created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),              -- Creation timestamp
   updated_at  TIMESTAMPTZ NOT NULL DEFAULT now(),              -- Last update timestamp
-
   resource_id UUID NOT NULL,                                   -- Booked resource (court/room)
   user_id     UUID NOT NULL,                                   -- User who made the booking
-
   start_time  TIMESTAMPTZ NOT NULL,                            -- Booking start time (UTC)
   end_time    TIMESTAMPTZ NOT NULL,                            -- Booking end time (UTC)
   status      booking_status NOT NULL DEFAULT 'pending',       -- Booking lifecycle status
@@ -158,8 +156,7 @@ CREATE TABLE IF NOT EXISTS public.bookings (
 -- =========================================================
 -- Table: organization_permissions
 -- Purpose: Per-organization membership & role for a user.
---          Used to represent organization owner/admin/member.
---          Venue managers = users with role 'owner' or 'admin' for some organization.
+--          Used to represent organization owner/admin.
 -- =========================================================
 CREATE TABLE IF NOT EXISTS public.organization_permissions (
   id              BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY, -- Permission row ID (Internal)
@@ -170,6 +167,22 @@ CREATE TABLE IF NOT EXISTS public.organization_permissions (
     FOREIGN KEY (organization_id) REFERENCES public.organizations(id),
   CONSTRAINT organization_permissions_user_id_fkey
     FOREIGN KEY (user_id) REFERENCES public.users(id)
+);
+
+-- =========================================================
+-- Table: location_admins
+-- Purpose: Grants admin permission to specific locations.
+--          Only users with 'admin' role in the parent organization
+--          should be added here (enforced by app logic).
+-- =========================================================
+CREATE TABLE IF NOT EXISTS public.location_admins (
+  location_id UUID NOT NULL,
+  user_id     UUID NOT NULL,
+  PRIMARY KEY (location_id, user_id),
+  CONSTRAINT location_admins_location_id_fkey
+    FOREIGN KEY (location_id) REFERENCES public.locations(id) ON DELETE CASCADE,
+  CONSTRAINT location_admins_user_id_fkey
+    FOREIGN KEY (user_id) REFERENCES public.users(id) ON DELETE CASCADE
 );
 
 -- =========================================================

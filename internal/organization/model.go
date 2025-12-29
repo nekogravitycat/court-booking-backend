@@ -35,9 +35,9 @@ type OrganizationFilter struct {
 
 // Define roles matching the database enum
 const (
-	RoleOwner  = "owner"
-	RoleAdmin  = "admin"
-	RoleMember = "member"
+	RoleOwner               = "owner"
+	RoleOrganizationManager = "manager"
+	RoleLocationManager     = "location_manager"
 )
 
 // Member represents a user with a specific role within an organization.

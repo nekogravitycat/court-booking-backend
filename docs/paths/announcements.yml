@@ -2,7 +2,12 @@ listAnnouncements:
   get:
     tags:
       - Announcements
-    summary: "列出公告"
+    summary: "查詢公告列表"
+    description: |
+      分頁查詢系統公告。
+
+      **權限 Access Control**:
+      - **Public / Login Required**: 視實作而定，目前為公開或一般登入者皆可。
     security:
       - bearerAuth: []
     parameters:
@@ -32,7 +37,12 @@ listAnnouncements:
   post:
     tags:
       - Announcements
-    summary: "建立公告 (System Admin)"
+    summary: "新增公告"
+    description: |
+      發布新的系統公告。
+
+      **權限 Access Control**:
+      - **System Admin Only**: 僅系統管理員可使用。
     security:
       - bearerAuth: []
     requestBody:
@@ -55,7 +65,12 @@ announcementDetail:
   get:
     tags:
       - Announcements
-    summary: "取得公告詳情"
+    summary: "查詢公告詳情"
+    description: |
+      取得特定公告的詳細內容。
+
+      **權限 Access Control**:
+      - **Public / Login Required**: 視實作而定，目前為公開或一般登入者皆可。
     security:
       - bearerAuth: []
     parameters: &idParams
@@ -77,7 +92,12 @@ announcementDetail:
   patch:
     tags:
       - Announcements
-    summary: "更新公告 (System Admin)"
+    summary: "修改公告內容"
+    description: |
+      更新系統公告的標題或內容。
+
+      **權限 Access Control**:
+      - **System Admin Only**: 僅系統管理員可使用。
     security:
       - bearerAuth: []
     parameters: *idParams
@@ -98,7 +118,12 @@ announcementDetail:
   delete:
     tags:
       - Announcements
-    summary: "刪除公告 (System Admin)"
+    summary: "刪除公告"
+    description: |
+      刪除系統公告 (軟刪除)。
+
+      **權限 Access Control**:
+      - **System Admin Only**: 僅系統管理員可使用。
     security:
       - bearerAuth: []
     parameters: *idParams

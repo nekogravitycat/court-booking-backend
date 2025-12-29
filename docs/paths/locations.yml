@@ -2,7 +2,12 @@ listLocations:
   get:
     tags:
       - Locations
-    summary: "列出 Locations (支援篩選)"
+    summary: "查詢 Location 列表"
+    description: |
+      分頁查詢 Location 資料，支援多種篩選條件。
+
+      **權限 Access Control**:
+      - **Login Required**: 任何已登入的使用者皆可存取。
     security:
       - bearerAuth: []
     parameters:
@@ -85,7 +90,13 @@ listLocations:
   post:
     tags:
       - Locations
-    summary: "建立 Location (Organization Owner/Admin)"
+    summary: "新增 Location"
+    description: |
+      建立一個新的 Location 據點。
+
+      **權限 Access Control**:
+      - **System Admin**: 完全存取權限。
+      - **Organization Owner / Manager**: 可新增所屬 Organization 下的 Location。
     security:
       - bearerAuth: []
     requestBody:
@@ -110,7 +121,12 @@ locationDetail:
   get:
     tags:
       - Locations
-    summary: "取得單一 Location 詳情"
+    summary: "查詢 Location 詳情"
+    description: |
+      取得特定 Location 的詳細資訊。
+
+      **權限 Access Control**:
+      - **Login Required**: 任何已登入的使用者皆可存取。
     security:
       - bearerAuth: []
     parameters: &idParams
@@ -132,7 +148,14 @@ locationDetail:
   patch:
     tags:
       - Locations
-    summary: "更新 Location (Organization Owner/Admin)"
+    summary: "修改 Location 資訊"
+    description: |
+      更新 Location 的基本資料。
+
+      **權限 Access Control**:
+      - **System Admin**: 完全存取權限。
+      - **Organization Owner / Manager**: 可管理所屬 Organization 下的 Location。
+      - **Location Manager**: 可管理自己所負責的 Location。
     security:
       - bearerAuth: []
     parameters: *idParams
@@ -155,7 +178,13 @@ locationDetail:
   delete:
     tags:
       - Locations
-    summary: "刪除 Location (Organization Owner/Admin)"
+    summary: "刪除 Location"
+    description: |
+      刪除 Location 據點 (軟刪除)。
+
+      **權限 Access Control**:
+      - **System Admin**: 完全存取權限。
+      - **Organization Owner / Manager**: 可刪除所屬 Organization 下的 Location。
     security:
       - bearerAuth: []
     parameters: *idParams
@@ -166,3 +195,80 @@ locationDetail:
         description: Permission denied
       "404":
         description: Location not found
+
+addLocationManager:
+  post:
+    tags:
+      - Locations
+    summary: "新增場館管理員"
+    description: |
+      指派使用者成為特定 Location 的管理員。
+
+      **權限 Access Control**:
+      - **System Admin**: 完全存取權限。
+      - **Organization Owner**: 可管理所有 Location 的管理員。
+      - **Organization Manager**: 可管理所有 Location 的管理員。
+    security:
+      - bearerAuth: []
+    parameters: *idParams
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            required:
+              - user_id
+            properties:
+              user_id:
+                type: string
+                format: uuid
+                description: "UUID of the user to be added as manager"
+    responses:
+      "201":
+        description: Manager added successfully
+      "400":
+        description: Invalid ID or request body
+      "403":
+        description: Permission denied (Only Org Owner/Admin)
+      "404":
+        description: Location or User not found
+      "409":
+        description: User is already a manager or higher role
+
+removeLocationManager:
+  delete:
+    tags:
+      - Locations
+    summary: "移除場館管理員"
+    description: |
+      移除特定 Location 的管理員權限。
+
+      **權限 Access Control**:
+      - **System Admin**: 完全存取權限。
+      - **Organization Owner**: 可管理所有 Location 的管理員。
+      - **Organization Manager**: 可管理所有 Location 的管理員。
+    security:
+      - bearerAuth: []
+    parameters:
+      - name: id
+        in: path
+        required: true
+        description: Location ID
+        schema:
+          type: string
+          format: uuid
+      - name: user_id
+        in: path
+        required: true
+        description: User ID (Manager)
+        schema:
+          type: string
+          format: uuid
+    responses:
+      "204":
+        description: Manager removed successfully
+      "403":
+        description: Permission denied
+      "404":
+        description: Location or User not found

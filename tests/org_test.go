@@ -168,18 +168,18 @@ func TestOrganizationMembers(t *testing.T) {
 	})
 
 	t.Run("Add Member", func(t *testing.T) {
-		addPayload := orgHttp.AddMemberRequest{
-			UserID: memberUser.ID,
-			Role:   "admin",
+		payload := orgHttp.AddMemberRequest{
+			UserID: memberUser.ID, // Assuming memberUser is the intended user, not orgAdmin
+			Role:   "manager",
 		}
-		wAdd := executeRequest("POST", membersPath, addPayload, adminToken)
+		wAdd := executeRequest("POST", membersPath, payload, adminToken) // Assuming adminToken is the intended token, not sysToken
 		assert.Equal(t, http.StatusCreated, wAdd.Code)
 	})
 
 	t.Run("Add Duplicate Member", func(t *testing.T) {
 		addPayload := orgHttp.AddMemberRequest{
 			UserID: memberUser.ID,
-			Role:   "admin",
+			Role:   "manager",
 		}
 		wAddDup := executeRequest("POST", membersPath, addPayload, adminToken)
 		assert.Equal(t, http.StatusConflict, wAddDup.Code, "Should return conflict for duplicate member")
@@ -193,15 +193,16 @@ func TestOrganizationMembers(t *testing.T) {
 		err := json.Unmarshal(wList.Body.Bytes(), &membersResp)
 		require.NoError(t, err)
 
-		require.Len(t, membersResp.Items, 1)
+		assert.Equal(t, 1, len(membersResp.Items))
 		assert.Equal(t, memberUser.ID, membersResp.Items[0].UserID)
-		assert.Equal(t, "admin", membersResp.Items[0].Role)
+		assert.Equal(t, "manager", membersResp.Items[0].Role)
 	})
 
 	t.Run("Update Member Role", func(t *testing.T) {
+		// Update to 'owner' should fail as API restricts it
 		updateRolePayload := orgHttp.UpdateMemberRequest{Role: "owner"}
 		wUpdate := executeRequest("PATCH", memberDetailPath, updateRolePayload, adminToken)
-		assert.Equal(t, http.StatusOK, wUpdate.Code)
+		assert.Equal(t, http.StatusBadRequest, wUpdate.Code)
 	})
 
 	t.Run("Remove Member", func(t *testing.T) {
@@ -220,7 +221,7 @@ func TestOrganizationMembers(t *testing.T) {
 		fakeUserID := "00000000-0000-0000-0000-000000000000"
 		payload := orgHttp.AddMemberRequest{
 			UserID: fakeUserID,
-			Role:   "member",
+			Role:   "admin",
 		}
 		w := executeRequest("POST", membersPath, payload, adminToken)
 		// Should be 400 Bad Request or 404 Not Found depending on implementation
@@ -245,7 +246,7 @@ func TestOrganizationMembers(t *testing.T) {
 		assert.Equal(t, http.StatusBadRequest, wList.Code, "Should return 400 for invalid Org ID in List Members")
 
 		// POST Member
-		addPayload := orgHttp.AddMemberRequest{UserID: memberUser.ID, Role: "member"}
+		addPayload := orgHttp.AddMemberRequest{UserID: memberUser.ID, Role: "admin"}
 		wAdd := executeRequest("POST", invalidOrgPath, addPayload, adminToken)
 		assert.Equal(t, http.StatusBadRequest, wAdd.Code, "Should return 400 for invalid Org ID in Add Member")
 

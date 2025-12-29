@@ -55,12 +55,9 @@ func TestResourceTypeCRUDAndPermissions(t *testing.T) {
 		orgA_ID = orgResp.ID
 
 		// Assign Roles for Org A
+		addMemberToOrg(t, orgA_ID, ownerA.ID, "owner")
 		executeRequest("POST", fmt.Sprintf("/v1/organizations/%s/members", orgA_ID),
-			orgHttp.AddMemberRequest{UserID: ownerA.ID, Role: "owner"}, sysAdminToken)
-		executeRequest("POST", fmt.Sprintf("/v1/organizations/%s/members", orgA_ID),
-			orgHttp.AddMemberRequest{UserID: adminA.ID, Role: "admin"}, sysAdminToken)
-		executeRequest("POST", fmt.Sprintf("/v1/organizations/%s/members", orgA_ID),
-			orgHttp.AddMemberRequest{UserID: memberA.ID, Role: "member"}, sysAdminToken)
+			orgHttp.AddMemberRequest{UserID: adminA.ID, Role: "manager"}, sysAdminToken)
 
 		// 2. Create Organization B (Target for cross-org attack test)
 		createPayloadB := orgHttp.CreateOrganizationRequest{Name: "Sports Center B"}
@@ -73,7 +70,7 @@ func TestResourceTypeCRUDAndPermissions(t *testing.T) {
 
 		// Assign Admin Role for Org B
 		executeRequest("POST", fmt.Sprintf("/v1/organizations/%s/members", orgB_ID),
-			orgHttp.AddMemberRequest{UserID: adminB.ID, Role: "admin"}, sysAdminToken)
+			orgHttp.AddMemberRequest{UserID: adminB.ID, Role: "manager"}, sysAdminToken)
 	})
 
 	t.Run("Create Resource Type: Input Validation (Bad Request)", func(t *testing.T) {

@@ -3,6 +3,11 @@ register:
     tags:
       - Auth
     summary: "使用者註冊"
+    description: |
+      註冊新的使用者帳號。
+
+      **權限 Access Control**:
+      - **Public**: 此公開 API 無需登入即可使用。
     operationId: registerUser
     requestBody:
       required: true
@@ -35,6 +40,11 @@ login:
     tags:
       - Auth
     summary: "使用者登入"
+    description: |
+      登入使用者並取得 JWT Access Token。
+
+      **權限 Access Control**:
+      - **Public**: 此公開 API 無需登入即可使用。
     operationId: loginUser
     requestBody:
       required: true

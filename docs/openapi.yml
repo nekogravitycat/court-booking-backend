@@ -49,7 +49,6 @@ components:
     page_size:
       $ref: "./components/parameters.yml#/page_size"
 
-
   schemas:
     # --------------------------
     # Common Responses
@@ -210,6 +209,12 @@ paths:
 
   /locations/{id}:
     $ref: "./paths/locations.yml#/locationDetail"
+
+  /locations/{id}/admins:
+    $ref: "./paths/locations.yml#/addLocationManager"
+
+  /locations/{id}/admins/{user_id}:
+    $ref: "./paths/locations.yml#/removeLocationManager"
 
   # ============================
   # Resource Types
