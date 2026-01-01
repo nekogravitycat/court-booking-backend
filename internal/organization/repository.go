@@ -10,6 +10,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/nekogravitycat/court-booking-backend/internal/user"
 )
 
 // Repository defines methods for accessing organization data.
@@ -24,7 +25,7 @@ type Repository interface {
 	AddOrganizationManager(ctx context.Context, orgID string, userID string) error
 	RemoveOrganizationManager(ctx context.Context, orgID string, userID string) error
 	IsOrganizationManager(ctx context.Context, orgID string, userID string) (bool, error)
-	ListOrganizationManagers(ctx context.Context, orgID string) ([]*Member, error)
+	ListOrganizationManagers(ctx context.Context, orgID string) ([]*user.User, error)
 	// Helpers
 	RemoveAllLocationManagersForUser(ctx context.Context, userID string) error
 }
@@ -249,7 +250,7 @@ func (r *pgxRepository) IsOrganizationManager(ctx context.Context, orgID string,
 	return true, nil
 }
 
-func (r *pgxRepository) ListOrganizationManagers(ctx context.Context, orgID string) ([]*Member, error) {
+func (r *pgxRepository) ListOrganizationManagers(ctx context.Context, orgID string) ([]*user.User, error) {
 	psql := squirrel.StatementBuilder.PlaceholderFormat(squirrel.Dollar)
 	query, args, err := psql.Select(
 		"u.id", "u.email", "u.display_name",
@@ -269,16 +270,15 @@ func (r *pgxRepository) ListOrganizationManagers(ctx context.Context, orgID stri
 	}
 	defer rows.Close()
 
-	var members []*Member
+	var users []*user.User
 	for rows.Next() {
-		var m Member
-		m.Role = RoleOrganizationManager
-		if err := rows.Scan(&m.UserID, &m.Email, &m.DisplayName); err != nil {
+		var u user.User
+		if err := rows.Scan(&u.ID, &u.Email, &u.DisplayName); err != nil {
 			return nil, fmt.Errorf("scan org manager failed: %w", err)
 		}
-		members = append(members, &m)
+		users = append(users, &u)
 	}
-	return members, nil
+	return users, nil
 }
 
 func (r *pgxRepository) RemoveAllLocationManagersForUser(ctx context.Context, userID string) error {

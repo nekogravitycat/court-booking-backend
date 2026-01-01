@@ -6,6 +6,7 @@ import (
 	"github.com/nekogravitycat/court-booking-backend/internal/location"
 	orgHttp "github.com/nekogravitycat/court-booking-backend/internal/organization/http"
 	"github.com/nekogravitycat/court-booking-backend/internal/pkg/request"
+	"github.com/nekogravitycat/court-booking-backend/internal/user"
 )
 
 type LocationResponse struct {
@@ -47,6 +48,24 @@ func NewLocationResponse(l *location.Location) LocationResponse {
 		Description:       l.Description,
 		Longitude:         l.Longitude,
 		Latitude:          l.Latitude,
+	}
+}
+
+type ManagerResponse struct {
+	ID          string    `json:"id"`
+	Email       string    `json:"email"`
+	DisplayName *string   `json:"display_name"`
+	CreatedAt   time.Time `json:"created_at"`
+	IsActive    bool      `json:"is_active"`
+}
+
+func NewManagerResponse(u *user.User) ManagerResponse {
+	return ManagerResponse{
+		ID:          u.ID,
+		Email:       u.Email,
+		DisplayName: u.DisplayName,
+		CreatedAt:   u.CreatedAt,
+		IsActive:    u.IsActive,
 	}
 }
 

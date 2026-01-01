@@ -32,6 +32,7 @@ type User struct {
 // UserFilter defines filter options for listing users.
 type UserFilter struct {
 	Email       string
+	IDs         []string
 	DisplayName string
 	IsActive    *bool // Use pointer to distinguish between false and nil (not set)
 

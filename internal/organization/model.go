@@ -33,26 +33,3 @@ type OrganizationFilter struct {
 	SortBy    string
 	SortOrder string
 }
-
-// Define roles
-const (
-	RoleOrganizationManager = "manager"
-	RoleLocationManager     = "location_manager"
-)
-
-// Member represents a user with a specific relation to an organization (Manager).
-// It joins data from organization_managers and users tables.
-type Member struct {
-	UserID      string
-	Email       string
-	DisplayName *string
-	Role        string
-}
-
-// MemberFilter defines filter options for listing members.
-type MemberFilter struct {
-	Page      int
-	PageSize  int
-	SortBy    string
-	SortOrder string
-}

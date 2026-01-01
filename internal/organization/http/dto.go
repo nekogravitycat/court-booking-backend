@@ -5,6 +5,7 @@ import (
 
 	"github.com/nekogravitycat/court-booking-backend/internal/organization"
 	"github.com/nekogravitycat/court-booking-backend/internal/pkg/request"
+	"github.com/nekogravitycat/court-booking-backend/internal/user"
 )
 
 // OrganizationResponse matches the OAS definition.
@@ -58,6 +59,7 @@ func (r *CreateOrganizationRequest) Validate() error {
 type UpdateOrganizationRequest struct {
 	Name     *string `json:"name" binding:"omitempty,min=1,max=100"`
 	IsActive *bool   `json:"is_active"`
+	OwnerID  *string `json:"owner_id" binding:"omitempty,uuid"`
 }
 
 // Validate performs custom validation for UpdateOrganizationRequest.
@@ -74,12 +76,13 @@ func NewOrganizationResponse(o *organization.Organization) OrganizationResponse 
 	}
 }
 
-// MemberResponse matches the desired output for a member in a list.
-type MemberResponse struct {
-	UserID      string  `json:"user_id"`
-	Email       string  `json:"email"`
-	DisplayName *string `json:"display_name"`
-	Role        string  `json:"role"`
+// ManagerResponse matches the User entity structure for manager list.
+type ManagerResponse struct {
+	ID          string    `json:"id"`
+	Email       string    `json:"email"`
+	DisplayName *string   `json:"display_name"`
+	CreatedAt   time.Time `json:"created_at"`
+	IsActive    bool      `json:"is_active"`
 }
 
 // ListMembersRequest defines query parameters for listing members.
@@ -103,11 +106,12 @@ func (r *AddOrganizationManagerRequest) Validate() error {
 	return nil
 }
 
-func NewMemberResponse(m *organization.Member) MemberResponse {
-	return MemberResponse{
-		UserID:      m.UserID,
-		Email:       m.Email,
-		DisplayName: m.DisplayName,
-		Role:        m.Role,
+func NewManagerResponse(u *user.User) ManagerResponse {
+	return ManagerResponse{
+		ID:          u.ID,
+		Email:       u.Email,
+		DisplayName: u.DisplayName,
+		CreatedAt:   u.CreatedAt,
+		IsActive:    u.IsActive,
 	}
 }

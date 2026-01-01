@@ -196,7 +196,37 @@ locationDetail:
       "404":
         description: Location not found
 
-addLocationManager:
+locationManagers:
+  get:
+    tags:
+      - Locations
+    summary: "查詢 Location Managers"
+    description: |
+      Listing all managers for a specific location.
+
+      **權限 Access Control**:
+      - **System Admin**: Full access.
+      - **Organization Owner / Manager**: Full access.
+      - **Location Manager**: Can view managers of their own location.
+    security:
+      - bearerAuth: []
+    parameters: *idParams
+    responses:
+      "200":
+        description: Manager list
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                data:
+                  type: array
+                  items:
+                    $ref: "../components/schemas/member.yml#/ManagerResponse"
+      "403":
+        description: Permission denied
+      "404":
+        description: Location not found
   post:
     tags:
       - Locations

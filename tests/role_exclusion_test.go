@@ -111,13 +111,13 @@ func TestRoleMutualExclusionAndUnifiedList(t *testing.T) {
 		w := executeRequest("GET", fmt.Sprintf("/v1/organizations/%s/managers", orgID), nil, ownerToken)
 		require.Equal(t, http.StatusOK, w.Code)
 
-		var resp map[string][]orgHttp.MemberResponse
+		var resp map[string][]orgHttp.ManagerResponse
 		err := json.Unmarshal(w.Body.Bytes(), &resp)
 		require.NoError(t, err)
 
 		// We expect 1 manager (orgAdmin). Owner is not in this list. LocAdmin is not in this list.
 		assert.Equal(t, 1, len(resp["data"]))
-		assert.Equal(t, orgAdmin.ID, resp["data"][0].UserID)
+		assert.Equal(t, orgAdmin.ID, resp["data"][0].ID)
 	})
 	// -------------------------------------------------------------------------
 	// Case 7: Fail Adding Owner as Manager (Self-check or API check)

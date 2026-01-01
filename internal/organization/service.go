@@ -13,6 +13,7 @@ import (
 type UpdateOrganizationRequest struct {
 	Name     *string
 	IsActive *bool
+	OwnerID  *string
 }
 
 // AddMemberRequest defines fields for adding a member.
@@ -37,7 +38,7 @@ type Service interface {
 	// Organization Manager methods
 	AddOrganizationManager(ctx context.Context, orgID string, userID string) error
 	RemoveOrganizationManager(ctx context.Context, orgID string, userID string) error
-	ListOrganizationManagers(ctx context.Context, orgID string) ([]*Member, error)
+	ListOrganizationManagers(ctx context.Context, orgID string) ([]*user.User, error)
 	// Permission methods
 	CheckPermission(ctx context.Context, orgID string, userID string) (bool, error)
 	CheckIsOwner(ctx context.Context, orgID string, userID string) (bool, error)
@@ -126,6 +127,27 @@ func (s *service) Update(ctx context.Context, id string, req UpdateOrganizationR
 	if req.IsActive != nil {
 		org.IsActive = *req.IsActive
 	}
+	if req.OwnerID != nil {
+		newOwnerID := *req.OwnerID
+		// Verify new owner exists
+		if _, err := s.userService.GetByID(ctx, newOwnerID); err != nil {
+			if errors.Is(err, user.ErrNotFound) {
+				return nil, ErrUserNotFound
+			}
+			return nil, err
+		}
+
+		// Mutual Exclusion Check: User cannot be both Org Owner and Location Manager
+		isLoMgr, err := s.locChecker.IsLocationManagerInOrg(ctx, id, newOwnerID)
+		if err != nil {
+			return nil, err
+		}
+		if isLoMgr {
+			return nil, apperror.New(409, "user is already a location manager in this organization; remove location manager privileges first")
+		}
+
+		org.OwnerID = newOwnerID
+	}
 
 	// Save updates
 	if err := s.repo.Update(ctx, org); err != nil {
@@ -143,10 +165,6 @@ func (s *service) Delete(ctx context.Context, id string) error {
 	}
 	return s.repo.Delete(ctx, id)
 }
-
-// ------------------------
-//     Member methods
-// ------------------------
 
 // -----------------------------
 //   Organization Manager methods
@@ -192,12 +210,34 @@ func (s *service) RemoveOrganizationManager(ctx context.Context, orgID string, u
 	return s.repo.RemoveOrganizationManager(ctx, orgID, userID)
 }
 
-func (s *service) ListOrganizationManagers(ctx context.Context, orgID string) ([]*Member, error) {
+func (s *service) ListOrganizationManagers(ctx context.Context, orgID string) ([]*user.User, error) {
 	// Verify organization exists
 	if _, err := s.repo.GetByID(ctx, orgID); err != nil {
 		return nil, err
 	}
-	return s.repo.ListOrganizationManagers(ctx, orgID)
+
+	members, err := s.repo.ListOrganizationManagers(ctx, orgID)
+	if err != nil {
+		return nil, err
+	}
+
+	if len(members) == 0 {
+		return []*user.User{}, nil
+	}
+
+	userIDs := make([]string, len(members))
+	for i, u := range members {
+		userIDs[i] = u.ID
+	}
+
+	users, _, err := s.userService.List(ctx, user.UserFilter{
+		IDs: userIDs,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	return users, nil
 }
 
 // ------------------------

@@ -132,6 +132,7 @@ func (h *OrganizationHandler) Update(c *gin.Context) {
 	req := organization.UpdateOrganizationRequest{
 		Name:     body.Name,
 		IsActive: body.IsActive,
+		OwnerID:  body.OwnerID,
 	}
 
 	org, err := h.service.Update(c.Request.Context(), uri.ID, req)
@@ -191,14 +192,11 @@ func (h *OrganizationHandler) ListManagers(c *gin.Context) {
 	}
 
 	// Manual pagination since service method changed (ListOrganizationManagers returns slice, no total/paging currently in repo)
-	// Wait, the repo implementation for ListOrganizationManagers doesn't support paging currently based on previous step.
-	// The implementation plan said: `ListOrganizationManagers(ctx, orgID) ([]*Member, error)`
-	// I should probably return all for now or the repo method needs update. The repo implementation I wrote returns all.
-	// So I will return simple list.
+	// We return simple list for now.
 
-	items := make([]MemberResponse, len(members))
+	items := make([]ManagerResponse, len(members))
 	for i, m := range members {
-		items[i] = NewMemberResponse(m)
+		items[i] = NewManagerResponse(m)
 	}
 
 	c.JSON(http.StatusOK, gin.H{"data": items})

@@ -333,3 +333,43 @@ func (h *LocationHandler) RemoveManager(c *gin.Context) {
 
 	c.Status(http.StatusNoContent)
 }
+
+// ListManagers retrieves the list of managers for a location.
+func (h *LocationHandler) ListManagers(c *gin.Context) {
+	var uri request.ByIDRequest
+	if err := c.ShouldBindUri(&uri); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request", "details": err.Error()})
+		return
+	}
+
+	// Fetch location
+	loc, err := h.service.GetByID(c.Request.Context(), uri.ID)
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+
+	// Permission: Owner, Org Manager, or Location Manager (of this location)
+	allowed, err := h.service.CheckLocationPermission(c.Request.Context(), loc.OrganizationID, loc.ID, auth.GetUserID(c))
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+	if !allowed {
+		c.JSON(http.StatusForbidden, gin.H{"error": "forbidden: you do not have permission to view managers for this location"})
+		return
+	}
+
+	users, err := h.service.ListLocationManagers(c.Request.Context(), uri.ID)
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+
+	items := make([]ManagerResponse, len(users))
+	for i, u := range users {
+		items[i] = NewManagerResponse(u)
+	}
+
+	c.JSON(http.StatusOK, gin.H{"data": items})
+}

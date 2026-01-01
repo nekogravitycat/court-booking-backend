@@ -6,12 +6,16 @@ OrganizationResponse:
       format: uuid
     name:
       type: string
+    owner_id:
+      type: string
+      format: uuid
     created_at:
       type: string
       format: date-time
   required:
     - id
     - name
+    - owner_id
     - created_at
 
 CreateOrganizationRequest:
@@ -19,8 +23,12 @@ CreateOrganizationRequest:
   properties:
     name:
       type: string
+    owner_id:
+      type: string
+      format: uuid
   required:
     - name
+    - owner_id
 
 UpdateOrganizationRequest:
   type: object
@@ -29,6 +37,9 @@ UpdateOrganizationRequest:
       type: string
     is_active:
       type: boolean
+    owner_id:
+      type: string
+      format: uuid
 
 OrganizationTag:
   type: object

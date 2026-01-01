@@ -52,7 +52,7 @@ type Service interface {
 	// Location Manager management
 	AddLocationManager(ctx context.Context, locationID string, userID string) error
 	RemoveLocationManager(ctx context.Context, locationID string, userID string) error
-	ListLocationManagers(ctx context.Context, locationID string) ([]string, error)
+	ListLocationManagers(ctx context.Context, locationID string) ([]*user.User, error)
 	// Permission methods
 	CheckLocationPermission(ctx context.Context, orgID string, locationID string, userID string) (bool, error)
 }
@@ -257,12 +257,34 @@ func (s *service) RemoveLocationManager(ctx context.Context, locationID string, 
 }
 
 // ListLocationManagers lists users who are managers of a location
-func (s *service) ListLocationManagers(ctx context.Context, locationID string) ([]string, error) {
+func (s *service) ListLocationManagers(ctx context.Context, locationID string) ([]*user.User, error) {
 	// Verify location exists
 	if _, err := s.repo.GetByID(ctx, locationID); err != nil {
 		return nil, err
 	}
-	return s.repo.ListLocationManagers(ctx, locationID)
+
+	members, err := s.repo.ListLocationManagers(ctx, locationID)
+	if err != nil {
+		return nil, err
+	}
+
+	if len(members) == 0 {
+		return []*user.User{}, nil
+	}
+
+	userIDs := make([]string, len(members))
+	for i, u := range members {
+		userIDs[i] = u.ID
+	}
+
+	users, _, err := s.userService.List(ctx, user.UserFilter{
+		IDs: userIDs,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	return users, nil
 }
 
 // CheckLocationPermission verifies if the user has permission for a specific location.

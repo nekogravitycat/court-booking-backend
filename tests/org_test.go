@@ -203,13 +203,13 @@ func TestOrganizationManagers(t *testing.T) {
 		wList := executeRequest("GET", managersPath, nil, ownerToken)
 		assert.Equal(t, http.StatusOK, wList.Code)
 
-		var resp map[string][]orgHttp.MemberResponse
+		var resp map[string][]orgHttp.ManagerResponse
 		err := json.Unmarshal(wList.Body.Bytes(), &resp)
 		require.NoError(t, err)
 
 		items := resp["data"]
 		assert.Equal(t, 1, len(items))
-		assert.Equal(t, managerUser.ID, items[0].UserID)
+		assert.Equal(t, managerUser.ID, items[0].ID)
 		// Role check removed as DTO might not carry role or it's always manager
 	})
 
@@ -220,7 +220,7 @@ func TestOrganizationManagers(t *testing.T) {
 
 	t.Run("Verify Removal", func(t *testing.T) {
 		wListAgain := executeRequest("GET", managersPath, nil, ownerToken)
-		var resp map[string][]orgHttp.MemberResponse
+		var resp map[string][]orgHttp.ManagerResponse
 		json.Unmarshal(wListAgain.Body.Bytes(), &resp)
 		assert.Equal(t, 0, len(resp["data"]))
 	})

@@ -8,6 +8,7 @@ import (
 	"github.com/Masterminds/squirrel"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/nekogravitycat/court-booking-backend/internal/user"
 )
 
 // Repository defines data access methods for locations.
@@ -21,7 +22,7 @@ type Repository interface {
 	AddLocationManager(ctx context.Context, locationID string, userID string) error
 	RemoveLocationManager(ctx context.Context, locationID string, userID string) error
 	IsLocationManager(ctx context.Context, locationID string, userID string) (bool, error)
-	ListLocationManagers(ctx context.Context, locationID string) ([]string, error)
+	ListLocationManagers(ctx context.Context, locationID string) ([]*user.User, error)
 	IsLocationManagerInOrg(ctx context.Context, orgID string, userID string) (bool, error)
 }
 
@@ -303,11 +304,13 @@ func (r *pgxRepository) IsLocationManager(ctx context.Context, locationID string
 	return true, nil
 }
 
-func (r *pgxRepository) ListLocationManagers(ctx context.Context, locationID string) ([]string, error) {
+func (r *pgxRepository) ListLocationManagers(ctx context.Context, locationID string) ([]*user.User, error) {
 	psql := squirrel.StatementBuilder.PlaceholderFormat(squirrel.Dollar)
-	query, args, err := psql.Select("user_id").
-		From("public.location_managers").
-		Where(squirrel.Eq{"location_id": locationID}).
+	query, args, err := psql.Select("u.id", "u.email", "u.display_name").
+		From("public.location_managers lm").
+		Join("public.users u ON lm.user_id = u.id").
+		Where(squirrel.Eq{"lm.location_id": locationID}).
+		OrderBy("u.display_name ASC").
 		ToSql()
 	if err != nil {
 		return nil, fmt.Errorf("build list location admins query failed: %w", err)
@@ -319,15 +322,15 @@ func (r *pgxRepository) ListLocationManagers(ctx context.Context, locationID str
 	}
 	defer rows.Close()
 
-	var userIDs []string
+	var users []*user.User
 	for rows.Next() {
-		var uid string
-		if err := rows.Scan(&uid); err != nil {
+		var u user.User
+		if err := rows.Scan(&u.ID, &u.Email, &u.DisplayName); err != nil {
 			return nil, fmt.Errorf("scan failed: %w", err)
 		}
-		userIDs = append(userIDs, uid)
+		users = append(users, &u)
 	}
-	return userIDs, nil
+	return users, nil
 }
 
 func (r *pgxRepository) IsLocationManagerInOrg(ctx context.Context, orgID string, userID string) (bool, error) {

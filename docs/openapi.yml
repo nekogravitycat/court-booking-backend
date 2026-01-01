@@ -90,8 +90,8 @@ components:
     # --------------------------
     # Manager Models
     # --------------------------
-    MemberResponse:
-      $ref: "./components/schemas/member.yml#/MemberResponse"
+    ManagerResponse:
+      $ref: "./components/schemas/member.yml#/ManagerResponse"
 
     AddOrganizationManagerRequest:
       $ref: "./components/schemas/member.yml#/AddOrganizationManagerRequest"
@@ -206,7 +206,7 @@ paths:
     $ref: "./paths/locations.yml#/locationDetail"
 
   /locations/{id}/managers:
-    $ref: "./paths/locations.yml#/addLocationManager"
+    $ref: "./paths/locations.yml#/locationManagers"
 
   /locations/{id}/managers/{user_id}:
     $ref: "./paths/locations.yml#/removeLocationManager"

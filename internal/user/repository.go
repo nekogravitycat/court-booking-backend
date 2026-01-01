@@ -208,6 +208,9 @@ func (r *pgxUserRepository) List(ctx context.Context, filter UserFilter) ([]*Use
 		From("public.users u")
 
 	// Dynamic filtering
+	if len(filter.IDs) > 0 {
+		queryBuilder = queryBuilder.Where(squirrel.Eq{"u.id": filter.IDs})
+	}
 	if filter.Email != "" {
 		queryBuilder = queryBuilder.Where(squirrel.ILike{"email": "%" + filter.Email + "%"})
 	}
