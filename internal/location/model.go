@@ -16,6 +16,7 @@ var (
 	ErrInvalidOpeningHours = apperror.New(http.StatusBadRequest, "opening hours start must be before end")
 	ErrCapacityInvalid     = apperror.New(http.StatusBadRequest, "capacity must be greater than zero")
 	ErrInvalidTimeRange    = apperror.New(http.StatusBadRequest, "start time must be before end time")
+	ErrUserNotFound        = apperror.New(http.StatusNotFound, "user not found")
 )
 
 // Location represents a physical venue under an organization.

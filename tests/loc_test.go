@@ -43,7 +43,7 @@ func TestLocationCRUDAndPermissions(t *testing.T) {
 
 	t.Run("Setup Context: Create Organizations and Assign Roles", func(t *testing.T) {
 		// 1. Create Organization A
-		createPayload := orgHttp.CreateOrganizationRequest{Name: "Sports Center A"}
+		createPayload := orgHttp.CreateOrganizationRequest{Name: "Sports Center A", OwnerID: ownerA.ID}
 		w := executeRequest("POST", "/v1/organizations", createPayload, sysAdminToken)
 		require.Equal(t, http.StatusCreated, w.Code)
 
@@ -52,14 +52,13 @@ func TestLocationCRUDAndPermissions(t *testing.T) {
 		orgA_ID = orgResp.ID
 
 		// Assign Roles for Org A
-		// Owner - Add directly to DB as API restricts 'owner' role in payload
-		addMemberToOrg(t, orgA_ID, ownerA.ID, "owner")
-		// Admin
-		executeRequest("POST", fmt.Sprintf("/v1/organizations/%s/members", orgA_ID),
-			orgHttp.AddMemberRequest{UserID: adminA.ID, Role: "admin"}, sysAdminToken)
+		// Owner - Set by Create.
+		// Admin (Manager)
+		executeRequest("POST", fmt.Sprintf("/v1/organizations/%s/managers", orgA_ID),
+			orgHttp.AddOrganizationManagerRequest{UserID: adminA.ID}, sysAdminToken)
 
 		// 2. Create Organization B (Target for cross-org attack test)
-		createPayloadB := orgHttp.CreateOrganizationRequest{Name: "Sports Center B"}
+		createPayloadB := orgHttp.CreateOrganizationRequest{Name: "Sports Center B", OwnerID: sysAdmin.ID} // Use SysAdmin as Owner of B
 		wB := executeRequest("POST", "/v1/organizations", createPayloadB, sysAdminToken)
 		require.Equal(t, http.StatusCreated, wB.Code)
 
@@ -67,8 +66,8 @@ func TestLocationCRUDAndPermissions(t *testing.T) {
 		json.Unmarshal(wB.Body.Bytes(), &orgRespB)
 
 		// Assign Admin Role for Org B
-		executeRequest("POST", fmt.Sprintf("/v1/organizations/%s/members", orgRespB.ID),
-			orgHttp.AddMemberRequest{UserID: adminB.ID, Role: "admin"}, sysAdminToken)
+		executeRequest("POST", fmt.Sprintf("/v1/organizations/%s/managers", orgRespB.ID),
+			orgHttp.AddOrganizationManagerRequest{UserID: adminB.ID}, sysAdminToken)
 	})
 
 	t.Run("Create Location: Validation Failures", func(t *testing.T) {

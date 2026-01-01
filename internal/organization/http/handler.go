@@ -80,7 +80,7 @@ func (h *OrganizationHandler) Create(c *gin.Context) {
 		return
 	}
 
-	org, err := h.service.Create(c.Request.Context(), req.Name)
+	org, err := h.service.Create(c.Request.Context(), req.Name, req.OwnerID)
 	if err != nil {
 		response.Error(c, err)
 		return
@@ -160,37 +160,18 @@ func (h *OrganizationHandler) Delete(c *gin.Context) {
 	c.Status(http.StatusNoContent)
 }
 
-// ListMembers retrieves members of an organization.
-func (h *OrganizationHandler) ListMembers(c *gin.Context) {
+// ListManagers retrieves managers of an organization.
+func (h *OrganizationHandler) ListManagers(c *gin.Context) {
 	var uri request.ByIDRequest
 	if err := c.ShouldBindUri(&uri); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request", "details": err.Error()})
 		return
 	}
 
-	var req ListMembersRequest
-	if err := c.ShouldBindQuery(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid query parameters", "details": err.Error()})
-		return
-	}
-
-	if err := req.Validate(); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-		return
-	}
-
-	filter := organization.MemberFilter{
-		Page:      req.Page,
-		PageSize:  req.PageSize,
-		SortBy:    req.SortBy,
-		SortOrder: req.SortOrder,
-	}
-
-	if filter.SortOrder == "" {
-		filter.SortOrder = "DESC"
-	} else {
-		filter.SortOrder = strings.ToUpper(filter.SortOrder)
-	}
+	// We can't filter by role anymore since we only return managers
+	// but we assume ListMembersRequest might still be used for pagination or removed/simplified
+	// For now, let's keep basic pagination.
+	// NOTE: ListMembersRequest struct in DTO has SortBy which may include 'role', but now all are managers.
 
 	userID := auth.GetUserID(c)
 	hasPerm, err := h.service.CheckPermission(c.Request.Context(), uri.ID, userID)
@@ -203,31 +184,36 @@ func (h *OrganizationHandler) ListMembers(c *gin.Context) {
 		return
 	}
 
-	members, total, err := h.service.ListOrganizationMembers(c.Request.Context(), uri.ID, filter)
+	members, err := h.service.ListOrganizationManagers(c.Request.Context(), uri.ID)
 	if err != nil {
 		response.Error(c, err)
 		return
 	}
+
+	// Manual pagination since service method changed (ListOrganizationManagers returns slice, no total/paging currently in repo)
+	// Wait, the repo implementation for ListOrganizationManagers doesn't support paging currently based on previous step.
+	// The implementation plan said: `ListOrganizationManagers(ctx, orgID) ([]*Member, error)`
+	// I should probably return all for now or the repo method needs update. The repo implementation I wrote returns all.
+	// So I will return simple list.
 
 	items := make([]MemberResponse, len(members))
 	for i, m := range members {
 		items[i] = NewMemberResponse(m)
 	}
 
-	resp := response.NewPageResponse(items, req.Page, req.PageSize, total)
-	c.JSON(http.StatusOK, resp)
+	c.JSON(http.StatusOK, gin.H{"data": items})
 }
 
-// AddMember adds a user to an organization.
-// Access Control: System Admin (for now).
-func (h *OrganizationHandler) AddMember(c *gin.Context) {
+// AddManager adds a manager to an organization.
+// Access Control: System Admin or Organization Owner.
+func (h *OrganizationHandler) AddManager(c *gin.Context) {
 	var uri request.ByIDRequest
 	if err := c.ShouldBindUri(&uri); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request", "details": err.Error()})
 		return
 	}
 
-	var body AddMemberRequest
+	var body AddOrganizationManagerRequest
 	if err := c.ShouldBindJSON(&body); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request body", "details": err.Error()})
 		return
@@ -244,23 +230,20 @@ func (h *OrganizationHandler) AddMember(c *gin.Context) {
 		return
 	}
 
-	req := organization.AddMemberRequest{
-		UserID: body.UserID,
-		Role:   body.Role,
-	}
-
 	actorID := auth.GetUserID(c)
-	hasPerm, err := h.service.CheckPermission(c.Request.Context(), uri.ID, actorID)
+	// Permission check: Must be Owner or SysAdmin to add managers.
+	// CheckIsOwner is strict owner check.
+	isOwner, err := h.service.CheckIsOwner(c.Request.Context(), uri.ID, actorID)
 	if err != nil {
 		response.Error(c, err)
 		return
 	}
-	if !hasPerm {
-		c.JSON(http.StatusForbidden, gin.H{"error": "permission denied"})
+	if !isOwner {
+		c.JSON(http.StatusForbidden, gin.H{"error": "permission denied: only owner can add managers"})
 		return
 	}
 
-	if err := h.service.AddOrganizationManager(c.Request.Context(), uri.ID, req.UserID); err != nil {
+	if err := h.service.AddOrganizationManager(c.Request.Context(), uri.ID, body.UserID); err != nil {
 		response.Error(c, err)
 		return
 	}
@@ -268,52 +251,9 @@ func (h *OrganizationHandler) AddMember(c *gin.Context) {
 	c.Status(http.StatusCreated)
 }
 
-// UpdateMemberRole modifies a member's role.
-// Access Control: System Admin (for now).
-func (h *OrganizationHandler) UpdateMemberRole(c *gin.Context) {
-	var uri OrgMemberRequest
-	if err := c.ShouldBindUri(&uri); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request", "details": err.Error()})
-		return
-	}
-
-	var body UpdateMemberRequest
-	if err := c.ShouldBindJSON(&body); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request body", "details": err.Error()})
-		return
-	}
-
-	if err := body.Validate(); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-		return
-	}
-
-	req := organization.UpdateMemberRequest{
-		Role: body.Role,
-	}
-
-	actorID := auth.GetUserID(c)
-	hasPerm, err := h.service.CheckPermission(c.Request.Context(), uri.ID, actorID)
-	if err != nil {
-		response.Error(c, err)
-		return
-	}
-	if !hasPerm {
-		c.JSON(http.StatusForbidden, gin.H{"error": "permission denied"})
-		return
-	}
-
-	if err := h.service.UpdateOrganizationMemberRole(c.Request.Context(), uri.ID, uri.UserID, req); err != nil {
-		response.Error(c, err)
-		return
-	}
-
-	c.JSON(http.StatusOK, gin.H{"status": "updated"})
-}
-
-// RemoveMember removes a user from an organization.
-// Access Control: System Admin (for now).
-func (h *OrganizationHandler) RemoveMember(c *gin.Context) {
+// RemoveManager removes a manager from an organization.
+// Access Control: System Admin or Organization Owner.
+func (h *OrganizationHandler) RemoveManager(c *gin.Context) {
 	var req OrgMemberRequest
 	if err := c.ShouldBindUri(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request", "details": err.Error()})
@@ -321,17 +261,17 @@ func (h *OrganizationHandler) RemoveMember(c *gin.Context) {
 	}
 
 	actorID := auth.GetUserID(c)
-	hasPerm, err := h.service.CheckPermission(c.Request.Context(), req.ID, actorID)
+	isOwner, err := h.service.CheckIsOwner(c.Request.Context(), req.ID, actorID)
 	if err != nil {
 		response.Error(c, err)
 		return
 	}
-	if !hasPerm {
-		c.JSON(http.StatusForbidden, gin.H{"error": "permission denied"})
+	if !isOwner {
+		c.JSON(http.StatusForbidden, gin.H{"error": "permission denied: only owner can remove managers"})
 		return
 	}
 
-	if err := h.service.RemoveOrganizationMember(c.Request.Context(), req.ID, req.UserID); err != nil {
+	if err := h.service.RemoveOrganizationManager(c.Request.Context(), req.ID, req.UserID); err != nil {
 		response.Error(c, err)
 		return
 	}

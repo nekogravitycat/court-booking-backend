@@ -26,7 +26,10 @@ func TestOrganizationCRUD(t *testing.T) {
 	var orgID string
 
 	t.Run("Create Organization", func(t *testing.T) {
-		createPayload := orgHttp.CreateOrganizationRequest{Name: "Badminton Club"}
+		createPayload := orgHttp.CreateOrganizationRequest{
+			Name:    "Badminton Club",
+			OwnerID: admin.ID,
+		}
 
 		// Case A: Normal user -> Forbidden
 		wFail := executeRequest("POST", "/v1/organizations", createPayload, userToken)
@@ -91,7 +94,10 @@ func TestOrganizationCRUD(t *testing.T) {
 	})
 
 	t.Run("Create Organization Validation (Empty Name)", func(t *testing.T) {
-		payload := orgHttp.CreateOrganizationRequest{Name: ""}
+		payload := orgHttp.CreateOrganizationRequest{
+			Name:    "",
+			OwnerID: admin.ID,
+		}
 		w := executeRequest("POST", "/v1/organizations", payload, adminToken)
 		assert.Equal(t, http.StatusBadRequest, w.Code, "Should return 400 for empty name")
 	})
@@ -139,22 +145,31 @@ func TestOrganizationCRUD(t *testing.T) {
 	})
 }
 
-func TestOrganizationMembers(t *testing.T) {
+func TestOrganizationManagers(t *testing.T) {
 	clearTables()
 
 	// Setup Users
-	admin := createTestUser(t, "admin@test.com", "pass", true)
-	memberUser := createTestUser(t, "member@test.com", "pass", false)
-	adminToken := generateToken(admin.ID, admin.Email)
+	// System Admin (to create org)
+	sysAdmin := createTestUser(t, "sysadmin@test.com", "pass", true)
+	// Owner (will own the org)
+	owner := createTestUser(t, "owner@test.com", "pass", false)
+	// Manager (will be added as manager)
+	managerUser := createTestUser(t, "manager@test.com", "pass", false)
+
+	sysToken := generateToken(sysAdmin.ID, sysAdmin.Email)
+	ownerToken := generateToken(owner.ID, owner.Email)
 
 	// Shared variables for sub-tests
 	var orgID string
-	var membersPath string
-	var memberDetailPath string
+	var managersPath string
+	var managerDetailPath string
 
 	t.Run("Setup Organization", func(t *testing.T) {
-		createPayload := orgHttp.CreateOrganizationRequest{Name: "Test Org"}
-		wOrg := executeRequest("POST", "/v1/organizations", createPayload, adminToken)
+		createPayload := orgHttp.CreateOrganizationRequest{
+			Name:    "Test Org",
+			OwnerID: owner.ID,
+		}
+		wOrg := executeRequest("POST", "/v1/organizations", createPayload, sysToken)
 		require.Equal(t, http.StatusCreated, wOrg.Code)
 
 		var orgResp orgHttp.OrganizationResponse
@@ -163,103 +178,80 @@ func TestOrganizationMembers(t *testing.T) {
 
 		// Initialize shared variables
 		orgID = orgResp.ID
-		membersPath = fmt.Sprintf("/v1/organizations/%s/members", orgID)
-		memberDetailPath = fmt.Sprintf("/v1/organizations/%s/members/%s", orgID, memberUser.ID)
+		managersPath = fmt.Sprintf("/v1/organizations/%s/managers", orgID)
+		managerDetailPath = fmt.Sprintf("/v1/organizations/%s/managers/%s", orgID, managerUser.ID)
 	})
 
-	t.Run("Add Member", func(t *testing.T) {
-		payload := orgHttp.AddMemberRequest{
-			UserID: memberUser.ID, // Assuming memberUser is the intended user, not orgAdmin
-			Role:   "manager",
+	t.Run("Add Manager", func(t *testing.T) {
+		payload := orgHttp.AddOrganizationManagerRequest{
+			UserID: managerUser.ID,
 		}
-		wAdd := executeRequest("POST", membersPath, payload, adminToken) // Assuming adminToken is the intended token, not sysToken
+		// Owner adds manager
+		wAdd := executeRequest("POST", managersPath, payload, ownerToken)
 		assert.Equal(t, http.StatusCreated, wAdd.Code)
 	})
 
-	t.Run("Add Duplicate Member", func(t *testing.T) {
-		addPayload := orgHttp.AddMemberRequest{
-			UserID: memberUser.ID,
-			Role:   "manager",
+	t.Run("Add Duplicate Manager", func(t *testing.T) {
+		addPayload := orgHttp.AddOrganizationManagerRequest{
+			UserID: managerUser.ID,
 		}
-		wAddDup := executeRequest("POST", membersPath, addPayload, adminToken)
-		assert.Equal(t, http.StatusConflict, wAddDup.Code, "Should return conflict for duplicate member")
+		wAddDup := executeRequest("POST", managersPath, addPayload, ownerToken)
+		assert.Equal(t, http.StatusConflict, wAddDup.Code, "Should return conflict for duplicate manager")
 	})
 
-	t.Run("List Members", func(t *testing.T) {
-		wList := executeRequest("GET", membersPath, nil, adminToken)
+	t.Run("List Managers", func(t *testing.T) {
+		wList := executeRequest("GET", managersPath, nil, ownerToken)
 		assert.Equal(t, http.StatusOK, wList.Code)
 
-		var membersResp response.PageResponse[orgHttp.MemberResponse]
-		err := json.Unmarshal(wList.Body.Bytes(), &membersResp)
+		var resp map[string][]orgHttp.MemberResponse
+		err := json.Unmarshal(wList.Body.Bytes(), &resp)
 		require.NoError(t, err)
 
-		assert.Equal(t, 1, len(membersResp.Items))
-		assert.Equal(t, memberUser.ID, membersResp.Items[0].UserID)
-		assert.Equal(t, "manager", membersResp.Items[0].Role)
+		items := resp["data"]
+		assert.Equal(t, 1, len(items))
+		assert.Equal(t, managerUser.ID, items[0].UserID)
+		// Role check removed as DTO might not carry role or it's always manager
 	})
 
-	t.Run("Update Member Role", func(t *testing.T) {
-		// Update to 'owner' should fail as API restricts it
-		updateRolePayload := orgHttp.UpdateMemberRequest{Role: "owner"}
-		wUpdate := executeRequest("PATCH", memberDetailPath, updateRolePayload, adminToken)
-		assert.Equal(t, http.StatusBadRequest, wUpdate.Code)
-	})
-
-	t.Run("Remove Member", func(t *testing.T) {
-		wRemove := executeRequest("DELETE", memberDetailPath, nil, adminToken)
+	t.Run("Remove Manager", func(t *testing.T) {
+		wRemove := executeRequest("DELETE", managerDetailPath, nil, ownerToken)
 		assert.Equal(t, http.StatusNoContent, wRemove.Code)
 	})
 
 	t.Run("Verify Removal", func(t *testing.T) {
-		wListAgain := executeRequest("GET", membersPath, nil, adminToken)
-		var membersRespAgain response.PageResponse[orgHttp.MemberResponse]
-		json.Unmarshal(wListAgain.Body.Bytes(), &membersRespAgain)
-		assert.Equal(t, 0, membersRespAgain.Total)
+		wListAgain := executeRequest("GET", managersPath, nil, ownerToken)
+		var resp map[string][]orgHttp.MemberResponse
+		json.Unmarshal(wListAgain.Body.Bytes(), &resp)
+		assert.Equal(t, 0, len(resp["data"]))
 	})
 
 	t.Run("Add Non-existent User", func(t *testing.T) {
 		fakeUserID := "00000000-0000-0000-0000-000000000000"
-		payload := orgHttp.AddMemberRequest{
+		payload := orgHttp.AddOrganizationManagerRequest{
 			UserID: fakeUserID,
-			Role:   "admin",
 		}
-		w := executeRequest("POST", membersPath, payload, adminToken)
-		// Should be 400 Bad Request or 404 Not Found depending on implementation
+		w := executeRequest("POST", managersPath, payload, ownerToken)
 		assert.Contains(t, []int{http.StatusBadRequest, http.StatusNotFound}, w.Code)
 	})
 
-	t.Run("Add Member with Invalid Role", func(t *testing.T) {
-		payload := orgHttp.AddMemberRequest{
-			UserID: memberUser.ID, // Re-use existing user but bad role
-			Role:   "super_admin", // Invalid role
-		}
-		w := executeRequest("POST", membersPath, payload, adminToken)
-		assert.Equal(t, http.StatusBadRequest, w.Code, "Should validate role enum")
-	})
-
-	t.Run("Interact with Invalid UUID in Member Routes", func(t *testing.T) {
+	t.Run("Interact with Invalid UUID in Manager Routes", func(t *testing.T) {
 		// Case 1: Invalid Organization ID
-		invalidOrgPath := "/v1/organizations/not-a-uuid/members"
+		invalidOrgPath := "/v1/organizations/not-a-uuid/managers"
 
-		// GET Members
-		wList := executeRequest("GET", invalidOrgPath, nil, adminToken)
-		assert.Equal(t, http.StatusBadRequest, wList.Code, "Should return 400 for invalid Org ID in List Members")
+		// GET Managers
+		wList := executeRequest("GET", invalidOrgPath, nil, ownerToken)
+		assert.Equal(t, http.StatusBadRequest, wList.Code)
 
-		// POST Member
-		addPayload := orgHttp.AddMemberRequest{UserID: memberUser.ID, Role: "admin"}
-		wAdd := executeRequest("POST", invalidOrgPath, addPayload, adminToken)
-		assert.Equal(t, http.StatusBadRequest, wAdd.Code, "Should return 400 for invalid Org ID in Add Member")
+		// POST Manager
+		addPayload := orgHttp.AddOrganizationManagerRequest{UserID: managerUser.ID}
+		wAdd := executeRequest("POST", invalidOrgPath, addPayload, ownerToken)
+		assert.Equal(t, http.StatusBadRequest, wAdd.Code)
 
-		// Case 2: Valid Organization ID but Invalid User ID (for PATCH/DELETE)
-		invalidUserPath := fmt.Sprintf("/v1/organizations/%s/members/not-a-uuid", orgID)
+		// Case 2: Valid Organization ID but Invalid User ID (for DELETE)
+		invalidUserPath := fmt.Sprintf("/v1/organizations/%s/managers/not-a-uuid", orgID)
 
-		// PATCH Member
-		updatePayload := orgHttp.UpdateMemberRequest{Role: "admin"}
-		wPatch := executeRequest("PATCH", invalidUserPath, updatePayload, adminToken)
-		assert.Equal(t, http.StatusBadRequest, wPatch.Code, "Should return 400 for invalid User ID in Update Member")
-
-		// DELETE Member
-		wDelete := executeRequest("DELETE", invalidUserPath, nil, adminToken)
-		assert.Equal(t, http.StatusBadRequest, wDelete.Code, "Should return 400 for invalid User ID in Remove Member")
+		// DELETE Manager
+		wDelete := executeRequest("DELETE", invalidUserPath, nil, ownerToken)
+		assert.Equal(t, http.StatusBadRequest, wDelete.Code)
 	})
 }

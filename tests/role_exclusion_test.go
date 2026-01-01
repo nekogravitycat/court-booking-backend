@@ -11,7 +11,6 @@ import (
 
 	locHttp "github.com/nekogravitycat/court-booking-backend/internal/location/http"
 	orgHttp "github.com/nekogravitycat/court-booking-backend/internal/organization/http"
-	"github.com/nekogravitycat/court-booking-backend/internal/pkg/response"
 )
 
 func TestRoleMutualExclusionAndUnifiedList(t *testing.T) {
@@ -21,21 +20,22 @@ func TestRoleMutualExclusionAndUnifiedList(t *testing.T) {
 	sysAdmin := createTestUser(t, "sysadmin@exclusion.com", "pass", true)
 	sysToken := generateToken(sysAdmin.ID, sysAdmin.Email)
 
-	// Create Org
-	createPayload := orgHttp.CreateOrganizationRequest{Name: "Exclusion Corp"}
+	// Create Actors
+	owner := createTestUser(t, "owner@exclusion.com", "pass", false)
+	orgAdmin := createTestUser(t, "orgadmin@exclusion.com", "pass", false)
+	locAdmin := createTestUser(t, "locadmin@exclusion.com", "pass", false)
+
+	// Create Org (Assign Owner directly)
+	createPayload := orgHttp.CreateOrganizationRequest{
+		Name:    "Exclusion Corp",
+		OwnerID: owner.ID,
+	}
 	w := executeRequest("POST", "/v1/organizations", createPayload, sysToken)
 	require.Equal(t, http.StatusCreated, w.Code)
 	var orgResp orgHttp.OrganizationResponse
 	json.Unmarshal(w.Body.Bytes(), &orgResp)
 	orgID := orgResp.ID
 
-	// Create Actors
-	owner := createTestUser(t, "owner@exclusion.com", "pass", false)
-	orgAdmin := createTestUser(t, "orgadmin@exclusion.com", "pass", false)
-	locAdmin := createTestUser(t, "locadmin@exclusion.com", "pass", false)
-
-	// Assign Owner directly to DB (Bypassing API restriction if any)
-	addMemberToOrg(t, orgID, owner.ID, "owner")
 	ownerToken := generateToken(owner.ID, owner.Email)
 
 	// Create Location
@@ -68,9 +68,12 @@ func TestRoleMutualExclusionAndUnifiedList(t *testing.T) {
 	// -------------------------------------------------------------------------
 	// Case 2: Try to Add Same User as Org Manager (Failure - Mutual Exclusion)
 	// -------------------------------------------------------------------------
+	// -------------------------------------------------------------------------
+	// Case 2: Try to Add Same User as Org Manager (Failure - Mutual Exclusion)
+	// -------------------------------------------------------------------------
 	t.Run("Fail Adding LocManager as OrgManager", func(t *testing.T) {
-		payload := orgHttp.AddMemberRequest{UserID: locAdmin.ID, Role: "manager"}
-		w := executeRequest("POST", fmt.Sprintf("/v1/organizations/%s/members", orgID), payload, ownerToken)
+		payload := orgHttp.AddOrganizationManagerRequest{UserID: locAdmin.ID}
+		w := executeRequest("POST", fmt.Sprintf("/v1/organizations/%s/managers", orgID), payload, ownerToken)
 		assert.Equal(t, http.StatusConflict, w.Code)
 	})
 
@@ -78,8 +81,8 @@ func TestRoleMutualExclusionAndUnifiedList(t *testing.T) {
 	// Case 3: Add Org Manager (Success)
 	// -------------------------------------------------------------------------
 	t.Run("Add Org Manager Success", func(t *testing.T) {
-		payload := orgHttp.AddMemberRequest{UserID: orgAdmin.ID, Role: "manager"}
-		w := executeRequest("POST", fmt.Sprintf("/v1/organizations/%s/members", orgID), payload, ownerToken)
+		payload := orgHttp.AddOrganizationManagerRequest{UserID: orgAdmin.ID}
+		w := executeRequest("POST", fmt.Sprintf("/v1/organizations/%s/managers", orgID), payload, ownerToken)
 		assert.Equal(t, http.StatusCreated, w.Code)
 	})
 
@@ -102,36 +105,26 @@ func TestRoleMutualExclusionAndUnifiedList(t *testing.T) {
 	})
 
 	// -------------------------------------------------------------------------
-	// Case 6: Unified ListMembers
+	// Case 6: ListManagers (Only Managers)
 	// -------------------------------------------------------------------------
-	t.Run("Unified ListMembers", func(t *testing.T) {
-		w := executeRequest("GET", fmt.Sprintf("/v1/organizations/%s/members", orgID), nil, ownerToken)
+	t.Run("ListManagers", func(t *testing.T) {
+		w := executeRequest("GET", fmt.Sprintf("/v1/organizations/%s/managers", orgID), nil, ownerToken)
 		require.Equal(t, http.StatusOK, w.Code)
 
-		var resp response.PageResponse[orgHttp.MemberResponse]
+		var resp map[string][]orgHttp.MemberResponse
 		err := json.Unmarshal(w.Body.Bytes(), &resp)
 		require.NoError(t, err)
 
-		// We expect 3 members: Owner, OrgManager, LocManager
-		assert.Equal(t, 3, resp.Total)
-
-		roleMap := make(map[string]int)
-		for _, m := range resp.Items {
-			roleMap[m.Role]++
-		}
-
-		assert.Equal(t, 1, roleMap["owner"], "Should have 1 owner")
-		assert.Equal(t, 1, roleMap["manager"], "Should have 1 manager")
-		// The role returned for location manager should be 'location_manager' as per repository query
-		assert.Equal(t, 1, roleMap["location_manager"], "Should have 1 location_manager")
+		// We expect 1 manager (orgAdmin). Owner is not in this list. LocAdmin is not in this list.
+		assert.Equal(t, 1, len(resp["data"]))
+		assert.Equal(t, orgAdmin.ID, resp["data"][0].UserID)
 	})
 	// -------------------------------------------------------------------------
-	// Case 7: Fail Adding User as Owner (API Restriction)
+	// Case 7: Fail Adding Owner as Manager (Self-check or API check)
 	// -------------------------------------------------------------------------
-	t.Run("Fail Adding Owner Role via API", func(t *testing.T) {
-		newUser := createTestUser(t, "new_owner@exclusion.com", "pass", false)
-		payload := orgHttp.AddMemberRequest{UserID: newUser.ID, Role: "owner"}
-		w := executeRequest("POST", fmt.Sprintf("/v1/organizations/%s/members", orgID), payload, ownerToken)
-		assert.Equal(t, http.StatusBadRequest, w.Code, "Should strictly disallow adding 'owner' via API")
+	t.Run("Fail Adding Owner as Manager", func(t *testing.T) {
+		payload := orgHttp.AddOrganizationManagerRequest{UserID: owner.ID}
+		w := executeRequest("POST", fmt.Sprintf("/v1/organizations/%s/managers", orgID), payload, ownerToken)
+		assert.Equal(t, http.StatusConflict, w.Code)
 	})
 }

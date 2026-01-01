@@ -78,7 +78,8 @@ func TestMain(m *testing.M) {
 func clearTables() {
 	ctx := context.Background()
 	queries := []string{
-		"TRUNCATE TABLE public.organization_permissions CASCADE",
+		"TRUNCATE TABLE public.location_managers CASCADE",
+		"TRUNCATE TABLE public.organization_managers CASCADE",
 		"TRUNCATE TABLE public.organizations CASCADE",
 		"TRUNCATE TABLE public.users CASCADE",
 	}

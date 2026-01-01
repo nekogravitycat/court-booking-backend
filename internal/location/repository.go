@@ -17,6 +17,12 @@ type Repository interface {
 	List(ctx context.Context, filter LocationFilter) ([]*Location, int, error)
 	Update(ctx context.Context, loc *Location) error
 	Delete(ctx context.Context, id string) error
+	// Manager methods
+	AddLocationManager(ctx context.Context, locationID string, userID string) error
+	RemoveLocationManager(ctx context.Context, locationID string, userID string) error
+	IsLocationManager(ctx context.Context, locationID string, userID string) (bool, error)
+	ListLocationManagers(ctx context.Context, locationID string) ([]string, error)
+	IsLocationManagerInOrg(ctx context.Context, orgID string, userID string) (bool, error)
 }
 
 type pgxRepository struct {
@@ -234,4 +240,115 @@ func (r *pgxRepository) Delete(ctx context.Context, id string) error {
 		return ErrLocNotFound
 	}
 	return nil
+}
+
+// ------------------------
+//   Location Manager methods
+// ------------------------
+
+func (r *pgxRepository) AddLocationManager(ctx context.Context, locationID string, userID string) error {
+	psql := squirrel.StatementBuilder.PlaceholderFormat(squirrel.Dollar)
+	query, args, err := psql.Insert("public.location_managers").
+		Columns("location_id", "user_id").
+		Values(locationID, userID).
+		Suffix("ON CONFLICT DO NOTHING").
+		ToSql()
+	if err != nil {
+		return fmt.Errorf("build add location admin query failed: %w", err)
+	}
+
+	_, err = r.pool.Exec(ctx, query, args...)
+	if err != nil {
+		return fmt.Errorf("AddLocationManager failed: %w", err)
+	}
+	return nil
+}
+
+func (r *pgxRepository) RemoveLocationManager(ctx context.Context, locationID string, userID string) error {
+	psql := squirrel.StatementBuilder.PlaceholderFormat(squirrel.Dollar)
+	query, args, err := psql.Delete("public.location_managers").
+		Where(squirrel.Eq{"location_id": locationID}).
+		Where(squirrel.Eq{"user_id": userID}).
+		ToSql()
+	if err != nil {
+		return fmt.Errorf("build remove location admin query failed: %w", err)
+	}
+
+	_, err = r.pool.Exec(ctx, query, args...)
+	if err != nil {
+		return fmt.Errorf("RemoveLocationManager failed: %w", err)
+	}
+	return nil
+}
+
+func (r *pgxRepository) IsLocationManager(ctx context.Context, locationID string, userID string) (bool, error) {
+	psql := squirrel.StatementBuilder.PlaceholderFormat(squirrel.Dollar)
+	query, args, err := psql.Select("1").
+		From("public.location_managers").
+		Where(squirrel.Eq{"location_id": locationID}).
+		Where(squirrel.Eq{"user_id": userID}).
+		ToSql()
+	if err != nil {
+		return false, fmt.Errorf("build check location admin query failed: %w", err)
+	}
+
+	var one int
+	err = r.pool.QueryRow(ctx, query, args...).Scan(&one)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return false, nil
+		}
+		return false, fmt.Errorf("IsLocationManager failed: %w", err)
+	}
+	return true, nil
+}
+
+func (r *pgxRepository) ListLocationManagers(ctx context.Context, locationID string) ([]string, error) {
+	psql := squirrel.StatementBuilder.PlaceholderFormat(squirrel.Dollar)
+	query, args, err := psql.Select("user_id").
+		From("public.location_managers").
+		Where(squirrel.Eq{"location_id": locationID}).
+		ToSql()
+	if err != nil {
+		return nil, fmt.Errorf("build list location admins query failed: %w", err)
+	}
+
+	rows, err := r.pool.Query(ctx, query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("ListLocationManagers failed: %w", err)
+	}
+	defer rows.Close()
+
+	var userIDs []string
+	for rows.Next() {
+		var uid string
+		if err := rows.Scan(&uid); err != nil {
+			return nil, fmt.Errorf("scan failed: %w", err)
+		}
+		userIDs = append(userIDs, uid)
+	}
+	return userIDs, nil
+}
+
+func (r *pgxRepository) IsLocationManagerInOrg(ctx context.Context, orgID string, userID string) (bool, error) {
+	psql := squirrel.StatementBuilder.PlaceholderFormat(squirrel.Dollar)
+	query, args, err := psql.Select("1").
+		From("public.location_managers la").
+		Join("public.locations l ON la.location_id = l.id").
+		Where(squirrel.Eq{"l.organization_id": orgID}).
+		Where(squirrel.Eq{"la.user_id": userID}).
+		ToSql()
+	if err != nil {
+		return false, fmt.Errorf("build check is location manager in org query failed: %w", err)
+	}
+
+	var one int
+	err = r.pool.QueryRow(ctx, query, args...).Scan(&one)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return false, nil
+		}
+		return false, fmt.Errorf("IsLocationManagerInOrg failed: %w", err)
+	}
+	return true, nil
 }

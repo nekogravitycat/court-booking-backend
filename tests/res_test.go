@@ -50,23 +50,22 @@ func TestResourceCRUDAndPermissions(t *testing.T) {
 	// ==== Setup Prerequisites (Orgs, Locs, RTs) ====
 	t.Run("Setup Prerequisites", func(t *testing.T) {
 		// Create Organization A & B
-		wOrgA := executeRequest("POST", "/v1/organizations", orgHttp.CreateOrganizationRequest{Name: "Org A"}, sysAdminToken)
+		wOrgA := executeRequest("POST", "/v1/organizations", orgHttp.CreateOrganizationRequest{Name: "Org A", OwnerID: ownerA.ID}, sysAdminToken)
 		var orgRespA orgHttp.OrganizationResponse
 		json.Unmarshal(wOrgA.Body.Bytes(), &orgRespA)
 		orgA_ID = orgRespA.ID
 
-		wOrgB := executeRequest("POST", "/v1/organizations", orgHttp.CreateOrganizationRequest{Name: "Org B"}, sysAdminToken)
+		wOrgB := executeRequest("POST", "/v1/organizations", orgHttp.CreateOrganizationRequest{Name: "Org B", OwnerID: ownerB.ID}, sysAdminToken)
 		var orgRespB orgHttp.OrganizationResponse
 		json.Unmarshal(wOrgB.Body.Bytes(), &orgRespB)
 		orgB_ID = orgRespB.ID
 
 		// Assign Roles
-		addMemberToOrg(t, orgA_ID, ownerA.ID, "owner")
-		executeRequest("POST", fmt.Sprintf("/v1/organizations/%s/members", orgA_ID),
-			orgHttp.AddMemberRequest{UserID: adminA.ID, Role: "manager"}, sysAdminToken)
-		addMemberToOrg(t, orgB_ID, ownerB.ID, "owner")
-		executeRequest("POST", fmt.Sprintf("/v1/organizations/%s/members", orgB_ID),
-			orgHttp.AddMemberRequest{UserID: adminB.ID, Role: "manager"}, sysAdminToken)
+		// Owners are set. Add Managers:
+		executeRequest("POST", fmt.Sprintf("/v1/organizations/%s/managers", orgA_ID),
+			orgHttp.AddOrganizationManagerRequest{UserID: adminA.ID}, sysAdminToken)
+		executeRequest("POST", fmt.Sprintf("/v1/organizations/%s/managers", orgB_ID),
+			orgHttp.AddOrganizationManagerRequest{UserID: adminB.ID}, sysAdminToken)
 
 		// Create Locations (Loc A in Org A, Loc B in Org B)
 		locPayloadA := locHttp.CreateLocationRequest{

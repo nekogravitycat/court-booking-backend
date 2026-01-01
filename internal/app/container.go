@@ -42,13 +42,14 @@ func NewContainer(cfg Config) *Container {
 	userRepo := user.NewPgxRepository(cfg.DBPool)
 	userService := user.NewService(userRepo, passwordHasher)
 
-	// Organization Module
-	orgRepo := organization.NewPgxRepository(cfg.DBPool)
-	orgService := organization.NewService(orgRepo, userService)
-
 	// Location Module
 	locRepo := location.NewPgxRepository(cfg.DBPool)
-	locService := location.NewService(locRepo, orgService)
+
+	// Organization Module
+	orgRepo := organization.NewPgxRepository(cfg.DBPool)
+	orgService := organization.NewService(orgRepo, userService, locRepo)
+
+	locService := location.NewService(locRepo, orgService, userService)
 
 	// ResourceType Module
 	rtRepo := resourcetype.NewPgxRepository(cfg.DBPool)

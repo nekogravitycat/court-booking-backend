@@ -59,11 +59,11 @@ func (h *Handler) checkIsOrgManager(c *gin.Context, resourceID string, userID st
 	if err != nil {
 		return false
 	}
-	member, err := h.orgService.GetOrganizationMember(ctx, loc.OrganizationID, userID)
+	allowed, err := h.orgService.CheckPermission(ctx, loc.OrganizationID, userID)
 	if err != nil {
 		return false
 	}
-	return member.Role == organization.RoleOwner || member.Role == organization.RoleOrganizationManager
+	return allowed
 }
 
 func (h *Handler) List(c *gin.Context) {

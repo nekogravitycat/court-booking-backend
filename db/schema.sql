@@ -4,18 +4,6 @@
 CREATE EXTENSION IF NOT EXISTS "pgcrypto";
 
 -- =========================================================
--- Enum: organization_role
--- Purpose: Role of a user within an organization
--- =========================================================
-DO $$
-BEGIN
-    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'organization_role') THEN
-        CREATE TYPE organization_role AS ENUM ('owner', 'manager');
-    END IF;
-END
-$$;
-
--- =========================================================
 -- Enum: booking_status
 -- Purpose: Lifecycle status for a booking
 -- =========================================================
@@ -26,18 +14,6 @@ BEGIN
     END IF;
 END
 $$;
-
--- =========================================================
--- Table: organizations
--- Purpose: Top-level entity for a company / brand / venue owner.
---          Other entities (locations, resource_types, etc.) belong to an organization.
--- =========================================================
-CREATE TABLE IF NOT EXISTS public.organizations (
-  id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),      -- Organization ID (UUID)
-  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),              -- Creation timestamp
-  name       TEXT NOT NULL,                                   -- Organization name
-  is_active  BOOLEAN NOT NULL DEFAULT true                    -- Soft delete / Suspension status
-);
 
 -- =========================================================
 -- Table: announcements
@@ -54,7 +30,7 @@ CREATE TABLE IF NOT EXISTS public.announcements (
 -- =========================================================
 -- Table: users
 -- Purpose: All application users (normal users, venue managers, system admins).
---          Organization-level roles are handled in organization_permissions.
+--          Organization-level roles are handled via organizations.owner_id and organization_managers.
 -- =========================================================
 CREATE TABLE IF NOT EXISTS public.users (
   id              UUID PRIMARY KEY DEFAULT gen_random_uuid(), -- User ID
@@ -65,6 +41,21 @@ CREATE TABLE IF NOT EXISTS public.users (
   last_login_at   TIMESTAMPTZ,                                -- Last login timestamp
   is_active       BOOLEAN NOT NULL DEFAULT true,              -- Soft-activation flag
   is_system_admin BOOLEAN NOT NULL DEFAULT false              -- Platform-level admin (God mode)
+);
+
+-- =========================================================
+-- Table: organizations
+-- Purpose: Top-level entity for a company / brand / venue owner.
+--          Other entities (locations, resource_types, etc.) belong to an organization.
+-- =========================================================
+CREATE TABLE IF NOT EXISTS public.organizations (
+  id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),      -- Organization ID (UUID)
+  owner_id   UUID NOT NULL,                                   -- Owner of the organization matches users(id)
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),              -- Creation timestamp
+  name       TEXT NOT NULL,                                   -- Organization name
+  is_active  BOOLEAN NOT NULL DEFAULT true,                   -- Soft delete / Suspension status
+  CONSTRAINT organizations_owner_id_fkey
+    FOREIGN KEY (owner_id) REFERENCES public.users(id)
 );
 
 -- =========================================================
@@ -154,44 +145,37 @@ CREATE TABLE IF NOT EXISTS public.bookings (
 );
 
 -- =========================================================
--- Table: organization_permissions
--- Purpose: Per-organization membership & role for a user.
---          Used to represent organization owner/admin.
+-- Table: organization_managers
+-- Purpose: Managers of an organization.
+--          The owner is defined in the organizations table.
 -- =========================================================
-CREATE TABLE IF NOT EXISTS public.organization_permissions (
-  id              BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY, -- Permission row ID (Internal)
+CREATE TABLE IF NOT EXISTS public.organization_managers (
   organization_id UUID NOT NULL,                                   -- Target organization
   user_id         UUID NOT NULL,                                   -- Target user
-  role            organization_role NOT NULL,                      -- Role within organization
-  CONSTRAINT organization_permissions_organization_id_fkey
-    FOREIGN KEY (organization_id) REFERENCES public.organizations(id),
-  CONSTRAINT organization_permissions_user_id_fkey
-    FOREIGN KEY (user_id) REFERENCES public.users(id)
+  PRIMARY KEY (organization_id, user_id),
+  CONSTRAINT organization_managers_organization_id_fkey
+    FOREIGN KEY (organization_id) REFERENCES public.organizations(id) ON DELETE CASCADE,
+  CONSTRAINT organization_managers_user_id_fkey
+    FOREIGN KEY (user_id) REFERENCES public.users(id) ON DELETE CASCADE
 );
 
 -- =========================================================
--- Table: location_admins
--- Purpose: Grants admin permission to specific locations.
---          Only users with 'admin' role in the parent organization
---          should be added here (enforced by app logic).
+-- Table: location_managers
+-- Purpose: Grants manager permission to specific locations.
 -- =========================================================
-CREATE TABLE IF NOT EXISTS public.location_admins (
+CREATE TABLE IF NOT EXISTS public.location_managers (
   location_id UUID NOT NULL,
   user_id     UUID NOT NULL,
   PRIMARY KEY (location_id, user_id),
-  CONSTRAINT location_admins_location_id_fkey
+  CONSTRAINT location_managers_location_id_fkey
     FOREIGN KEY (location_id) REFERENCES public.locations(id) ON DELETE CASCADE,
-  CONSTRAINT location_admins_user_id_fkey
+  CONSTRAINT location_managers_user_id_fkey
     FOREIGN KEY (user_id) REFERENCES public.users(id) ON DELETE CASCADE
 );
 
 -- =========================================================
 -- Indexes
 -- =========================================================
-
--- Unique constraint: one membership per (organization, user)
-CREATE UNIQUE INDEX IF NOT EXISTS idx_org_permissions_org_user
-  ON public.organization_permissions (organization_id, user_id);
 
 -- Index for querying locations by organization
 CREATE INDEX IF NOT EXISTS idx_locations_org

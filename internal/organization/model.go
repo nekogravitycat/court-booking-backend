@@ -20,6 +20,7 @@ var (
 // Organization represents a venue owner or brand entity.
 type Organization struct {
 	ID        string
+	OwnerID   string
 	Name      string
 	CreatedAt time.Time
 	IsActive  bool
@@ -33,15 +34,14 @@ type OrganizationFilter struct {
 	SortOrder string
 }
 
-// Define roles matching the database enum
+// Define roles
 const (
-	RoleOwner               = "owner"
 	RoleOrganizationManager = "manager"
 	RoleLocationManager     = "location_manager"
 )
 
-// Member represents a user with a specific role within an organization.
-// It joins data from organization_permissions and users tables.
+// Member represents a user with a specific relation to an organization (Manager).
+// It joins data from organization_managers and users tables.
 type Member struct {
 	UserID      string
 	Email       string

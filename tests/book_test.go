@@ -52,14 +52,14 @@ func TestBookingCRUDAndPermissions(t *testing.T) {
 	// ==== Setup Infrastructure (Org -> Loc -> RT -> Resource) ====
 	t.Run("Setup Infrastructure", func(t *testing.T) {
 		// 1. Create Org A
-		wOrg := executeRequest("POST", "/v1/organizations", orgHttp.CreateOrganizationRequest{Name: "Booking Center A"}, sysAdminToken)
+		wOrg := executeRequest("POST", "/v1/organizations", orgHttp.CreateOrganizationRequest{Name: "Booking Center A", OwnerID: orgOwnerA.ID}, sysAdminToken)
 		var orgA orgHttp.OrganizationResponse
 		json.Unmarshal(wOrg.Body.Bytes(), &orgA)
 
 		// 2. Assign Roles for Org A
-		addMemberToOrg(t, orgA.ID, orgOwnerA.ID, "owner")
-		executeRequest("POST", fmt.Sprintf("/v1/organizations/%s/members", orgA.ID),
-			orgHttp.AddMemberRequest{UserID: orgAdminA.ID, Role: "manager"}, sysAdminToken)
+		// Owner is set by Create. Add Manager:
+		executeRequest("POST", fmt.Sprintf("/v1/organizations/%s/managers", orgA.ID),
+			orgHttp.AddOrganizationManagerRequest{UserID: orgAdminA.ID}, sysAdminToken)
 
 		// 3. Create Location in Org A (Must be Owner)
 		locPayload := locHttp.CreateLocationRequest{
@@ -91,11 +91,11 @@ func TestBookingCRUDAndPermissions(t *testing.T) {
 		resourceID = resA.ID
 
 		// 6. Create Org B (For isolation tests)
-		wOrgB := executeRequest("POST", "/v1/organizations", orgHttp.CreateOrganizationRequest{Name: "Center B"}, sysAdminToken)
+		wOrgB := executeRequest("POST", "/v1/organizations", orgHttp.CreateOrganizationRequest{Name: "Center B", OwnerID: sysAdmin.ID}, sysAdminToken)
 		var orgB orgHttp.OrganizationResponse
 		json.Unmarshal(wOrgB.Body.Bytes(), &orgB)
-		executeRequest("POST", fmt.Sprintf("/v1/organizations/%s/members", orgB.ID),
-			orgHttp.AddMemberRequest{UserID: orgAdminB.ID, Role: "manager"}, sysAdminToken)
+		executeRequest("POST", fmt.Sprintf("/v1/organizations/%s/managers", orgB.ID),
+			orgHttp.AddOrganizationManagerRequest{UserID: orgAdminB.ID}, sysAdminToken)
 	})
 
 	// ==== Create Booking Tests (Input Validation & Business Logic) ====

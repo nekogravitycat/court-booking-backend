@@ -45,9 +45,9 @@ func (r *pgxUserRepository) GetByEmail(ctx context.Context, email string) (*User
 		`COALESCE(
 				(
 					SELECT json_agg(json_build_object('id', o.id, 'name', o.name))
-					FROM public.organization_permissions op
-					JOIN public.organizations o ON op.organization_id = o.id
-					WHERE op.user_id = u.id AND o.is_active = true
+					FROM public.organization_managers om
+					JOIN public.organizations o ON om.organization_id = o.id
+					WHERE om.user_id = u.id AND o.is_active = true
 				),
 				'[]'::json
 			) AS organizations`,
@@ -99,9 +99,9 @@ func (r *pgxUserRepository) GetByID(ctx context.Context, id string) (*User, erro
 		`COALESCE(
 				(
 					SELECT json_agg(json_build_object('id', o.id, 'name', o.name))
-					FROM public.organization_permissions op
-					JOIN public.organizations o ON op.organization_id = o.id
-					WHERE op.user_id = u.id AND o.is_active = true
+					FROM public.organization_managers om
+					JOIN public.organizations o ON om.organization_id = o.id
+					WHERE om.user_id = u.id AND o.is_active = true
 				),
 				'[]'::json
 			) AS organizations`,
@@ -198,9 +198,9 @@ func (r *pgxUserRepository) List(ctx context.Context, filter UserFilter) ([]*Use
 		`COALESCE(
 				(
 					SELECT json_agg(json_build_object('id', o.id, 'name', o.name))
-					FROM public.organization_permissions op
-					JOIN public.organizations o ON op.organization_id = o.id
-					WHERE op.user_id = u.id AND o.is_active = true
+					FROM public.organization_managers om
+					JOIN public.organizations o ON om.organization_id = o.id
+					WHERE om.user_id = u.id AND o.is_active = true
 				),
 				'[]'::json
 			) AS organizations`,

@@ -5,7 +5,11 @@ import (
 	"strings"
 	"time"
 
+	"errors"
+
 	"github.com/nekogravitycat/court-booking-backend/internal/organization"
+	"github.com/nekogravitycat/court-booking-backend/internal/pkg/apperror"
+	"github.com/nekogravitycat/court-booking-backend/internal/user"
 )
 
 // CreateLocationRequest carries data to create a location.
@@ -45,15 +49,22 @@ type Service interface {
 	List(ctx context.Context, filter LocationFilter) ([]*Location, int, error)
 	Update(ctx context.Context, id string, req UpdateLocationRequest) (*Location, error)
 	Delete(ctx context.Context, id string) error
+	// Location Manager management
+	AddLocationManager(ctx context.Context, locationID string, userID string) error
+	RemoveLocationManager(ctx context.Context, locationID string, userID string) error
+	ListLocationManagers(ctx context.Context, locationID string) ([]string, error)
+	// Permission methods
+	CheckLocationPermission(ctx context.Context, orgID string, locationID string, userID string) (bool, error)
 }
 
 type service struct {
-	repo       Repository
-	orgService organization.Service
+	repo        Repository
+	orgService  organization.Service
+	userService user.Service
 }
 
-func NewService(repo Repository, orgService organization.Service) Service {
-	return &service{repo: repo, orgService: orgService}
+func NewService(repo Repository, orgService organization.Service, userService user.Service) Service {
+	return &service{repo: repo, orgService: orgService, userService: userService}
 }
 
 // validateLocation checks the logical rules for a Location struct.
@@ -202,4 +213,93 @@ func (s *service) Delete(ctx context.Context, id string) error {
 		return err
 	}
 	return s.repo.Delete(ctx, id)
+}
+
+// ------------------------
+//   Location Manager methods
+// ------------------------
+
+// AddLocationManager assigns a manager to a location
+func (s *service) AddLocationManager(ctx context.Context, locationID string, userID string) error {
+	// 1. Get Location & OrgID
+	loc, err := s.repo.GetByID(ctx, locationID)
+	if err != nil {
+		return err
+	}
+
+	// 2. Verify User Exists
+	if _, err := s.userService.GetByID(ctx, userID); err != nil {
+		if errors.Is(err, user.ErrNotFound) {
+			return ErrUserNotFound
+		}
+		return err
+	}
+
+	// 3. Mutual Exclusion Check: User cannot be Org Admin/Owner and Location Admin
+	isOrgStaff, err := s.orgService.CheckPermission(ctx, loc.OrganizationID, userID)
+	if err != nil {
+		return err
+	}
+	if isOrgStaff {
+		return apperror.New(409, "user is already an organization manager or owner; cannot add as location manager")
+	}
+
+	return s.repo.AddLocationManager(ctx, locationID, userID)
+}
+
+// RemoveLocationManager removes a manager from a location
+func (s *service) RemoveLocationManager(ctx context.Context, locationID string, userID string) error {
+	// Verify location exists
+	if _, err := s.repo.GetByID(ctx, locationID); err != nil {
+		return err
+	}
+	return s.repo.RemoveLocationManager(ctx, locationID, userID)
+}
+
+// ListLocationManagers lists users who are managers of a location
+func (s *service) ListLocationManagers(ctx context.Context, locationID string) ([]string, error) {
+	// Verify location exists
+	if _, err := s.repo.GetByID(ctx, locationID); err != nil {
+		return nil, err
+	}
+	return s.repo.ListLocationManagers(ctx, locationID)
+}
+
+// CheckLocationPermission verifies if the user has permission for a specific location.
+// Owner/OrgManager: Has access to all locations.
+// LocationManager: Has access only if assigned to the location.
+func (s *service) CheckLocationPermission(ctx context.Context, orgID string, locationID string, userID string) (bool, error) {
+	if userID == "" {
+		return false, nil
+	}
+
+	// 1. Check System Admin
+	u, err := s.userService.GetByID(ctx, userID)
+	if err != nil {
+		return false, err
+	}
+	if u.IsSystemAdmin {
+		return true, nil
+	}
+
+	// 2. Check Org Level Permission (Owner or Admin)
+	// Owners and Org Admins have full access to all locations.
+	isOrgStaff, err := s.orgService.CheckPermission(ctx, orgID, userID)
+	if err != nil {
+		return false, err
+	}
+	if isOrgStaff {
+		return true, nil
+	}
+
+	// 3. Check Location Manager
+	// If not Org Staff, check if assigned specifically to this location.
+	if locationID == "" {
+		return false, nil
+	}
+	isAdmin, err := s.repo.IsLocationManager(ctx, locationID, userID)
+	if err != nil {
+		return false, err
+	}
+	return isAdmin, nil
 }

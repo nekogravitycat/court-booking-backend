@@ -176,7 +176,7 @@ func (h *LocationHandler) Update(c *gin.Context) {
 	}
 
 	// Permission check: The user must be a Manager (assigned to this location) or Owner.
-	allowed, err := h.orgService.CheckLocationPermission(c.Request.Context(), existingLoc.OrganizationID, existingLoc.ID, auth.GetUserID(c))
+	allowed, err := h.service.CheckLocationPermission(c.Request.Context(), existingLoc.OrganizationID, existingLoc.ID, auth.GetUserID(c))
 	if err != nil {
 		response.Error(c, err)
 		return
@@ -288,7 +288,7 @@ func (h *LocationHandler) AddManager(c *gin.Context) {
 		return
 	}
 
-	if err := h.orgService.AddLocationManager(c.Request.Context(), uri.ID, body.UserID); err != nil {
+	if err := h.service.AddLocationManager(c.Request.Context(), uri.ID, body.UserID); err != nil {
 		response.Error(c, err)
 		return
 	}
@@ -326,7 +326,7 @@ func (h *LocationHandler) RemoveManager(c *gin.Context) {
 		return
 	}
 
-	if err := h.orgService.RemoveLocationManager(c.Request.Context(), uri.ID, uri.UserID); err != nil {
+	if err := h.service.RemoveLocationManager(c.Request.Context(), uri.ID, uri.UserID); err != nil {
 		response.Error(c, err)
 		return
 	}

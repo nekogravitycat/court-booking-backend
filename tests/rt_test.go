@@ -46,7 +46,7 @@ func TestResourceTypeCRUDAndPermissions(t *testing.T) {
 
 	t.Run("Setup Context: Create Organizations and Assign Roles", func(t *testing.T) {
 		// 1. Create Organization A
-		createPayload := orgHttp.CreateOrganizationRequest{Name: "Sports Center A"}
+		createPayload := orgHttp.CreateOrganizationRequest{Name: "Sports Center A", OwnerID: ownerA.ID}
 		w := executeRequest("POST", "/v1/organizations", createPayload, sysAdminToken)
 		require.Equal(t, http.StatusCreated, w.Code, "Should create organization A successfully")
 
@@ -55,12 +55,14 @@ func TestResourceTypeCRUDAndPermissions(t *testing.T) {
 		orgA_ID = orgResp.ID
 
 		// Assign Roles for Org A
-		addMemberToOrg(t, orgA_ID, ownerA.ID, "owner")
-		executeRequest("POST", fmt.Sprintf("/v1/organizations/%s/members", orgA_ID),
-			orgHttp.AddMemberRequest{UserID: adminA.ID, Role: "manager"}, sysAdminToken)
+		// Owner is set. Add Manager:
+		executeRequest("POST", fmt.Sprintf("/v1/organizations/%s/managers", orgA_ID),
+			orgHttp.AddOrganizationManagerRequest{UserID: adminA.ID}, sysAdminToken)
 
 		// 2. Create Organization B (Target for cross-org attack test)
-		createPayloadB := orgHttp.CreateOrganizationRequest{Name: "Sports Center B"}
+		// We need an owner for Org B. Let's create one or reuse sysAdmin as owner for simplicity?
+		// To match previous test logic where adminB was manager, we can set sysAdmin as owner.
+		createPayloadB := orgHttp.CreateOrganizationRequest{Name: "Sports Center B", OwnerID: sysAdmin.ID}
 		wB := executeRequest("POST", "/v1/organizations", createPayloadB, sysAdminToken)
 		require.Equal(t, http.StatusCreated, wB.Code, "Should create organization B successfully")
 
@@ -69,8 +71,8 @@ func TestResourceTypeCRUDAndPermissions(t *testing.T) {
 		orgB_ID = orgRespB.ID
 
 		// Assign Admin Role for Org B
-		executeRequest("POST", fmt.Sprintf("/v1/organizations/%s/members", orgB_ID),
-			orgHttp.AddMemberRequest{UserID: adminB.ID, Role: "manager"}, sysAdminToken)
+		executeRequest("POST", fmt.Sprintf("/v1/organizations/%s/managers", orgB_ID),
+			orgHttp.AddOrganizationManagerRequest{UserID: adminB.ID}, sysAdminToken)
 	})
 
 	t.Run("Create Resource Type: Input Validation (Bad Request)", func(t *testing.T) {

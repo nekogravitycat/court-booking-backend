@@ -11,6 +11,7 @@ import (
 type OrganizationResponse struct {
 	ID        string    `json:"id"`
 	Name      string    `json:"name"`
+	OwnerID   string    `json:"owner_id"`
 	CreatedAt time.Time `json:"created_at"`
 }
 
@@ -44,7 +45,8 @@ func (r *ListOrganizationsRequest) Validate() error {
 
 // CreateOrganizationRequest is the payload for POST /organizations.
 type CreateOrganizationRequest struct {
-	Name string `json:"name" binding:"required,min=1,max=100"`
+	Name    string `json:"name" binding:"required,min=1,max=100"`
+	OwnerID string `json:"owner_id" binding:"required,uuid"`
 }
 
 // Validate performs custom validation for CreateOrganizationRequest.
@@ -67,6 +69,7 @@ func NewOrganizationResponse(o *organization.Organization) OrganizationResponse 
 	return OrganizationResponse{
 		ID:        o.ID,
 		Name:      o.Name,
+		OwnerID:   o.OwnerID,
 		CreatedAt: o.CreatedAt,
 	}
 }
@@ -90,24 +93,13 @@ func (r *ListMembersRequest) Validate() error {
 	return nil
 }
 
-// AddMemberRequest defines payload for adding a member.
-type AddMemberRequest struct {
+// AddOrganizationManagerRequest defines payload for adding a manager.
+type AddOrganizationManagerRequest struct {
 	UserID string `json:"user_id" binding:"required,uuid"`
-	Role   string `json:"role" binding:"required,oneof=manager"`
 }
 
-// Validate performs custom validation for AddMemberRequest.
-func (r *AddMemberRequest) Validate() error {
-	return nil
-}
-
-// UpdateMemberRequest defines payload for updating a member role.
-type UpdateMemberRequest struct {
-	Role string `json:"role" binding:"required,oneof=manager"`
-}
-
-// Validate performs custom validation for UpdateMemberRequest.
-func (r *UpdateMemberRequest) Validate() error {
+// Validate performs custom validation for AddOrganizationManagerRequest.
+func (r *AddOrganizationManagerRequest) Validate() error {
 	return nil
 }
 

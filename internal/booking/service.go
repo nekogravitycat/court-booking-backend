@@ -59,14 +59,8 @@ func (s *service) isOrgManager(ctx context.Context, resourceID string, userID st
 	if err != nil {
 		return false, err
 	}
-	// 3. Get Member Role in Organization
-	member, err := s.orgService.GetOrganizationMember(ctx, loc.OrganizationID, userID)
-	if err != nil {
-		// Not a member or error
-		return false, nil // Treat error as "not a manager" for permission check
-	}
-
-	return member.Role == organization.RoleOwner || member.Role == organization.RoleOrganizationManager, nil
+	// 3. Check Permission using Org Service
+	return s.orgService.CheckPermission(ctx, loc.OrganizationID, userID)
 }
 
 func (s *service) Create(ctx context.Context, req CreateRequest) (*Booking, error) {

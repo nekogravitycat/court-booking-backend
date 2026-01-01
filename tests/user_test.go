@@ -192,17 +192,18 @@ func TestUserOrganizationResponse(t *testing.T) {
 	lonelyToken := generateToken(lonelyUser.ID, lonelyUser.Email)
 
 	// Setup: Create organizations directly in DB
-	orgA_ID := createTestOrganization(t, "Badminton Club A", true)
-	orgB_ID := createTestOrganization(t, "Tennis Club B", true)
-	orgInactive_ID := createTestOrganization(t, "Closed Club", false) // Inactive organization
+	// We use adminUser as the owner for these test organizations
+	orgA_ID := createTestOrganization(t, adminUser.ID, "Badminton Club A", true)
+	orgB_ID := createTestOrganization(t, adminUser.ID, "Tennis Club B", true)
+	orgInactive_ID := createTestOrganization(t, adminUser.ID, "Closed Club", false) // Inactive organization
 
 	// Setup: Add targetUser to organizations
 	// Add to active Org A
-	addMemberToOrg(t, orgA_ID, targetUser.ID, "manager")
+	addMemberToOrg(t, orgA_ID, targetUser.ID)
 	// Add to active Org B
-	addMemberToOrg(t, orgB_ID, targetUser.ID, "manager")
+	addMemberToOrg(t, orgB_ID, targetUser.ID)
 	// Add to inactive Org (should be filtered out)
-	addMemberToOrg(t, orgInactive_ID, targetUser.ID, "manager")
+	addMemberToOrg(t, orgInactive_ID, targetUser.ID)
 
 	// Test Case: Check /me endpoint (should include multiple organizations and filter inactive ones)
 	t.Run("Get Me Includes Active Organizations Only", func(t *testing.T) {
@@ -382,19 +383,19 @@ func TestDeleteUser(t *testing.T) {
 
 // createTestOrganization inserts a dummy organization directly into the database.
 // Note: Ensure 'dbPool' or your global test database variable is accessible here.
-func createTestOrganization(t *testing.T, name string, isActive bool) string {
+func createTestOrganization(t *testing.T, ownerID string, name string, isActive bool) string {
 	var id string
-	query := `INSERT INTO organizations (name, is_active) VALUES ($1, $2) RETURNING id`
+	query := `INSERT INTO organizations (owner_id, name, is_active) VALUES ($1, $2, $3) RETURNING id`
 
-	err := testPool.QueryRow(context.Background(), query, name, isActive).Scan(&id)
+	err := testPool.QueryRow(context.Background(), query, ownerID, name, isActive).Scan(&id)
 	require.NoError(t, err, "Failed to create test organization")
 	return id
 }
 
-// addMemberToOrg inserts a record into organization_permissions directly.
-func addMemberToOrg(t *testing.T, orgID, userID, role string) {
-	query := `INSERT INTO organization_permissions (organization_id, user_id, role) VALUES ($1, $2, $3)`
+// addMemberToOrg inserts a record into organization_managers directly.
+func addMemberToOrg(t *testing.T, orgID, userID string) {
+	query := `INSERT INTO organization_managers (organization_id, user_id) VALUES ($1, $2)`
 
-	_, err := testPool.Exec(context.Background(), query, orgID, userID, role)
+	_, err := testPool.Exec(context.Background(), query, orgID, userID)
 	require.NoError(t, err, "Failed to add member to org")
 }

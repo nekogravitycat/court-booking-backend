@@ -27,16 +27,18 @@ func TestLocationPermissions(t *testing.T) {
 	admin1Token := generateToken(admin1.ID, admin1.Email)
 	admin2Token := generateToken(admin2.ID, admin2.Email)
 
-	// Create Organization (System Admin)
-	createOrg := orgHttp.CreateOrganizationRequest{Name: "Loc Permission Org"}
+	// Create Organization (System Admin creates, assigns owner directly)
+	createOrg := orgHttp.CreateOrganizationRequest{
+		Name:    "Loc Permission Org",
+		OwnerID: owner.ID,
+	}
 	wOrg := executeRequest("POST", "/v1/organizations", createOrg, sysToken)
 	require.Equal(t, http.StatusCreated, wOrg.Code)
 	var org orgHttp.OrganizationResponse
 	json.Unmarshal(wOrg.Body.Bytes(), &org)
 	orgID := org.ID
 
-	// Assign Owner (System Admin assigns owner)
-	addMemberToOrg(t, orgID, owner.ID, "owner")
+	// Owner is now set by Create, so we don't need addMemberToOrg(owner)
 
 	// Add admins to organization
 
