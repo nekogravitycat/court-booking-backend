@@ -60,7 +60,7 @@ func (s *service) isOrgManager(ctx context.Context, resourceID string, userID st
 		return false, err
 	}
 	// 3. Get Member Role in Organization
-	member, err := s.orgService.GetMember(ctx, loc.OrganizationID, userID)
+	member, err := s.orgService.GetOrganizationMember(ctx, loc.OrganizationID, userID)
 	if err != nil {
 		// Not a member or error
 		return false, nil // Treat error as "not a manager" for permission check

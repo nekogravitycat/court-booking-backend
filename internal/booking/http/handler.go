@@ -59,7 +59,7 @@ func (h *Handler) checkIsOrgManager(c *gin.Context, resourceID string, userID st
 	if err != nil {
 		return false
 	}
-	member, err := h.orgService.GetMember(ctx, loc.OrganizationID, userID)
+	member, err := h.orgService.GetOrganizationMember(ctx, loc.OrganizationID, userID)
 	if err != nil {
 		return false
 	}

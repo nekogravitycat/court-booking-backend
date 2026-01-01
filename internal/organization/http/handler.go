@@ -203,7 +203,7 @@ func (h *OrganizationHandler) ListMembers(c *gin.Context) {
 		return
 	}
 
-	members, total, err := h.service.ListMembers(c.Request.Context(), uri.ID, filter)
+	members, total, err := h.service.ListOrganizationMembers(c.Request.Context(), uri.ID, filter)
 	if err != nil {
 		response.Error(c, err)
 		return
@@ -260,7 +260,7 @@ func (h *OrganizationHandler) AddMember(c *gin.Context) {
 		return
 	}
 
-	if err := h.service.AddMember(c.Request.Context(), uri.ID, req); err != nil {
+	if err := h.service.AddOrganizationManager(c.Request.Context(), uri.ID, req.UserID); err != nil {
 		response.Error(c, err)
 		return
 	}
@@ -303,7 +303,7 @@ func (h *OrganizationHandler) UpdateMemberRole(c *gin.Context) {
 		return
 	}
 
-	if err := h.service.UpdateMemberRole(c.Request.Context(), uri.ID, uri.UserID, req); err != nil {
+	if err := h.service.UpdateOrganizationMemberRole(c.Request.Context(), uri.ID, uri.UserID, req); err != nil {
 		response.Error(c, err)
 		return
 	}
@@ -331,7 +331,7 @@ func (h *OrganizationHandler) RemoveMember(c *gin.Context) {
 		return
 	}
 
-	if err := h.service.RemoveMember(c.Request.Context(), req.ID, req.UserID); err != nil {
+	if err := h.service.RemoveOrganizationMember(c.Request.Context(), req.ID, req.UserID); err != nil {
 		response.Error(c, err)
 		return
 	}

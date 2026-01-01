@@ -35,11 +35,11 @@ type Service interface {
 	Update(ctx context.Context, id string, req UpdateOrganizationRequest) (*Organization, error)
 	Delete(ctx context.Context, id string) error
 	// Member methods
-	GetMember(ctx context.Context, orgID string, userID string) (*Member, error)
-	AddMember(ctx context.Context, orgID string, req AddMemberRequest) error
-	RemoveMember(ctx context.Context, orgID string, userID string) error
-	UpdateMemberRole(ctx context.Context, orgID string, userID string, req UpdateMemberRequest) error
-	ListMembers(ctx context.Context, orgID string, filter MemberFilter) ([]*Member, int, error)
+	GetOrganizationMember(ctx context.Context, orgID string, userID string) (*Member, error)
+	AddOrganizationManager(ctx context.Context, orgID string, userID string) error
+	RemoveOrganizationMember(ctx context.Context, orgID string, userID string) error
+	UpdateOrganizationMemberRole(ctx context.Context, orgID string, userID string, req UpdateMemberRequest) error
+	ListOrganizationMembers(ctx context.Context, orgID string, filter MemberFilter) ([]*Member, int, error)
 	// Permission methods
 	CheckPermission(ctx context.Context, orgID string, userID string) (bool, error)
 	CheckLocationPermission(ctx context.Context, orgID string, locationID string, userID string) (bool, error)
@@ -136,19 +136,12 @@ func (s *service) Delete(ctx context.Context, id string) error {
 //     Member methods
 // ------------------------
 
-func (s *service) GetMember(ctx context.Context, orgID string, userID string) (*Member, error) {
+func (s *service) GetOrganizationMember(ctx context.Context, orgID string, userID string) (*Member, error) {
 	return s.repo.GetMember(ctx, orgID, userID)
 }
 
-func (s *service) AddMember(ctx context.Context, orgID string, req AddMemberRequest) error {
-	if req.UserID == "" {
-		return ErrUserIDRequired
-	}
-
-	req.Role = strings.ToLower(strings.TrimSpace(req.Role))
-	if req.Role != RoleOrganizationManager {
-		return apperror.New(400, "invalid role: only 'manager' can be assigned via this endpoint")
-	}
+func (s *service) AddOrganizationManager(ctx context.Context, orgID string, userID string) error {
+	role := RoleOrganizationManager
 
 	// Verify organization exists
 	if _, err := s.repo.GetByID(ctx, orgID); err != nil {
@@ -156,7 +149,7 @@ func (s *service) AddMember(ctx context.Context, orgID string, req AddMemberRequ
 	}
 
 	// Verify user exists
-	if _, err := s.userService.GetByID(ctx, req.UserID); err != nil {
+	if _, err := s.userService.GetByID(ctx, userID); err != nil {
 		switch {
 		case errors.Is(err, user.ErrNotFound):
 			return ErrUserNotFound
@@ -165,19 +158,19 @@ func (s *service) AddMember(ctx context.Context, orgID string, req AddMemberRequ
 		}
 	}
 
-	// Mutual Exclusion Check: User cannot be both Org Admin/Owner and Location Admin
-	isLoAdmin, err := s.repo.IsLocationManagerInOrg(ctx, orgID, req.UserID)
+	// Mutual Exclusion Check: User cannot be both Org Manager/Owner and Location Manager
+	isLoMgr, err := s.repo.IsLocationManagerInOrg(ctx, orgID, userID)
 	if err != nil {
 		return err
 	}
-	if isLoAdmin {
+	if isLoMgr {
 		return apperror.New(409, "user is already a location manager in this organization; remove location manager privileges first")
 	}
 
-	return s.repo.AddMember(ctx, orgID, req.UserID, req.Role)
+	return s.repo.AddMember(ctx, orgID, userID, role)
 }
 
-func (s *service) RemoveMember(ctx context.Context, orgID string, userID string) error {
+func (s *service) RemoveOrganizationMember(ctx context.Context, orgID string, userID string) error {
 	// Verify organization exists
 	if _, err := s.repo.GetByID(ctx, orgID); err != nil {
 		return err
@@ -185,7 +178,7 @@ func (s *service) RemoveMember(ctx context.Context, orgID string, userID string)
 	return s.repo.RemoveMember(ctx, orgID, userID)
 }
 
-func (s *service) UpdateMemberRole(ctx context.Context, orgID string, userID string, req UpdateMemberRequest) error {
+func (s *service) UpdateOrganizationMemberRole(ctx context.Context, orgID string, userID string, req UpdateMemberRequest) error {
 	req.Role = strings.ToLower(strings.TrimSpace(req.Role))
 	if req.Role != RoleOrganizationManager {
 		return apperror.New(400, "invalid role: only 'manager' can be assigned via this endpoint")
@@ -199,7 +192,7 @@ func (s *service) UpdateMemberRole(ctx context.Context, orgID string, userID str
 	return s.repo.UpdateMemberRole(ctx, orgID, userID, req.Role)
 }
 
-func (s *service) ListMembers(ctx context.Context, orgID string, filter MemberFilter) ([]*Member, int, error) {
+func (s *service) ListOrganizationMembers(ctx context.Context, orgID string, filter MemberFilter) ([]*Member, int, error) {
 	// Verify organization exists
 	if _, err := s.repo.GetByID(ctx, orgID); err != nil {
 		return nil, 0, err
