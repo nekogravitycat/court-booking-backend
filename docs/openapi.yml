@@ -23,8 +23,6 @@ tags:
     description: 使用者管理 (System Admin Only)
   - name: Organizations
     description: 組織/場館主管理
-  - name: Members
-    description: 組織成員權限管理
   - name: Locations
     description: 實體場館據點
   - name: ResourceTypes
@@ -90,16 +88,13 @@ components:
       $ref: "./components/schemas/organization.yml#/CreateOrganizationRequest"
 
     # --------------------------
-    # Member Models
+    # Manager Models
     # --------------------------
     MemberResponse:
       $ref: "./components/schemas/member.yml#/MemberResponse"
 
-    AddMemberRequest:
-      $ref: "./components/schemas/member.yml#/AddMemberRequest"
-
-    UpdateMemberRequest:
-      $ref: "./components/schemas/member.yml#/UpdateMemberRequest"
+    AddOrganizationManagerRequest:
+      $ref: "./components/schemas/member.yml#/AddOrganizationManagerRequest"
 
     # --------------------------
     # Location Models
@@ -193,13 +188,13 @@ paths:
     $ref: "./paths/organizations.yml#/organizationDetail"
 
   # ============================
-  # Members
+  # Managers
   # ============================
-  /organizations/{id}/members:
-    $ref: "./paths/members.yml#/listMembers"
+  /organizations/{id}/managers:
+    $ref: "./paths/managers.yml#/listManagers"
 
-  /organizations/{id}/members/{user_id}:
-    $ref: "./paths/members.yml#/memberDetail"
+  /organizations/{id}/managers/{user_id}:
+    $ref: "./paths/managers.yml#/removeManager"
 
   # ============================
   # Locations
@@ -210,10 +205,10 @@ paths:
   /locations/{id}:
     $ref: "./paths/locations.yml#/locationDetail"
 
-  /locations/{id}/admins:
+  /locations/{id}/managers:
     $ref: "./paths/locations.yml#/addLocationManager"
 
-  /locations/{id}/admins/{user_id}:
+  /locations/{id}/managers/{user_id}:
     $ref: "./paths/locations.yml#/removeLocationManager"
 
   # ============================

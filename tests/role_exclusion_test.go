@@ -18,7 +18,7 @@ func TestRoleMutualExclusionAndUnifiedList(t *testing.T) {
 
 	// Setup System Admin
 	sysAdmin := createTestUser(t, "sysadmin@exclusion.com", "pass", true)
-	sysToken := generateToken(sysAdmin.ID, sysAdmin.Email)
+	sysToken := generateToken(sysAdmin.ID)
 
 	// Create Actors
 	owner := createTestUser(t, "owner@exclusion.com", "pass", false)
@@ -36,7 +36,7 @@ func TestRoleMutualExclusionAndUnifiedList(t *testing.T) {
 	json.Unmarshal(w.Body.Bytes(), &orgResp)
 	orgID := orgResp.ID
 
-	ownerToken := generateToken(owner.ID, owner.Email)
+	ownerToken := generateToken(owner.ID)
 
 	// Create Location
 	locPayload := locHttp.CreateLocationRequest{
@@ -61,7 +61,7 @@ func TestRoleMutualExclusionAndUnifiedList(t *testing.T) {
 	// -------------------------------------------------------------------------
 	t.Run("Add Location Manager Success", func(t *testing.T) {
 		payload := map[string]string{"user_id": locAdmin.ID}
-		w := executeRequest("POST", fmt.Sprintf("/v1/locations/%s/admins", locID), payload, ownerToken)
+		w := executeRequest("POST", fmt.Sprintf("/v1/locations/%s/managers", locID), payload, ownerToken)
 		assert.Equal(t, http.StatusCreated, w.Code)
 	})
 
@@ -91,7 +91,7 @@ func TestRoleMutualExclusionAndUnifiedList(t *testing.T) {
 	// -------------------------------------------------------------------------
 	t.Run("Fail Adding OrgManager as LocManager", func(t *testing.T) {
 		payload := map[string]string{"user_id": orgAdmin.ID}
-		w := executeRequest("POST", fmt.Sprintf("/v1/locations/%s/admins", locID), payload, ownerToken)
+		w := executeRequest("POST", fmt.Sprintf("/v1/locations/%s/managers", locID), payload, ownerToken)
 		assert.Equal(t, http.StatusConflict, w.Code)
 	})
 
@@ -100,7 +100,7 @@ func TestRoleMutualExclusionAndUnifiedList(t *testing.T) {
 	// -------------------------------------------------------------------------
 	t.Run("Fail Adding Owner as LocManager", func(t *testing.T) {
 		payload := map[string]string{"user_id": owner.ID}
-		w := executeRequest("POST", fmt.Sprintf("/v1/locations/%s/admins", locID), payload, ownerToken)
+		w := executeRequest("POST", fmt.Sprintf("/v1/locations/%s/managers", locID), payload, ownerToken)
 		assert.Equal(t, http.StatusConflict, w.Code)
 	})
 

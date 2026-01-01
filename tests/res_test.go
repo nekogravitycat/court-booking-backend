@@ -34,12 +34,12 @@ func TestResourceCRUDAndPermissions(t *testing.T) {
 	stranger := createTestUser(t, "stranger@res.com", "pass", false)
 
 	// Generate Tokens
-	sysAdminToken := generateToken(sysAdmin.ID, sysAdmin.Email)
-	ownerAToken := generateToken(ownerA.ID, ownerA.Email)
-	adminAToken := generateToken(adminA.ID, adminA.Email)
-	ownerBToken := generateToken(ownerB.ID, ownerB.Email)
-	adminBToken := generateToken(adminB.ID, adminB.Email)
-	strangerToken := generateToken(stranger.ID, stranger.Email)
+	sysAdminToken := generateToken(sysAdmin.ID)
+	ownerAToken := generateToken(ownerA.ID)
+	adminAToken := generateToken(adminA.ID)
+	ownerBToken := generateToken(ownerB.ID)
+	adminBToken := generateToken(adminB.ID)
+	strangerToken := generateToken(stranger.ID)
 
 	// Shared ID variables
 	var orgA_ID, orgB_ID string

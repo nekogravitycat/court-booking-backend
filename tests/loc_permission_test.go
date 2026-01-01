@@ -22,10 +22,10 @@ func TestLocationPermissions(t *testing.T) {
 	admin1 := createTestUser(t, "admin1@loc.com", "pass", false)
 	admin2 := createTestUser(t, "admin2@loc.com", "pass", false)
 
-	sysToken := generateToken(sysAdmin.ID, sysAdmin.Email)
-	ownerToken := generateToken(owner.ID, owner.Email)
-	admin1Token := generateToken(admin1.ID, admin1.Email)
-	admin2Token := generateToken(admin2.ID, admin2.Email)
+	sysToken := generateToken(sysAdmin.ID)
+	ownerToken := generateToken(owner.ID)
+	admin1Token := generateToken(admin1.ID)
+	admin2Token := generateToken(admin2.ID)
 
 	// Create Organization (System Admin creates, assigns owner directly)
 	createOrg := orgHttp.CreateOrganizationRequest{
@@ -40,7 +40,7 @@ func TestLocationPermissions(t *testing.T) {
 
 	// Owner is now set by Create, so we don't need addMemberToOrg(owner)
 
-	// Add admins to organization
+	// Add managers to organization
 
 	// Create Location (Only Owner should be able to do this)
 	createLoc := locHttp.CreateLocationRequest{
@@ -91,7 +91,7 @@ func TestLocationPermissions(t *testing.T) {
 
 	t.Run("Assign Admin1 to Location", func(t *testing.T) {
 		assignReq := map[string]string{"user_id": admin1.ID}
-		path := fmt.Sprintf("/v1/locations/%s/admins", locID)
+		path := fmt.Sprintf("/v1/locations/%s/managers", locID)
 		w := executeRequest("POST", path, assignReq, ownerToken)
 		require.Equal(t, http.StatusCreated, w.Code)
 	})
@@ -108,7 +108,7 @@ func TestLocationPermissions(t *testing.T) {
 		// Did I restrict Delete to Owner?
 		// In handler.go: Delete uses CheckLocationPermission.
 		// So assigned Admin CAN delete location.
-		// Is this desired? "Owner still have permission to anything... admins however, now need to be assigned to a location in order to grant the permission to it." -> Permission to "it". Usually implies full control over "it".
+		// Is this desired? "Owner still have permission to anything... managers however, now need to be assigned to a location in order to grant the permission to it." -> Permission to "it". Usually implies full control over "it".
 		// I'll assume YES, assigned admin can delete location.
 
 		// But let's verify if Admin can delete ANY location (no, checked above).
@@ -125,7 +125,7 @@ func TestLocationPermissions(t *testing.T) {
 	})
 
 	t.Run("Remove Admin1 from Location", func(t *testing.T) {
-		path := fmt.Sprintf("/v1/locations/%s/admins/%s", locID, admin1.ID)
+		path := fmt.Sprintf("/v1/locations/%s/managers/%s", locID, admin1.ID)
 		w := executeRequest("DELETE", path, nil, ownerToken)
 		require.Equal(t, http.StatusNoContent, w.Code)
 	})

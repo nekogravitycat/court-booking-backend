@@ -17,24 +17,11 @@ MemberResponse:
     - email
     - role
 
-AddMemberRequest:
+AddOrganizationManagerRequest:
   type: object
   properties:
     user_id:
       type: string
       format: uuid
-    role:
-      type: string
-      enum: [manager]
   required:
     - user_id
-    - role
-
-UpdateMemberRequest:
-  type: object
-  properties:
-    role:
-      type: string
-      enum: [manager]
-  required:
-    - role

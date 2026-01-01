@@ -94,8 +94,8 @@ func TestUserManagementPermissions(t *testing.T) {
 	adminUser := createTestUser(t, "admin@example.com", "adminpass", true)
 	normalUser := createTestUser(t, "normal@example.com", "userpass", false)
 
-	adminToken := generateToken(adminUser.ID, adminUser.Email)
-	normalToken := generateToken(normalUser.ID, normalUser.Email)
+	adminToken := generateToken(adminUser.ID)
+	normalToken := generateToken(normalUser.ID)
 
 	t.Run("Admin List Users", func(t *testing.T) {
 		w := executeRequest("GET", "/v1/users", nil, adminToken)
@@ -152,7 +152,7 @@ func TestUserManagementPermissions(t *testing.T) {
 func TestUserNotFoundAndInvalidInput(t *testing.T) {
 	clearTables()
 	adminUser := createTestUser(t, "admin@sys.com", "pass", true)
-	token := generateToken(adminUser.ID, adminUser.Email)
+	token := generateToken(adminUser.ID)
 
 	t.Run("Get Non-existent User", func(t *testing.T) {
 		fakeUUID := "00000000-0000-0000-0000-000000000000"
@@ -181,15 +181,15 @@ func TestUserOrganizationResponse(t *testing.T) {
 	// Setup: Create users
 	// Admin user to test GetByID permissions
 	adminUser := createTestUser(t, "admin@check.com", "pass", true)
-	adminToken := generateToken(adminUser.ID, adminUser.Email)
+	adminToken := generateToken(adminUser.ID)
 
 	// Target user whose organizations we will verify
 	targetUser := createTestUser(t, "target@check.com", "pass", false)
-	targetToken := generateToken(targetUser.ID, targetUser.Email)
+	targetToken := generateToken(targetUser.ID)
 
 	// User with zero organizations (edge case)
 	lonelyUser := createTestUser(t, "lonely@check.com", "pass", false)
-	lonelyToken := generateToken(lonelyUser.ID, lonelyUser.Email)
+	lonelyToken := generateToken(lonelyUser.ID)
 
 	// Setup: Create organizations directly in DB
 	// We use adminUser as the owner for these test organizations
@@ -295,11 +295,11 @@ func TestDeleteUser(t *testing.T) {
 	// Setup: Create actors
 	// 1. Admin user (Authorized to delete)
 	adminUser := createTestUser(t, "admin@delete.com", "adminpass", true)
-	adminToken := generateToken(adminUser.ID, adminUser.Email)
+	adminToken := generateToken(adminUser.ID)
 
 	// 2. Normal user (Unauthorized to delete)
 	normalUser := createTestUser(t, "normal@delete.com", "userpass", false)
-	normalToken := generateToken(normalUser.ID, normalUser.Email)
+	normalToken := generateToken(normalUser.ID)
 
 	// 3. Victim user (The one to be deleted)
 	victimUser := createTestUser(t, "victim@delete.com", "victimpass", false)

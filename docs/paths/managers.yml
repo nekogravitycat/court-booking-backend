@@ -1,14 +1,14 @@
-listMembers:
+listManagers:
   get:
     tags:
-      - Members
-    summary: "查詢成員列表"
+      - Organizations
+    summary: "查詢 Organization Managers 列表"
     description: |
-      列出 Organization 中的所有成員。
+      列出 Organization 中的所有 Manager (包含 Owner)。
 
       **權限 Access Control**:
       - **System Admin**: 完全存取權限。
-      - **Organization Owner / Manager**: 可查看自己所屬 Organization 的成員。
+      - **Organization Owner / Manager**: 可查看自己所屬 Organization 的經理。
     security:
       - bearerAuth: []
     parameters:
@@ -22,11 +22,11 @@ listMembers:
       - $ref: "../components/parameters.yml#/page"
       - $ref: "../components/parameters.yml#/page_size"
       - $ref: "../components/parameters.yml#/sort_by"
-        description: "Sort field (enum: role)"
+        description: "Sort field (enum: role, created_at)"
       - $ref: "../components/parameters.yml#/sort_order"
     responses:
       "200":
-        description: Member list
+        description: Manager list
         content:
           application/json:
             schema:
@@ -39,10 +39,10 @@ listMembers:
                         $ref: "../components/schemas/member.yml#/MemberResponse"
   post:
     tags:
-      - Members
-    summary: "新增成員"
+      - Organizations
+    summary: "新增 Manager"
     description: |
-      將使用者加入至 Organization。
+      將使用者加入至 Organization 並賦予 Manager 權限。
 
       **注意 Note**:
       - 僅能新增 `manager` 角色。
@@ -50,7 +50,8 @@ listMembers:
 
       **權限 Access Control**:
       - **System Admin**: 完全存取權限。
-      - **Organization Owner / Manager**: 可管理自己所屬 Organization 的成員。
+      - **Organization Owner**: 可新增 Manager。
+      - **Organization Manager**: 可新增其他 Manager。
     security:
       - bearerAuth: []
     parameters:
@@ -66,33 +67,30 @@ listMembers:
       content:
         application/json:
           schema:
-            $ref: "../components/schemas/member.yml#/AddMemberRequest"
+            $ref: "../components/schemas/member.yml#/AddOrganizationManagerRequest"
     responses:
       "201":
-        description: Member added successfully
+        description: Manager added successfully
       "404":
         description: Organization or User not found
       "409":
-        description: User is already a member
+        description: User is already a manager or owner
 
-memberDetail:
-  patch:
+removeManager:
+  delete:
     tags:
-      - Members
-    summary: "修改成員角色"
+      - Organizations
+    summary: "移除 Manager"
     description: |
-      更新 Organization 成員的角色。
-
-      **注意 Note**:
-      - 僅能更新為 `manager` 角色。
-      - 無法透過此 API 指派 `owner` 權限。
+      將使用者從 Organization 的 Manager 列表中移除。
 
       **權限 Access Control**:
       - **System Admin**: 完全存取權限。
-      - **Organization Owner / Manager**: 可管理自己所屬 Organization 的成員。
+      - **Organization Owner**: 可移除 Manager。
+      - **Organization Manager**: 可移除其他 Manager (不可移除 Owner)。
     security:
       - bearerAuth: []
-    parameters: &idParams
+    parameters:
       - name: id
         in: path
         required: true
@@ -103,44 +101,14 @@ memberDetail:
       - name: user_id
         in: path
         required: true
-        description: User ID
+        description: User ID (Manager)
         schema:
           type: string
           format: uuid
-    requestBody:
-      required: true
-      content:
-        application/json:
-          schema:
-            $ref: "../components/schemas/member.yml#/UpdateMemberRequest"
-    responses:
-      "200":
-        description: Role updated
-        content:
-          application/json:
-            schema:
-              type: object
-              properties:
-                status:
-                  type: string
-                  example: "updated"
-      "404":
-        description: Member or Organization not found
-  delete:
-    tags:
-      - Members
-    summary: "刪除成員"
-    description: |
-      將使用者從 Organization 中移除。
-
-      **權限 Access Control**:
-      - **System Admin**: 完全存取權限。
-      - **Organization Owner / Manager**: 可管理自己所屬 Organization 的成員。
-    security:
-      - bearerAuth: []
-    parameters: *idParams
     responses:
       "204":
-        description: Member removed
+        description: Manager removed
       "404":
-        description: Member or Organization not found
+        description: Manager or Organization not found
+      "403":
+        description: Permission denied (e.g. trying to remove Owner)

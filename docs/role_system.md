@@ -90,10 +90,10 @@
 
 ### 場館員工 (場館管理員)
 
-- `POST /v1/locations/:id/admins`：指派一位使用者為特定場館的管理員。
+- `POST /v1/locations/:id/managers`：指派一位使用者為特定場館的管理員。
   - 請求資料 (Payload)：`{"user_id": "uuid"}`
   - 存取控制：僅限組織擁有者/組織管理員。
-- `GET /v1/locations/:id/admins`：列出某個場域的所有管理員。
+- `GET /v1/locations/:id/managers`：列出某個場域的所有管理員。
 
 ## 資料庫架構模型 (Database Schema Model)
 

@@ -38,12 +38,12 @@ func TestBookingCRUDAndPermissions(t *testing.T) {
 	stranger := createTestUser(t, "stranger@book.com", "pass", false)
 
 	// Generate Tokens
-	sysAdminToken := generateToken(sysAdmin.ID, sysAdmin.Email)
-	orgOwnerAToken := generateToken(orgOwnerA.ID, orgOwnerA.Email)
-	orgAdminAToken := generateToken(orgAdminA.ID, orgAdminA.Email)
-	orgAdminBToken := generateToken(orgAdminB.ID, orgAdminB.Email)
-	bookerToken := generateToken(booker.ID, booker.Email)
-	strangerToken := generateToken(stranger.ID, stranger.Email)
+	sysAdminToken := generateToken(sysAdmin.ID)
+	orgOwnerAToken := generateToken(orgOwnerA.ID)
+	orgAdminAToken := generateToken(orgAdminA.ID)
+	orgAdminBToken := generateToken(orgAdminB.ID)
+	bookerToken := generateToken(booker.ID)
+	strangerToken := generateToken(stranger.ID)
 
 	// Shared Variables
 	var resourceID string

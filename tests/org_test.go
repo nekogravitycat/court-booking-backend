@@ -19,8 +19,8 @@ func TestOrganizationCRUD(t *testing.T) {
 	admin := createTestUser(t, "admin@org.com", "pass", true)
 	user := createTestUser(t, "user@org.com", "pass", false)
 
-	adminToken := generateToken(admin.ID, admin.Email)
-	userToken := generateToken(user.ID, user.Email)
+	adminToken := generateToken(admin.ID)
+	userToken := generateToken(user.ID)
 
 	// Define orgID in the outer scope to share it between sub-tests
 	var orgID string
@@ -156,8 +156,8 @@ func TestOrganizationManagers(t *testing.T) {
 	// Manager (will be added as manager)
 	managerUser := createTestUser(t, "manager@test.com", "pass", false)
 
-	sysToken := generateToken(sysAdmin.ID, sysAdmin.Email)
-	ownerToken := generateToken(owner.ID, owner.Email)
+	sysToken := generateToken(sysAdmin.ID)
+	ownerToken := generateToken(owner.ID)
 
 	// Shared variables for sub-tests
 	var orgID string

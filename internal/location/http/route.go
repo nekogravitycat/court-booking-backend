@@ -17,7 +17,7 @@ func RegisterRoutes(g *gin.RouterGroup, h *LocationHandler, authMiddleware gin.H
 		group.DELETE("/:id", h.Delete) // Delete location
 
 		// Location Managers
-		group.POST("/:id/admins", h.AddManager)
-		group.DELETE("/:id/admins/:user_id", h.RemoveManager)
+		group.POST("/:id/managers", h.AddManager)
+		group.DELETE("/:id/managers/:user_id", h.RemoveManager)
 	}
 }

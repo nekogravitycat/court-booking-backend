@@ -21,8 +21,8 @@ func TestAnnouncementCRUDAndPermissions(t *testing.T) {
 	sysAdmin := createTestUser(t, "admin@news.com", "pass", true)
 	regularUser := createTestUser(t, "user@news.com", "pass", false)
 
-	sysAdminToken := generateToken(sysAdmin.ID, sysAdmin.Email)
-	regularUserToken := generateToken(regularUser.ID, regularUser.Email)
+	sysAdminToken := generateToken(sysAdmin.ID)
+	regularUserToken := generateToken(regularUser.ID)
 	// Empty token for testing 401
 	noToken := ""
 
