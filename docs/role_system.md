@@ -22,7 +22,7 @@
 
 ### 2. 組織擁有者 (Organization Owner)
 
-**識別方式：** 在 `organization_permissions` 表中 `role = "owner"`。
+**識別方式：** 在 `organizations` 表中 `owner_id` 欄位。
 
 - **數量：** 每個組織限制 **一位**。
 - **範圍：** 他們所擁有的特定組織。
@@ -35,7 +35,7 @@
 
 ### 3. 組織管理員 (Organization Manager)
 
-**識別方式：** 在 `organization_permissions` 表中 `role = "manager"`。
+**識別方式：** 存在於 `organization_managers` 資料表中。
 
 - **數量：** 允許由多位擔任。
 - **範圍：** 特定的組織。
@@ -47,7 +47,7 @@
 
 ### 4. 場館管理員 (Location Manager)
 
-**識別方式：** 存在於 `location_admins` 資料表中。
+**識別方式：** 存在於 `location_managers` 資料表中。
 
 - **數量：** 允許由多位擔任。
 - **範圍：** 僅限 **特定場館**。
@@ -56,7 +56,7 @@
   - **無權** 操作場館本身（不能建立/刪除場館）。
   - **可以管理** 指派場館內的資源（球場/房間）。
   - **可以管理** 指派場館內的預約。
-- **獨立性：** 使用者 **不需要** 是組織成員/組織管理員 (Organization Manager) 即可成為場館管理員。這兩者是分開的權限集。
+- **獨立性：** 使用者 **不需要** 是組織管理員 (Organization Manager) 即可成為場館管理員。這兩者是分開的權限集。
 
 ## 權限邏輯 (Permission Logic)
 
@@ -68,25 +68,25 @@
 
 ### 組織層級檢查
 
-- **`CheckPermission(orgID, userID)` (完全存取權)：**
+- **`IsManagerOrAbove(orgID, userID)` (完全存取權)：**
 - 若使用者是系統管理員，回傳 `true`。
-- 若使用者在 `organization_permissions` 中是 **Owner** 或 **Manager**，回傳 `true`。
+- 若使用者是組織的 **Owner** (檢查 `organizations.owner_id`) 或存在於 `organization_managers` 表，回傳 `true`。
 - 授予權限：更新組織、建立/刪除場館、管理員工。
 
 ### 場館層級檢查
 
-- **`CheckLocationPermission(orgID, locationID, userID)`：**
-- 若使用者通過 `CheckPermission`（系統管理員 / 擁有者 / 組織管理員），回傳 `true`。
-- 若使用者在特定 `locationID` 的 `location_admins` 清單中，回傳 `true`。
+- **`IsLocationManagerOrAbove(locationID, userID)`：**
+- 若使用者通過 `IsManagerOrAbove`（系統管理員 / 擁有者 / 組織管理員），回傳 `true`。
+- 若使用者在特定 `locationID` 的 `location_managers` 清單中，回傳 `true`。
 - 授予權限：更新場館詳細資訊、管理資源、管理預約。
 
 ## 用於權限管理的 API 端點
 
 ### 組織員工 (擁有者 & 組織管理員)
 
-- `POST /v1/organizations/:id/members`：新增一位使用者為管理員 (Manager)。
-  - 請求資料 (Payload)：`{"user_id": "uuid", "role": "manager"}`
-- `DELETE /v1/organizations/:id/members/:user_id`：移除一位管理員。
+- `POST /v1/organizations/:id/managers`：新增一位使用者為管理員 (Manager)。
+  - 請求資料 (Payload)：`{"user_id": "uuid"}`
+- `DELETE /v1/organizations/:id/managers/:user_id`：移除一位管理員。
 
 ### 場館員工 (場館管理員)
 
@@ -97,12 +97,13 @@
 
 ## 資料庫架構模型 (Database Schema Model)
 
-- **`organization_permissions`**：
-  - 將 `user_id` 連結至 `organization_id` 並附帶 `role`（'owner' 或 'manager'）。
-  - **限制 (Constraint)：** 應用程式邏輯應強制每個組織只有一位 'owner'。
-  - **目的：** 授予高層級的組織控制權。
-- **`location_admins`**：
+- **`organizations`** (Owner 欄位)：
+  - `owner_id` 欄位定義了組織擁有者。每個組織僅有一位擁有者。
+- **`organization_managers`**：
+  - 將 `user_id` 連結至 `organization_id`，定義組織管理員。
+  - **目的：** 授予高層級的組織控制權 (除擁有者專屬權限外)。
+- **`location_managers`**：
   - 將 `user_id` 連結至 `location_id`。
   - **限制 (Constraint)：** 指向 `users` 和 `locations` 的外鍵 (Foreign keys)。
   - **目的：** 授予特定場域的存取權。
-  - **解耦 (Decoupling)：** 此資料表獨立於 `organization_permissions`。
+  - **解耦 (Decoupling)：** 此資料表獨立於 `organization_managers`。

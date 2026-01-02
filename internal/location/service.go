@@ -55,7 +55,6 @@ type Service interface {
 	RemoveLocationManager(ctx context.Context, locationID string, userID string) error
 	ListLocationManagers(ctx context.Context, locationID string, params request.ListParams) ([]*user.User, int, error)
 	// Permission methods
-
 	IsOrganizationManagerOrAbove(ctx context.Context, locationID string, userID string) (bool, error)
 	IsLocationManagerOrAbove(ctx context.Context, locationID string, userID string) (bool, error)
 	// Utility methods
