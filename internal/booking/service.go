@@ -60,7 +60,7 @@ func (s *service) isOrgManager(ctx context.Context, resourceID string, userID st
 		return false, err
 	}
 	// 3. Check Permission using Org Service
-	return s.orgService.CheckPermission(ctx, loc.OrganizationID, userID)
+	return s.orgService.IsManagerOrAbove(ctx, loc.OrganizationID, userID)
 }
 
 func (s *service) Create(ctx context.Context, req CreateRequest) (*Booking, error) {

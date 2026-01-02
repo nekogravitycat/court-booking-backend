@@ -93,7 +93,7 @@ func (h *Handler) Create(c *gin.Context) {
 	}
 
 	// 2. Check User Permission for that Org
-	allowed, err := h.orgService.CheckPermission(c.Request.Context(), loc.OrganizationID, auth.GetUserID(c))
+	allowed, err := h.orgService.IsManagerOrAbove(c.Request.Context(), loc.OrganizationID, auth.GetUserID(c))
 	if err != nil {
 		response.Error(c, err)
 		return
@@ -157,7 +157,7 @@ func (h *Handler) Update(c *gin.Context) {
 	}
 
 	// 3. Check Permissions
-	allowed, err := h.orgService.CheckPermission(c.Request.Context(), loc.OrganizationID, auth.GetUserID(c))
+	allowed, err := h.orgService.IsManagerOrAbove(c.Request.Context(), loc.OrganizationID, auth.GetUserID(c))
 	if err != nil {
 		response.Error(c, err)
 		return
@@ -211,7 +211,7 @@ func (h *Handler) Delete(c *gin.Context) {
 		return
 	}
 
-	allowed, err := h.orgService.CheckPermission(c.Request.Context(), loc.OrganizationID, auth.GetUserID(c))
+	allowed, err := h.orgService.IsManagerOrAbove(c.Request.Context(), loc.OrganizationID, auth.GetUserID(c))
 	if err != nil {
 		response.Error(c, err)
 		return

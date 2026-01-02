@@ -118,6 +118,10 @@ type ListLocationsRequest struct {
 	SortBy string `form:"sort_by" binding:"omitempty,oneof=capacity opening_hours_start opening_hours_end created_at"`
 }
 
+type ListManagersRequest struct {
+	request.ListParams
+}
+
 func (r *ListLocationsRequest) Validate() error {
 	// 1. Capacity Range
 	if r.CapacityMin != nil && r.CapacityMax != nil {

@@ -210,19 +210,34 @@ locationManagers:
       - **Location Manager**: Can view managers of their own location.
     security:
       - bearerAuth: []
-    parameters: *idParams
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - $ref: "../components/parameters.yml#/page"
+      - $ref: "../components/parameters.yml#/page_size"
+      - $ref: "../components/parameters.yml#/sort_order"
+      - name: sort_by
+        in: query
+        description: "Sort field (enum: created_at, display_name...)"
+        schema:
+          type: string
     responses:
       "200":
         description: Manager list
         content:
           application/json:
             schema:
-              type: object
-              properties:
-                data:
-                  type: array
-                  items:
-                    $ref: "../components/schemas/member.yml#/ManagerResponse"
+              allOf:
+                - $ref: "../components/schemas/common.yml#/PageResponse"
+                - properties:
+                    items:
+                      type: array
+                      items:
+                        $ref: "../components/schemas/member.yml#/ManagerResponse"
       "403":
         description: Permission denied
       "404":

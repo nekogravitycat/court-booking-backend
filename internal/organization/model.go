@@ -33,3 +33,11 @@ type OrganizationFilter struct {
 	SortBy    string
 	SortOrder string
 }
+
+// ManagerFilter defines filter options for listing organization managers.
+type ManagerFilter struct {
+	Page      int
+	PageSize  int
+	SortBy    string
+	SortOrder string
+}

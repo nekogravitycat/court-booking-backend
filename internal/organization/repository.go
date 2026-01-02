@@ -25,7 +25,7 @@ type Repository interface {
 	AddOrganizationManager(ctx context.Context, orgID string, userID string) error
 	RemoveOrganizationManager(ctx context.Context, orgID string, userID string) error
 	IsOrganizationManager(ctx context.Context, orgID string, userID string) (bool, error)
-	ListOrganizationManagers(ctx context.Context, orgID string) ([]*user.User, error)
+	ListOrganizationManagers(ctx context.Context, orgID string, filter ManagerFilter) ([]*user.User, int, error)
 	// Helpers
 	RemoveAllLocationManagersForUser(ctx context.Context, userID string) error
 }
@@ -250,35 +250,83 @@ func (r *pgxRepository) IsOrganizationManager(ctx context.Context, orgID string,
 	return true, nil
 }
 
-func (r *pgxRepository) ListOrganizationManagers(ctx context.Context, orgID string) ([]*user.User, error) {
+func (r *pgxRepository) ListOrganizationManagers(ctx context.Context, orgID string, filter ManagerFilter) ([]*user.User, int, error) {
 	psql := squirrel.StatementBuilder.PlaceholderFormat(squirrel.Dollar)
-	query, args, err := psql.Select(
-		"u.id", "u.email", "u.display_name",
+	queryBuilder := psql.Select(
+		"u.id", "u.email", "u.display_name", "u.created_at", "u.is_active", "count(*) OVER() AS total_count",
 	).
 		From("public.organization_managers om").
 		Join("public.users u ON om.user_id = u.id").
-		Where(squirrel.Eq{"om.organization_id": orgID}).
-		OrderBy("u.display_name ASC").
-		ToSql()
+		Where(squirrel.Eq{"om.organization_id": orgID})
+
+	orderBy := "u.display_name"
+	if filter.SortBy != "" {
+		if filter.SortBy == "created_at" {
+			orderBy = "om.created_at" // Assuming organization_managers has created_at or we join user.created_at?
+			// Wait, organization_managers usually doesn't have created_at in the join above unless we select it.
+			// The current join is on users. u.created_at is available in users table.
+			// Let's check the user table schema or just use u.created_at.
+			orderBy = "u.created_at"
+		} else if filter.SortBy == "name" {
+			orderBy = "u.display_name"
+		} else {
+			orderBy = "u." + filter.SortBy
+		}
+	}
+
+	// Correcting SortBy logic. The user might send 'name' or 'email'.
+	// The previous implementation used u.display_name ASC.
+
+	if filter.SortBy == "name" {
+		orderBy = "u.display_name"
+	} else if filter.SortBy == "email" {
+		orderBy = "u.email"
+	} else if filter.SortBy == "created_at" {
+		orderBy = "u.created_at"
+	} else {
+		orderBy = "u.display_name" // Default
+	}
+
+	orderDir := "ASC"
+	if filter.SortOrder != "" {
+		orderDir = filter.SortOrder
+	}
+
+	queryBuilder = queryBuilder.OrderBy(orderBy + " " + orderDir)
+
+	// Pagination
+	if filter.Page < 1 {
+		filter.Page = 1
+	}
+	if filter.PageSize < 1 {
+		filter.PageSize = 20
+	}
+	offset := (filter.Page - 1) * filter.PageSize
+
+	queryBuilder = queryBuilder.Limit(uint64(filter.PageSize)).Offset(uint64(offset))
+
+	query, args, err := queryBuilder.ToSql()
 	if err != nil {
-		return nil, fmt.Errorf("build list org managers query failed: %w", err)
+		return nil, 0, fmt.Errorf("build list org managers query failed: %w", err)
 	}
 
 	rows, err := r.pool.Query(ctx, query, args...)
 	if err != nil {
-		return nil, fmt.Errorf("ListOrganizationManagers failed: %w", err)
+		return nil, 0, fmt.Errorf("ListOrganizationManagers failed: %w", err)
 	}
 	defer rows.Close()
 
 	var users []*user.User
+	var total int
+
 	for rows.Next() {
 		var u user.User
-		if err := rows.Scan(&u.ID, &u.Email, &u.DisplayName); err != nil {
-			return nil, fmt.Errorf("scan org manager failed: %w", err)
+		if err := rows.Scan(&u.ID, &u.Email, &u.DisplayName, &u.CreatedAt, &u.IsActive, &total); err != nil {
+			return nil, 0, fmt.Errorf("scan org manager failed: %w", err)
 		}
 		users = append(users, &u)
 	}
-	return users, nil
+	return users, total, nil
 }
 
 func (r *pgxRepository) RemoveAllLocationManagersForUser(ctx context.Context, userID string) error {

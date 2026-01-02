@@ -169,13 +169,20 @@ func (h *OrganizationHandler) ListManagers(c *gin.Context) {
 		return
 	}
 
-	// We can't filter by role anymore since we only return managers
-	// but we assume ListMembersRequest might still be used for pagination or removed/simplified
-	// For now, let's keep basic pagination.
-	// NOTE: ListMembersRequest struct in DTO has SortBy which may include 'role', but now all are managers.
+	// Bind query parameters
+	var req ListManagerRequest
+	if err := c.ShouldBindQuery(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid query parameters", "details": err.Error()})
+		return
+	}
+
+	if err := req.Validate(); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
 
 	userID := auth.GetUserID(c)
-	hasPerm, err := h.service.CheckPermission(c.Request.Context(), uri.ID, userID)
+	hasPerm, err := h.service.IsManagerOrAbove(c.Request.Context(), uri.ID, userID)
 	if err != nil {
 		response.Error(c, err)
 		return
@@ -185,21 +192,36 @@ func (h *OrganizationHandler) ListManagers(c *gin.Context) {
 		return
 	}
 
-	members, err := h.service.ListOrganizationManagers(c.Request.Context(), uri.ID)
+	filter := organization.ManagerFilter{
+		Page:      req.Page,
+		PageSize:  req.PageSize,
+		SortBy:    req.SortBy,
+		SortOrder: req.SortOrder,
+	}
+
+	// Default sort
+	if filter.SortBy == "" {
+		filter.SortBy = "name"
+	}
+	if filter.SortOrder == "" {
+		filter.SortOrder = "ASC"
+	} else {
+		filter.SortOrder = strings.ToUpper(filter.SortOrder)
+	}
+
+	members, total, err := h.service.ListOrganizationManagers(c.Request.Context(), uri.ID, filter)
 	if err != nil {
 		response.Error(c, err)
 		return
 	}
-
-	// Manual pagination since service method changed (ListOrganizationManagers returns slice, no total/paging currently in repo)
-	// We return simple list for now.
 
 	items := make([]ManagerResponse, len(members))
 	for i, m := range members {
 		items[i] = NewManagerResponse(m)
 	}
 
-	c.JSON(http.StatusOK, gin.H{"data": items})
+	resp := response.NewPageResponse(items, req.Page, req.PageSize, total)
+	c.JSON(http.StatusOK, resp)
 }
 
 // AddManager adds a manager to an organization.
@@ -231,7 +253,7 @@ func (h *OrganizationHandler) AddManager(c *gin.Context) {
 	actorID := auth.GetUserID(c)
 	// Permission check: Must be Owner or SysAdmin to add managers.
 	// CheckIsOwner is strict owner check.
-	isOwner, err := h.service.CheckIsOwner(c.Request.Context(), uri.ID, actorID)
+	isOwner, err := h.service.IsOwnerOrAbove(c.Request.Context(), uri.ID, actorID)
 	if err != nil {
 		response.Error(c, err)
 		return
@@ -259,7 +281,7 @@ func (h *OrganizationHandler) RemoveManager(c *gin.Context) {
 	}
 
 	actorID := auth.GetUserID(c)
-	isOwner, err := h.service.CheckIsOwner(c.Request.Context(), req.ID, actorID)
+	isOwner, err := h.service.IsOwnerOrAbove(c.Request.Context(), req.ID, actorID)
 	if err != nil {
 		response.Error(c, err)
 		return

@@ -1,7 +1,6 @@
 package http
 
 import (
-	"errors"
 	"net/http"
 	"strings"
 	"time"
@@ -102,7 +101,7 @@ func (h *LocationHandler) Create(c *gin.Context) {
 	}
 
 	// Permission check: Organization Manager or Owner (or System Admin) can create locations.
-	allowed, err := h.orgService.CheckPermission(c.Request.Context(), body.OrganizationID, auth.GetUserID(c))
+	allowed, err := h.orgService.IsManagerOrAbove(c.Request.Context(), body.OrganizationID, auth.GetUserID(c))
 	if err != nil {
 		response.Error(c, err)
 		return
@@ -162,21 +161,8 @@ func (h *LocationHandler) Update(c *gin.Context) {
 		return
 	}
 
-	// Fetch the existing location to determine which organization it belongs to.
-	existingLoc, err := h.service.GetByID(c.Request.Context(), uri.ID)
-	if err != nil {
-		switch {
-		case errors.Is(err, location.ErrLocNotFound):
-			c.JSON(http.StatusNotFound, gin.H{"error": "location not found"})
-			return
-		default:
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to fetch location for permission check"})
-			return
-		}
-	}
-
 	// Permission check: The user must be a Manager (assigned to this location) or Owner.
-	allowed, err := h.service.CheckLocationPermission(c.Request.Context(), existingLoc.OrganizationID, existingLoc.ID, auth.GetUserID(c))
+	allowed, err := h.service.IsLocationManagerOrAbove(c.Request.Context(), uri.ID, auth.GetUserID(c))
 	if err != nil {
 		response.Error(c, err)
 		return
@@ -225,16 +211,9 @@ func (h *LocationHandler) Delete(c *gin.Context) {
 		return
 	}
 
-	// Fetch the existing location to determine which organization it belongs to.
-	existingLoc, err := h.service.GetByID(c.Request.Context(), req.ID)
-	if err != nil {
-		response.Error(c, err)
-		return
-	}
-
 	// Permission check: Only Organization Manager or Owner can delete locations.
 	// Location Managers cannot delete.
-	allowed, err := h.orgService.CheckPermission(c.Request.Context(), existingLoc.OrganizationID, auth.GetUserID(c))
+	allowed, err := h.service.IsOrganizationManagerOrAbove(c.Request.Context(), req.ID, auth.GetUserID(c))
 	if err != nil {
 		response.Error(c, err)
 		return
@@ -270,15 +249,8 @@ func (h *LocationHandler) AddManager(c *gin.Context) {
 		return
 	}
 
-	// Fetch location to check Org Owner permission
-	loc, err := h.service.GetByID(c.Request.Context(), uri.ID)
-	if err != nil {
-		response.Error(c, err)
-		return
-	}
-
 	// Permission: Owner or Org Manager can assign location managers
-	allowed, err := h.orgService.CheckPermission(c.Request.Context(), loc.OrganizationID, auth.GetUserID(c))
+	allowed, err := h.service.IsOrganizationManagerOrAbove(c.Request.Context(), uri.ID, auth.GetUserID(c))
 	if err != nil {
 		response.Error(c, err)
 		return
@@ -308,15 +280,8 @@ func (h *LocationHandler) RemoveManager(c *gin.Context) {
 		return
 	}
 
-	// Fetch location
-	loc, err := h.service.GetByID(c.Request.Context(), uri.ID)
-	if err != nil {
-		response.Error(c, err)
-		return
-	}
-
 	// Permission: Owner or Org Admin
-	allowed, err := h.orgService.CheckPermission(c.Request.Context(), loc.OrganizationID, auth.GetUserID(c))
+	allowed, err := h.service.IsOrganizationManagerOrAbove(c.Request.Context(), uri.ID, auth.GetUserID(c))
 	if err != nil {
 		response.Error(c, err)
 		return
@@ -342,15 +307,14 @@ func (h *LocationHandler) ListManagers(c *gin.Context) {
 		return
 	}
 
-	// Fetch location
-	loc, err := h.service.GetByID(c.Request.Context(), uri.ID)
-	if err != nil {
-		response.Error(c, err)
+	var req ListManagersRequest
+	if err := c.ShouldBindQuery(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid query parameters", "details": err.Error()})
 		return
 	}
 
 	// Permission: Owner, Org Manager, or Location Manager (of this location)
-	allowed, err := h.service.CheckLocationPermission(c.Request.Context(), loc.OrganizationID, loc.ID, auth.GetUserID(c))
+	allowed, err := h.service.IsLocationManagerOrAbove(c.Request.Context(), uri.ID, auth.GetUserID(c))
 	if err != nil {
 		response.Error(c, err)
 		return
@@ -360,7 +324,7 @@ func (h *LocationHandler) ListManagers(c *gin.Context) {
 		return
 	}
 
-	users, err := h.service.ListLocationManagers(c.Request.Context(), uri.ID)
+	users, total, err := h.service.ListLocationManagers(c.Request.Context(), uri.ID, req.ListParams)
 	if err != nil {
 		response.Error(c, err)
 		return
@@ -371,5 +335,5 @@ func (h *LocationHandler) ListManagers(c *gin.Context) {
 		items[i] = NewManagerResponse(u)
 	}
 
-	c.JSON(http.StatusOK, gin.H{"data": items})
+	c.JSON(http.StatusOK, response.NewPageResponse(items, req.Page, req.PageSize, total))
 }

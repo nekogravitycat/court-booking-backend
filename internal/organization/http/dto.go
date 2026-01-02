@@ -85,14 +85,14 @@ type ManagerResponse struct {
 	IsActive    bool      `json:"is_active"`
 }
 
-// ListMembersRequest defines query parameters for listing members.
-type ListMembersRequest struct {
+// ListManagerRequest defines query parameters for listing managers.
+type ListManagerRequest struct {
 	request.ListParams
-	SortBy string `form:"sort_by" binding:"omitempty,oneof=role"`
+	SortBy string `form:"sort_by" binding:"omitempty,oneof=name email created_at"`
 }
 
-// Validate performs custom validation for ListMembersRequest.
-func (r *ListMembersRequest) Validate() error {
+// Validate performs custom validation for ListManagerRequest.
+func (r *ListManagerRequest) Validate() error {
 	return nil
 }
 

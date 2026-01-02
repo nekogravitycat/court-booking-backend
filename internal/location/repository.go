@@ -8,6 +8,7 @@ import (
 	"github.com/Masterminds/squirrel"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/nekogravitycat/court-booking-backend/internal/pkg/request"
 	"github.com/nekogravitycat/court-booking-backend/internal/user"
 )
 
@@ -22,8 +23,10 @@ type Repository interface {
 	AddLocationManager(ctx context.Context, locationID string, userID string) error
 	RemoveLocationManager(ctx context.Context, locationID string, userID string) error
 	IsLocationManager(ctx context.Context, locationID string, userID string) (bool, error)
-	ListLocationManagers(ctx context.Context, locationID string) ([]*user.User, error)
+	ListLocationManagers(ctx context.Context, locationID string, params request.ListParams) ([]*user.User, int, error)
 	IsLocationManagerInOrg(ctx context.Context, orgID string, userID string) (bool, error)
+	// Utility methods
+	GetOrganizationID(ctx context.Context, locationID string) (string, error)
 }
 
 type pgxRepository struct {
@@ -304,33 +307,54 @@ func (r *pgxRepository) IsLocationManager(ctx context.Context, locationID string
 	return true, nil
 }
 
-func (r *pgxRepository) ListLocationManagers(ctx context.Context, locationID string) ([]*user.User, error) {
+func (r *pgxRepository) ListLocationManagers(ctx context.Context, locationID string, params request.ListParams) ([]*user.User, int, error) {
 	psql := squirrel.StatementBuilder.PlaceholderFormat(squirrel.Dollar)
-	query, args, err := psql.Select("u.id", "u.email", "u.display_name").
+	query := psql.Select("u.id", "u.email", "u.display_name", "u.created_at", "u.is_active", "count(*) OVER() as total_count").
 		From("public.location_managers lm").
 		Join("public.users u ON lm.user_id = u.id").
-		Where(squirrel.Eq{"lm.location_id": locationID}).
-		OrderBy("u.display_name ASC").
-		ToSql()
+		Where(squirrel.Eq{"lm.location_id": locationID})
+
+	// Sorting
+	orderDir := "ASC"
+	if params.SortOrder == "DESC" {
+		orderDir = "DESC"
+	} else if params.SortOrder == "ASC" {
+		orderDir = "ASC"
+	}
+	query = query.OrderBy("u.display_name " + orderDir)
+
+	// Pagination
+	if params.Page < 1 {
+		params.Page = 1
+	}
+	if params.PageSize < 1 {
+		params.PageSize = 20
+	}
+	offset := (params.Page - 1) * params.PageSize
+	query = query.Limit(uint64(params.PageSize)).Offset(uint64(offset))
+
+	sql, args, err := query.ToSql()
 	if err != nil {
-		return nil, fmt.Errorf("build list location admins query failed: %w", err)
+		return nil, 0, fmt.Errorf("build list location admins query failed: %w", err)
 	}
 
-	rows, err := r.pool.Query(ctx, query, args...)
+	rows, err := r.pool.Query(ctx, sql, args...)
 	if err != nil {
-		return nil, fmt.Errorf("ListLocationManagers failed: %w", err)
+		return nil, 0, fmt.Errorf("ListLocationManagers failed: %w", err)
 	}
 	defer rows.Close()
 
 	var users []*user.User
+	var total int
+
 	for rows.Next() {
 		var u user.User
-		if err := rows.Scan(&u.ID, &u.Email, &u.DisplayName); err != nil {
-			return nil, fmt.Errorf("scan failed: %w", err)
+		if err := rows.Scan(&u.ID, &u.Email, &u.DisplayName, &u.CreatedAt, &u.IsActive, &total); err != nil {
+			return nil, 0, fmt.Errorf("scan failed: %w", err)
 		}
 		users = append(users, &u)
 	}
-	return users, nil
+	return users, total, nil
 }
 
 func (r *pgxRepository) IsLocationManagerInOrg(ctx context.Context, orgID string, userID string) (bool, error) {
@@ -354,4 +378,29 @@ func (r *pgxRepository) IsLocationManagerInOrg(ctx context.Context, orgID string
 		return false, fmt.Errorf("IsLocationManagerInOrg failed: %w", err)
 	}
 	return true, nil
+}
+
+// ------------------------
+//     Utility methods
+// ------------------------
+
+func (r *pgxRepository) GetOrganizationID(ctx context.Context, locationID string) (string, error) {
+	psql := squirrel.StatementBuilder.PlaceholderFormat(squirrel.Dollar)
+	query, args, err := psql.Select("organization_id").
+		From("public.locations").
+		Where(squirrel.Eq{"id": locationID}).
+		ToSql()
+	if err != nil {
+		return "", fmt.Errorf("build get organization id query failed: %w", err)
+	}
+
+	var orgID string
+	err = r.pool.QueryRow(ctx, query, args...).Scan(&orgID)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return "", ErrLocNotFound
+		}
+		return "", fmt.Errorf("GetOrganizationID failed: %w", err)
+	}
+	return orgID, nil
 }

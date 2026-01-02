@@ -38,10 +38,10 @@ type Service interface {
 	// Organization Manager methods
 	AddOrganizationManager(ctx context.Context, orgID string, userID string) error
 	RemoveOrganizationManager(ctx context.Context, orgID string, userID string) error
-	ListOrganizationManagers(ctx context.Context, orgID string) ([]*user.User, error)
+	ListOrganizationManagers(ctx context.Context, orgID string, filter ManagerFilter) ([]*user.User, int, error)
 	// Permission methods
-	CheckPermission(ctx context.Context, orgID string, userID string) (bool, error)
-	CheckIsOwner(ctx context.Context, orgID string, userID string) (bool, error)
+	IsOwnerOrAbove(ctx context.Context, orgID string, userID string) (bool, error)
+	IsManagerOrAbove(ctx context.Context, orgID string, userID string) (bool, error)
 }
 
 // LocationManagerChecker defines the method required to check location manager status.
@@ -210,75 +210,21 @@ func (s *service) RemoveOrganizationManager(ctx context.Context, orgID string, u
 	return s.repo.RemoveOrganizationManager(ctx, orgID, userID)
 }
 
-func (s *service) ListOrganizationManagers(ctx context.Context, orgID string) ([]*user.User, error) {
+func (s *service) ListOrganizationManagers(ctx context.Context, orgID string, filter ManagerFilter) ([]*user.User, int, error) {
 	// Verify organization exists
 	if _, err := s.repo.GetByID(ctx, orgID); err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 
-	members, err := s.repo.ListOrganizationManagers(ctx, orgID)
-	if err != nil {
-		return nil, err
-	}
-
-	if len(members) == 0 {
-		return []*user.User{}, nil
-	}
-
-	userIDs := make([]string, len(members))
-	for i, u := range members {
-		userIDs[i] = u.ID
-	}
-
-	users, _, err := s.userService.List(ctx, user.UserFilter{
-		IDs: userIDs,
-	})
-	if err != nil {
-		return nil, err
-	}
-
-	return users, nil
+	return s.repo.ListOrganizationManagers(ctx, orgID, filter)
 }
 
 // ------------------------
 //     Permission methods
 // ------------------------
 
-// CheckPermission verifies if the user is an Owner or Manager of the organization.
-// This checks general organization membership.
-func (s *service) CheckPermission(ctx context.Context, orgID string, userID string) (bool, error) {
-	if userID == "" {
-		return false, nil
-	}
-
-	// Check System Admin
-	user, err := s.userService.GetByID(ctx, userID)
-	if err != nil {
-		return false, err
-	}
-	if user.IsSystemAdmin {
-		return true, nil
-	}
-
-	// Check Organization Owner
-	org, err := s.repo.GetByID(ctx, orgID)
-	if err != nil {
-		return false, err
-	}
-	if org.OwnerID == userID {
-		return true, nil
-	}
-
-	// Check Organization Manager
-	isManager, err := s.repo.IsOrganizationManager(ctx, orgID, userID)
-	if err != nil {
-		return false, err
-	}
-	return isManager, nil
-}
-
-// CheckIsOwner verifies if the user is an Owner of the organization.
-func (s *service) CheckIsOwner(ctx context.Context, orgID string, userID string) (bool, error) {
+// IsOwnerOrAbove verifies if the user is an Owner of the organization or SysAdmin.
+func (s *service) IsOwnerOrAbove(ctx context.Context, orgID string, userID string) (bool, error) {
 	if userID == "" {
 		return false, nil
 	}
@@ -302,4 +248,25 @@ func (s *service) CheckIsOwner(ctx context.Context, orgID string, userID string)
 	}
 
 	return false, nil
+}
+
+// IsManagerOrAbove verifies if the user is an Owner or Manager of the organization, or SysAdmin.
+func (s *service) IsManagerOrAbove(ctx context.Context, orgID string, userID string) (bool, error) {
+	if userID == "" {
+		return false, nil
+	}
+
+	// Check if user is owner or above
+	if isOwner, err := s.IsOwnerOrAbove(ctx, orgID, userID); err != nil {
+		return false, err
+	} else if isOwner {
+		return true, nil
+	}
+
+	// Check if user is organization manager
+	isManager, err := s.repo.IsOrganizationManager(ctx, orgID, userID)
+	if err != nil {
+		return false, err
+	}
+	return isManager, nil
 }

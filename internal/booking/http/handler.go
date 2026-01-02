@@ -59,7 +59,7 @@ func (h *Handler) checkIsOrgManager(c *gin.Context, resourceID string, userID st
 	if err != nil {
 		return false
 	}
-	allowed, err := h.orgService.CheckPermission(ctx, loc.OrganizationID, userID)
+	allowed, err := h.orgService.IsManagerOrAbove(ctx, loc.OrganizationID, userID)
 	if err != nil {
 		return false
 	}
