@@ -1,5 +1,6 @@
 .env
 codebase-for-llm.*
+*output.txt
 
 # Binaries for programs and plugins
 *.exe
