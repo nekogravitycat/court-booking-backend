@@ -58,6 +58,10 @@ func TestBookingCRUDAndPermissions(t *testing.T) {
 
 		// 2. Assign Roles for Org A
 		// Owner is set by Create. Add Manager:
+		// 1. Add Member
+		executeRequest("POST", fmt.Sprintf("/v1/organizations/%s/members", orgA.ID),
+			orgHttp.AddOrganizationMemberRequest{UserID: orgAdminA.ID}, sysAdminToken)
+		// 2. Add Manager
 		executeRequest("POST", fmt.Sprintf("/v1/organizations/%s/managers", orgA.ID),
 			orgHttp.AddOrganizationManagerRequest{UserID: orgAdminA.ID}, sysAdminToken)
 
@@ -94,6 +98,11 @@ func TestBookingCRUDAndPermissions(t *testing.T) {
 		wOrgB := executeRequest("POST", "/v1/organizations", orgHttp.CreateOrganizationRequest{Name: "Center B", OwnerID: sysAdmin.ID}, sysAdminToken)
 		var orgB orgHttp.OrganizationResponse
 		json.Unmarshal(wOrgB.Body.Bytes(), &orgB)
+
+		// Add Member
+		executeRequest("POST", fmt.Sprintf("/v1/organizations/%s/members", orgB.ID),
+			orgHttp.AddOrganizationMemberRequest{UserID: orgAdminB.ID}, sysAdminToken)
+		// Add Manager
 		executeRequest("POST", fmt.Sprintf("/v1/organizations/%s/managers", orgB.ID),
 			orgHttp.AddOrganizationManagerRequest{UserID: orgAdminB.ID}, sysAdminToken)
 	})

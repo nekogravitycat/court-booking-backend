@@ -394,8 +394,14 @@ func createTestOrganization(t *testing.T, ownerID string, name string, isActive 
 
 // addMemberToOrg inserts a record into organization_managers directly.
 func addMemberToOrg(t *testing.T, orgID, userID string) {
+	// First add as member
+	memberQuery := `INSERT INTO organization_members (organization_id, user_id) VALUES ($1, $2) ON CONFLICT DO NOTHING`
+	_, err := testPool.Exec(context.Background(), memberQuery, orgID, userID)
+	require.NoError(t, err, "Failed to add member to org (members table)")
+
+	// Then add as manager
 	query := `INSERT INTO organization_managers (organization_id, user_id) VALUES ($1, $2)`
 
-	_, err := testPool.Exec(context.Background(), query, orgID, userID)
-	require.NoError(t, err, "Failed to add member to org")
+	_, err = testPool.Exec(context.Background(), query, orgID, userID)
+	require.NoError(t, err, "Failed to add member to org (managers table)")
 }

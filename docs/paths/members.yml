@@ -1,14 +1,14 @@
-listManagers:
+listMembers:
   get:
     tags:
-      - Organization Managers
-    summary: "查詢 Organization Managers 列表"
+      - Organization Members
+    summary: "查詢 Organization Members 列表"
     description: |
-      列出 Organization 中的所有 Manager (包含 Owner)。
+      列出 Organization 中的所有一般成員 (Members)。
 
       **權限 Access Control**:
       - **System Admin**: 完全存取權限。
-      - **Organization Owner / Manager**: 可查看自己所屬 Organization 的經理。
+      - **Organization Owner / Manager**: 可查看自己所屬 Organization 的成員。
     security:
       - bearerAuth: []
     parameters:
@@ -22,11 +22,11 @@ listManagers:
       - $ref: "../components/parameters.yml#/page"
       - $ref: "../components/parameters.yml#/page_size"
       - $ref: "../components/parameters.yml#/sort_by"
-        description: "Sort field (enum: role, created_at)"
+        description: "Sort field (enum: created_at, display_name)"
       - $ref: "../components/parameters.yml#/sort_order"
     responses:
       "200":
-        description: Manager list
+        description: Member list
         content:
           application/json:
             schema:
@@ -36,23 +36,18 @@ listManagers:
                     items:
                       type: array
                       items:
-                        $ref: "../components/schemas/member.yml#/ManagerResponse"
+                        $ref: "../components/schemas/user.yml#/UserResponse"
   post:
     tags:
-      - Organization Managers
-    summary: "新增 Manager"
+      - Organization Members
+    summary: "新增 Member"
     description: |
-      將使用者加入至 Organization 並賦予 Manager 權限。
-
-      **注意 Note**:
-      - 僅能新增 `manager` 角色。
-      - 無法透過此 API 新增 `owner`。
-      - **Prerequisite**: 使用者必須先成為 Organization 的 **Member** 才能被指派為 Manager。
+      將使用者加入至 Organization 成為一般成員 (Member)。
+      這是成為 Manager 的前置條件。
 
       **權限 Access Control**:
       - **System Admin**: 完全存取權限。
-      - **Organization Owner**: 可新增 Manager。
-      - **Organization Manager**: 可新增其他 Manager。
+      - **Organization Owner / Manager**: 可新增成員。
     security:
       - bearerAuth: []
     parameters:
@@ -68,27 +63,28 @@ listManagers:
       content:
         application/json:
           schema:
-            $ref: "../components/schemas/member.yml#/AddOrganizationManagerRequest"
+            $ref: "../components/schemas/member.yml#/AddMemberRequest"
     responses:
       "201":
-        description: Manager added successfully
+        description: Member added successfully
       "404":
         description: Organization or User not found
       "409":
-        description: User is already a manager or owner
+        description: User is already a member
 
-removeManager:
+removeMember:
   delete:
     tags:
-      - Organization Managers
-    summary: "移除 Manager"
+      - Organization Members
+    summary: "移除 Member"
     description: |
-      將使用者從 Organization 的 Manager 列表中移除。
+      將使用者從 Organization 移除。
+
+      **注意**: 移除成員會連帶移除其所有的 Manager 權限 (Cascading delete)。
 
       **權限 Access Control**:
       - **System Admin**: 完全存取權限。
-      - **Organization Owner**: 可移除 Manager。
-      - **Organization Manager**: 可移除其他 Manager (不可移除 Owner)。
+      - **Organization Owner / Manager**: 可移除成員。
     security:
       - bearerAuth: []
     parameters:
@@ -102,14 +98,14 @@ removeManager:
       - name: user_id
         in: path
         required: true
-        description: User ID (Manager)
+        description: User ID (Member)
         schema:
           type: string
           format: uuid
     responses:
       "204":
-        description: Manager removed
+        description: Member removed
       "404":
-        description: Manager or Organization not found
+        description: Member or Organization not found
       "403":
-        description: Permission denied (e.g. trying to remove Owner)
+        description: Permission denied

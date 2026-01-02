@@ -22,17 +22,23 @@ tags:
   - name: Users
     description: 使用者管理 (System Admin Only)
   - name: Organizations
-    description: 組織/場館主管理
+    description: 組織管理
+  - name: Organization Members
+    description: 組織成員管理
+  - name: Organization Managers
+    description: 組織管理員管理
   - name: Locations
-    description: 實體場館據點
+    description: 場域管理
+  - name: Location Managers
+    description: 場域管理員管理
   - name: ResourceTypes
-    description: 場地類型 (如：羽球場、會議室)
+    description: 場地類型管理 (如：羽球場、會議室)
   - name: Resources
-    description: 實際可預約資源 (如：A球場、B會議室)
+    description: 場地管理 (實際可預約單位，如：A球場、B會議室)
   - name: Bookings
-    description: 預約交易
+    description: 場地預約管理
   - name: Announcements
-    description: 系統公告
+    description: 系統公告管理
 
 components:
   securitySchemes:
@@ -95,6 +101,9 @@ components:
 
     AddOrganizationManagerRequest:
       $ref: "./components/schemas/member.yml#/AddOrganizationManagerRequest"
+
+    AddMemberRequest:
+      $ref: "./components/schemas/member.yml#/AddMemberRequest"
 
     # --------------------------
     # Location Models
@@ -188,6 +197,15 @@ paths:
     $ref: "./paths/organizations.yml#/organizationDetail"
 
   # ============================
+  # Members
+  # ============================
+  /organizations/{id}/members:
+    $ref: "./paths/members.yml#/listMembers"
+
+  /organizations/{id}/members/{user_id}:
+    $ref: "./paths/members.yml#/removeMember"
+
+  # ============================
   # Managers
   # ============================
   /organizations/{id}/managers:
@@ -205,6 +223,9 @@ paths:
   /locations/{id}:
     $ref: "./paths/locations.yml#/locationDetail"
 
+  # ============================
+  # Location Managers
+  # ============================
   /locations/{id}/managers:
     $ref: "./paths/locations.yml#/locationManagers"
 

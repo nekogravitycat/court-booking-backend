@@ -28,3 +28,12 @@ AddOrganizationManagerRequest:
       format: uuid
   required:
     - user_id
+
+AddMemberRequest:
+  type: object
+  properties:
+    user_id:
+      type: string
+      format: uuid
+  required:
+    - user_id

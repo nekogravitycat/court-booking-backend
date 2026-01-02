@@ -39,6 +39,10 @@ type Service interface {
 	AddOrganizationManager(ctx context.Context, orgID string, userID string) error
 	RemoveOrganizationManager(ctx context.Context, orgID string, userID string) error
 	ListOrganizationManagers(ctx context.Context, orgID string, filter ManagerFilter) ([]*user.User, int, error)
+	// Organization Member methods
+	AddMember(ctx context.Context, orgID string, userID string) error
+	RemoveMember(ctx context.Context, orgID string, userID string) error
+	ListMembers(ctx context.Context, orgID string, filter ManagerFilter) ([]*user.User, int, error)
 	// Permission methods
 	IsOwnerOrAbove(ctx context.Context, orgID string, userID string) (bool, error)
 	IsManagerOrAbove(ctx context.Context, orgID string, userID string) (bool, error)
@@ -199,6 +203,15 @@ func (s *service) AddOrganizationManager(ctx context.Context, orgID string, user
 		return apperror.New(409, "user is already a location manager in this organization; remove location manager privileges first")
 	}
 
+	// Membership Check: User must be a member first
+	isMember, err := s.repo.IsMember(ctx, orgID, userID)
+	if err != nil {
+		return err
+	}
+	if !isMember {
+		return apperror.New(400, "user must be a member of the organization first")
+	}
+
 	return s.repo.AddOrganizationManager(ctx, orgID, userID)
 }
 
@@ -217,6 +230,43 @@ func (s *service) ListOrganizationManagers(ctx context.Context, orgID string, fi
 	}
 
 	return s.repo.ListOrganizationManagers(ctx, orgID, filter)
+}
+
+// -----------------------------
+//   Organization Member methods
+// -----------------------------
+
+func (s *service) AddMember(ctx context.Context, orgID string, userID string) error {
+	// Verify organization exists
+	if _, err := s.repo.GetByID(ctx, orgID); err != nil {
+		return err
+	}
+
+	// Verify user exists
+	if _, err := s.userService.GetByID(ctx, userID); err != nil {
+		if errors.Is(err, user.ErrNotFound) {
+			return ErrUserNotFound
+		}
+		return err
+	}
+
+	return s.repo.AddMember(ctx, orgID, userID)
+}
+
+func (s *service) RemoveMember(ctx context.Context, orgID string, userID string) error {
+	// Verify organization exists
+	if _, err := s.repo.GetByID(ctx, orgID); err != nil {
+		return err
+	}
+	return s.repo.RemoveMember(ctx, orgID, userID)
+}
+
+func (s *service) ListMembers(ctx context.Context, orgID string, filter ManagerFilter) ([]*user.User, int, error) {
+	// Verify organization exists
+	if _, err := s.repo.GetByID(ctx, orgID); err != nil {
+		return nil, 0, err
+	}
+	return s.repo.ListMembers(ctx, orgID, filter)
 }
 
 // ------------------------

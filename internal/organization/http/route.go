@@ -19,6 +19,11 @@ func RegisterRoutes(g *gin.RouterGroup, h *OrganizationHandler, authMiddleware, 
 		orgGroup.GET("/:id/managers", h.ListManagers)              // List managers
 		orgGroup.POST("/:id/managers", h.AddManager)               // Add new manager
 		orgGroup.DELETE("/:id/managers/:user_id", h.RemoveManager) // Remove manager
+
+		// --- Organization Member Management ---
+		orgGroup.GET("/:id/members", h.ListMembers)              // List members
+		orgGroup.POST("/:id/members", h.AddMember)               // Add new member
+		orgGroup.DELETE("/:id/members/:user_id", h.RemoveMember) // Remove member
 	}
 
 	// === Administration Routes (System Admin Only) ===

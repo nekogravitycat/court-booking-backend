@@ -65,6 +65,7 @@ CREATE TABLE IF NOT EXISTS public.organizations (
 -- =========================================================
 CREATE TABLE IF NOT EXISTS public.locations (
   id                   UUID PRIMARY KEY DEFAULT gen_random_uuid(),      -- Location ID (UUID)
+  UNIQUE (id, organization_id),                                         -- Composite Constraint for FK references
   created_at           TIMESTAMPTZ NOT NULL DEFAULT now(),              -- Creation timestamp
   organization_id      UUID NOT NULL,                                   -- Owning organization
   name                 TEXT NOT NULL,                                   -- Display name (e.g. "Xinyi Branch")
@@ -145,18 +146,34 @@ CREATE TABLE IF NOT EXISTS public.bookings (
 );
 
 -- =========================================================
+-- Table: organization_members
+-- Purpose: Members of an organization.
+--          Must be a member to be a manager.
+-- =========================================================
+CREATE TABLE IF NOT EXISTS public.organization_members (
+  organization_id UUID NOT NULL,
+  user_id         UUID NOT NULL,
+  created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
+  PRIMARY KEY (organization_id, user_id),
+  CONSTRAINT organization_members_organization_id_fkey
+    FOREIGN KEY (organization_id) REFERENCES public.organizations(id) ON DELETE CASCADE,
+  CONSTRAINT organization_members_user_id_fkey
+    FOREIGN KEY (user_id) REFERENCES public.users(id) ON DELETE CASCADE
+);
+
+-- =========================================================
 -- Table: organization_managers
 -- Purpose: Managers of an organization.
 --          The owner is defined in the organizations table.
 -- =========================================================
 CREATE TABLE IF NOT EXISTS public.organization_managers (
-  organization_id UUID NOT NULL,                                   -- Target organization
-  user_id         UUID NOT NULL,                                   -- Target user
+  organization_id UUID NOT NULL,
+  user_id         UUID NOT NULL,
   PRIMARY KEY (organization_id, user_id),
-  CONSTRAINT organization_managers_organization_id_fkey
-    FOREIGN KEY (organization_id) REFERENCES public.organizations(id) ON DELETE CASCADE,
-  CONSTRAINT organization_managers_user_id_fkey
-    FOREIGN KEY (user_id) REFERENCES public.users(id) ON DELETE CASCADE
+  CONSTRAINT organization_managers_member_fkey
+    FOREIGN KEY (organization_id, user_id)
+    REFERENCES public.organization_members(organization_id, user_id)
+    ON DELETE CASCADE
 );
 
 -- =========================================================
@@ -164,13 +181,18 @@ CREATE TABLE IF NOT EXISTS public.organization_managers (
 -- Purpose: Grants manager permission to specific locations.
 -- =========================================================
 CREATE TABLE IF NOT EXISTS public.location_managers (
-  location_id UUID NOT NULL,
-  user_id     UUID NOT NULL,
+  location_id     UUID NOT NULL,
+  organization_id UUID NOT NULL,
+  user_id         UUID NOT NULL,
   PRIMARY KEY (location_id, user_id),
-  CONSTRAINT location_managers_location_id_fkey
-    FOREIGN KEY (location_id) REFERENCES public.locations(id) ON DELETE CASCADE,
-  CONSTRAINT location_managers_user_id_fkey
-    FOREIGN KEY (user_id) REFERENCES public.users(id) ON DELETE CASCADE
+  CONSTRAINT location_managers_member_fkey
+    FOREIGN KEY (organization_id, user_id)
+    REFERENCES public.organization_members(organization_id, user_id)
+    ON DELETE CASCADE,
+  CONSTRAINT location_managers_location_org_fkey
+    FOREIGN KEY (location_id, organization_id)
+    REFERENCES public.locations(id, organization_id)
+    ON DELETE CASCADE
 );
 
 -- =========================================================

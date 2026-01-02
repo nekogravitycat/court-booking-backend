@@ -106,6 +106,29 @@ func (r *AddOrganizationManagerRequest) Validate() error {
 	return nil
 }
 
+// AddOrganizationMemberRequest defines payload for adding a member.
+// Same structure as AddOrganizationManagerRequest.
+type AddOrganizationMemberRequest struct {
+	UserID string `json:"user_id" binding:"required,uuid"`
+}
+
+// Validate performs custom validation for AddOrganizationMemberRequest.
+func (r *AddOrganizationMemberRequest) Validate() error {
+	return nil
+}
+
+// ListMemberRequest defines query parameters for listing members.
+// Similar to ListManagerRequest.
+type ListMemberRequest struct {
+	request.ListParams
+	SortBy string `form:"sort_by" binding:"omitempty,oneof=name email created_at"`
+}
+
+// Validate performs custom validation for ListMemberRequest.
+func (r *ListMemberRequest) Validate() error {
+	return nil
+}
+
 func NewManagerResponse(u *user.User) ManagerResponse {
 	return ManagerResponse{
 		ID:          u.ID,
@@ -114,4 +137,12 @@ func NewManagerResponse(u *user.User) ManagerResponse {
 		CreatedAt:   u.CreatedAt,
 		IsActive:    u.IsActive,
 	}
+}
+
+// MemberResponse is a type alias for ManagerResponse as they share the same User structure.
+type MemberResponse = ManagerResponse
+
+// NewMemberResponse creates a MemberResponse from a User.
+func NewMemberResponse(u *user.User) MemberResponse {
+	return NewManagerResponse(u)
 }

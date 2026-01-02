@@ -54,6 +54,10 @@ func TestLocationCRUDAndPermissions(t *testing.T) {
 		// Assign Roles for Org A
 		// Owner - Set by Create.
 		// Admin (Manager)
+		// 1. Add Member
+		executeRequest("POST", fmt.Sprintf("/v1/organizations/%s/members", orgA_ID),
+			orgHttp.AddOrganizationMemberRequest{UserID: adminA.ID}, sysAdminToken)
+		// 2. Add Manager
 		executeRequest("POST", fmt.Sprintf("/v1/organizations/%s/managers", orgA_ID),
 			orgHttp.AddOrganizationManagerRequest{UserID: adminA.ID}, sysAdminToken)
 
@@ -66,6 +70,10 @@ func TestLocationCRUDAndPermissions(t *testing.T) {
 		json.Unmarshal(wB.Body.Bytes(), &orgRespB)
 
 		// Assign Admin Role for Org B
+		// 1. Add Member
+		executeRequest("POST", fmt.Sprintf("/v1/organizations/%s/members", orgRespB.ID),
+			orgHttp.AddOrganizationMemberRequest{UserID: adminB.ID}, sysAdminToken)
+		// 2. Add Manager
 		executeRequest("POST", fmt.Sprintf("/v1/organizations/%s/managers", orgRespB.ID),
 			orgHttp.AddOrganizationManagerRequest{UserID: adminB.ID}, sysAdminToken)
 	})

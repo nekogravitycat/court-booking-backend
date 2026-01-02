@@ -26,6 +26,11 @@ type Repository interface {
 	RemoveOrganizationManager(ctx context.Context, orgID string, userID string) error
 	IsOrganizationManager(ctx context.Context, orgID string, userID string) (bool, error)
 	ListOrganizationManagers(ctx context.Context, orgID string, filter ManagerFilter) ([]*user.User, int, error)
+	// Organization Member methods
+	AddMember(ctx context.Context, orgID string, userID string) error
+	RemoveMember(ctx context.Context, orgID string, userID string) error
+	IsMember(ctx context.Context, orgID string, userID string) (bool, error)
+	ListMembers(ctx context.Context, orgID string, filter ManagerFilter) ([]*user.User, int, error)
 }
 
 type pgxRepository struct {
@@ -319,6 +324,133 @@ func (r *pgxRepository) ListOrganizationManagers(ctx context.Context, orgID stri
 		var u user.User
 		if err := rows.Scan(&u.ID, &u.Email, &u.DisplayName, &u.CreatedAt, &u.IsActive, &total); err != nil {
 			return nil, 0, fmt.Errorf("scan org manager failed: %w", err)
+		}
+		users = append(users, &u)
+	}
+	return users, total, nil
+}
+
+// -----------------------------
+//   Organization Member methods
+// -----------------------------
+
+func (r *pgxRepository) AddMember(ctx context.Context, orgID string, userID string) error {
+	psql := squirrel.StatementBuilder.PlaceholderFormat(squirrel.Dollar)
+	query, args, err := psql.Insert("public.organization_members").
+		Columns("organization_id", "user_id").
+		Values(orgID, userID).
+		Suffix("ON CONFLICT DO NOTHING").
+		ToSql()
+	if err != nil {
+		return fmt.Errorf("build add member query failed: %w", err)
+	}
+
+	_, err = r.pool.Exec(ctx, query, args...)
+	if err != nil {
+		return fmt.Errorf("AddMember failed: %w", err)
+	}
+	return nil
+}
+
+func (r *pgxRepository) RemoveMember(ctx context.Context, orgID string, userID string) error {
+	psql := squirrel.StatementBuilder.PlaceholderFormat(squirrel.Dollar)
+	query, args, err := psql.Delete("public.organization_members").
+		Where(squirrel.Eq{"organization_id": orgID}).
+		Where(squirrel.Eq{"user_id": userID}).
+		ToSql()
+	if err != nil {
+		return fmt.Errorf("build remove member query failed: %w", err)
+	}
+
+	ct, err := r.pool.Exec(ctx, query, args...)
+	if err != nil {
+		return fmt.Errorf("RemoveMember failed: %w", err)
+	}
+	if ct.RowsAffected() == 0 {
+		return ErrUserNotMember
+	}
+	return nil
+}
+
+func (r *pgxRepository) IsMember(ctx context.Context, orgID string, userID string) (bool, error) {
+	psql := squirrel.StatementBuilder.PlaceholderFormat(squirrel.Dollar)
+	query, args, err := psql.Select("1").
+		From("public.organization_members").
+		Where(squirrel.Eq{"organization_id": orgID}).
+		Where(squirrel.Eq{"user_id": userID}).
+		ToSql()
+	if err != nil {
+		return false, fmt.Errorf("build check member query failed: %w", err)
+	}
+
+	var one int
+	err = r.pool.QueryRow(ctx, query, args...).Scan(&one)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return false, nil
+		}
+		return false, fmt.Errorf("IsMember failed: %w", err)
+	}
+	return true, nil
+}
+
+func (r *pgxRepository) ListMembers(ctx context.Context, orgID string, filter ManagerFilter) ([]*user.User, int, error) {
+	psql := squirrel.StatementBuilder.PlaceholderFormat(squirrel.Dollar)
+	queryBuilder := psql.Select(
+		"u.id", "u.email", "u.display_name", "u.created_at", "u.is_active", "count(*) OVER() AS total_count",
+	).
+		From("public.organization_members om").
+		Join("public.users u ON om.user_id = u.id").
+		Where(squirrel.Eq{"om.organization_id": orgID})
+
+	orderBy := "u.display_name"
+	switch filter.SortBy {
+	case "name":
+		orderBy = "u.display_name"
+	case "email":
+		orderBy = "u.email"
+	case "created_at":
+		orderBy = "u.created_at"
+	default:
+		orderBy = "u.display_name"
+	}
+
+	orderDir := "ASC"
+	if filter.SortOrder != "" {
+		orderDir = filter.SortOrder
+	}
+
+	queryBuilder = queryBuilder.OrderBy(orderBy + " " + orderDir)
+
+	// Pagination
+	if filter.Page < 1 {
+		filter.Page = 1
+	}
+	if filter.PageSize < 1 {
+		filter.PageSize = 20
+	}
+	offset := (filter.Page - 1) * filter.PageSize
+
+	queryBuilder = queryBuilder.Limit(uint64(filter.PageSize)).Offset(uint64(offset))
+
+	query, args, err := queryBuilder.ToSql()
+	if err != nil {
+		return nil, 0, fmt.Errorf("build list members query failed: %w", err)
+	}
+
+	rows, err := r.pool.Query(ctx, query, args...)
+	if err != nil {
+		return nil, 0, fmt.Errorf("ListMembers failed: %w", err)
+	}
+	defer rows.Close()
+
+	var users []*user.User
+	var total int
+
+	for rows.Next() {
+		var u user.User
+		if err := rows.Scan(&u.ID, &u.Email, &u.DisplayName, &u.CreatedAt, &u.IsActive, &total); err != nil {
+			return nil, 0, fmt.Errorf("scan member failed: %w", err)
 		}
 		users = append(users, &u)
 	}

@@ -199,7 +199,7 @@ locationDetail:
 locationManagers:
   get:
     tags:
-      - Locations
+      - Location Managers
     summary: "查詢 Location Managers"
     description: |
       Listing all managers for a specific location.
@@ -244,10 +244,14 @@ locationManagers:
         description: Location not found
   post:
     tags:
-      - Locations
+      - Location Managers
     summary: "新增場館管理員"
     description: |
       指派使用者成為特定 Location 的管理員。
+
+      **Prerequisite**:
+      - 使用者必須是 Organization 的 **Member**。
+      - 根據系統限制，該使用者 **不能** 是 Organization Manager 或 Owner (角色互斥)。
 
       **權限 Access Control**:
       - **System Admin**: 完全存取權限。
@@ -284,7 +288,7 @@ locationManagers:
 removeLocationManager:
   delete:
     tags:
-      - Locations
+      - Location Managers
     summary: "移除場館管理員"
     description: |
       移除特定 Location 的管理員權限。

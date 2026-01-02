@@ -67,6 +67,9 @@ func TestMain(m *testing.M) {
 	// Setup Gin mode
 	gin.SetMode(gin.TestMode)
 
+	// Apply Schema (Migration for Tests)
+	applySchema()
+
 	// Run Tests
 	exitCode := m.Run()
 
@@ -75,11 +78,33 @@ func TestMain(m *testing.M) {
 	os.Exit(exitCode)
 }
 
+func applySchema() {
+	// Reset schema to ensure all changes in schema.sql are applied
+	_, err := testPool.Exec(context.Background(), `
+		DROP SCHEMA public CASCADE;
+		CREATE SCHEMA public;
+		GRANT ALL ON SCHEMA public TO public;
+	`)
+	if err != nil {
+		log.Fatalf("Failed to reset schema: %v", err)
+	}
+
+	schema, err := os.ReadFile("../db/schema.sql")
+	if err != nil {
+		log.Fatalf("Failed to read schema file: %v", err)
+	}
+	_, err = testPool.Exec(context.Background(), string(schema))
+	if err != nil {
+		log.Fatalf("Failed to apply schema: %v", err)
+	}
+}
+
 func clearTables() {
 	ctx := context.Background()
 	queries := []string{
 		"TRUNCATE TABLE public.location_managers CASCADE",
 		"TRUNCATE TABLE public.organization_managers CASCADE",
+		"TRUNCATE TABLE public.organization_members CASCADE",
 		"TRUNCATE TABLE public.organizations CASCADE",
 		"TRUNCATE TABLE public.users CASCADE",
 	}

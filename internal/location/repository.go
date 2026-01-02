@@ -251,12 +251,19 @@ func (r *pgxRepository) Delete(ctx context.Context, id string) error {
 // ------------------------
 
 func (r *pgxRepository) AddLocationManager(ctx context.Context, locationID string, userID string) error {
+	// First get the organization ID for this location to ensure consistency
+	orgID, err := r.GetOrganizationID(ctx, locationID)
+	if err != nil {
+		return fmt.Errorf("get organization id for location failed: %w", err)
+	}
+
 	psql := squirrel.StatementBuilder.PlaceholderFormat(squirrel.Dollar)
 	query, args, err := psql.Insert("public.location_managers").
-		Columns("location_id", "user_id").
-		Values(locationID, userID).
+		Columns("location_id", "organization_id", "user_id").
+		Values(locationID, orgID, userID).
 		Suffix("ON CONFLICT DO NOTHING").
 		ToSql()
+
 	if err != nil {
 		return fmt.Errorf("build add location admin query failed: %w", err)
 	}

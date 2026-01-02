@@ -37,6 +37,7 @@
 
 **識別方式：** 存在於 `organization_managers` 資料表中。
 
+- **前置條件：** 必須先是 **Organization Member**。
 - **數量：** 允許由多位擔任。
 - **範圍：** 特定的組織。
 - **權限：**
@@ -49,6 +50,7 @@
 
 **識別方式：** 存在於 `location_managers` 資料表中。
 
+- **前置條件：** 必須先是 **Organization Member**。
 - **數量：** 允許由多位擔任。
 - **範圍：** 僅限 **特定場館**。
 - **權限：**
@@ -56,7 +58,19 @@
   - **無權** 操作場館本身（不能建立/刪除場館）。
   - **可以管理** 指派場館內的資源（球場/房間）。
   - **可以管理** 指派場館內的預約。
-- **獨立性：** 使用者 **不需要** 是組織管理員 (Organization Manager) 即可成為場館管理員。這兩者是分開的權限集。
+- **角色互斥：**
+  - 若使用者已是 **Organization Manager** 或 **Owner**，則**不能**擔任場館管理員。
+  - 系統內的高階管理職與場館專屬職責是分開的。
+
+### 5. 組織成員 (Organization Member)
+
+**識別方式：** 存在於 `organization_members` 資料表中。
+
+- **範圍：** 特定組織。
+- **角色定位：**
+  - 這是組織內的基礎身分。
+  - 所有 Manager / Location Manager 都必須由此身分晉升。
+  - 僅具備基本的讀取權限 (視具體實作而定)，主要是作為身分綁定的基礎。
 
 ## 權限邏輯 (Permission Logic)
 
@@ -85,8 +99,15 @@
 ### 組織員工 (擁有者 & 組織管理員)
 
 - `POST /v1/organizations/:id/managers`：新增一位使用者為管理員 (Manager)。
+  - **注意**：使用者必須先存在於成員列表 (Members) 中。
   - 請求資料 (Payload)：`{"user_id": "uuid"}`
 - `DELETE /v1/organizations/:id/managers/:user_id`：移除一位管理員。
+
+### 組織成員 (一般成員)
+
+- `POST /v1/organizations/:id/members`：加入新成員。
+- `GET /v1/organizations/:id/members`：查看成員列表。
+- `DELETE /v1/organizations/:id/members/:user_id`：移除成員 (會連帶移除所有管理職)。
 
 ### 場館員工 (場館管理員)
 

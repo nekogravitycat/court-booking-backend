@@ -61,14 +61,15 @@ func TestRoleMutualExclusionAndUnifiedList(t *testing.T) {
 	// Case 1: Add Location Manager (Success)
 	// -------------------------------------------------------------------------
 	t.Run("Add Location Manager Success", func(t *testing.T) {
+		// Prerequisite: Add as Member
+		executeRequest("POST", fmt.Sprintf("/v1/organizations/%s/members", orgID),
+			orgHttp.AddOrganizationMemberRequest{UserID: locAdmin.ID}, ownerToken)
+
 		payload := map[string]string{"user_id": locAdmin.ID}
 		w := executeRequest("POST", fmt.Sprintf("/v1/locations/%s/managers", locID), payload, ownerToken)
 		assert.Equal(t, http.StatusCreated, w.Code)
 	})
 
-	// -------------------------------------------------------------------------
-	// Case 2: Try to Add Same User as Org Manager (Failure - Mutual Exclusion)
-	// -------------------------------------------------------------------------
 	// -------------------------------------------------------------------------
 	// Case 2: Try to Add Same User as Org Manager (Failure - Mutual Exclusion)
 	// -------------------------------------------------------------------------
@@ -82,6 +83,10 @@ func TestRoleMutualExclusionAndUnifiedList(t *testing.T) {
 	// Case 3: Add Org Manager (Success)
 	// -------------------------------------------------------------------------
 	t.Run("Add Org Manager Success", func(t *testing.T) {
+		// Prerequisite: Add as Member
+		executeRequest("POST", fmt.Sprintf("/v1/organizations/%s/members", orgID),
+			orgHttp.AddOrganizationMemberRequest{UserID: orgAdmin.ID}, ownerToken)
+
 		payload := orgHttp.AddOrganizationManagerRequest{UserID: orgAdmin.ID}
 		w := executeRequest("POST", fmt.Sprintf("/v1/organizations/%s/managers", orgID), payload, ownerToken)
 		assert.Equal(t, http.StatusCreated, w.Code)

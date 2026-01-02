@@ -183,6 +183,14 @@ func TestOrganizationManagers(t *testing.T) {
 	})
 
 	t.Run("Add Manager", func(t *testing.T) {
+		// Step 0: Add as Member first (Prerequisite)
+		memberPayload := orgHttp.AddOrganizationMemberRequest{
+			UserID: managerUser.ID,
+		}
+		wMember := executeRequest("POST", "/v1/organizations/"+orgID+"/members", memberPayload, ownerToken)
+		require.Equal(t, http.StatusCreated, wMember.Code, "Should be able to add member")
+
+		// Step 1: Add as Manager
 		payload := orgHttp.AddOrganizationManagerRequest{
 			UserID: managerUser.ID,
 		}
@@ -255,5 +263,72 @@ func TestOrganizationManagers(t *testing.T) {
 		// DELETE Manager
 		wDelete := executeRequest("DELETE", invalidUserPath, nil, ownerToken)
 		assert.Equal(t, http.StatusBadRequest, wDelete.Code)
+	})
+}
+
+func TestOrganizationMembers(t *testing.T) {
+	clearTables()
+
+	sysAdmin := createTestUser(t, "sysadmin2@test.com", "pass", true)
+	owner := createTestUser(t, "owner2@test.com", "pass", false)
+	member := createTestUser(t, "member@test.com", "pass", false)
+	nonMember := createTestUser(t, "outsider@test.com", "pass", false)
+
+	sysToken := generateToken(sysAdmin.ID)
+	ownerToken := generateToken(owner.ID)
+	// memberToken := generateToken(member.ID)
+
+	var orgID string
+
+	t.Run("Setup", func(t *testing.T) {
+		createPayload := orgHttp.CreateOrganizationRequest{
+			Name:    "Member Org",
+			OwnerID: owner.ID,
+		}
+		wOrg := executeRequest("POST", "/v1/organizations", createPayload, sysToken)
+		require.Equal(t, http.StatusCreated, wOrg.Code)
+		var orgResp orgHttp.OrganizationResponse
+		json.Unmarshal(wOrg.Body.Bytes(), &orgResp)
+		orgID = orgResp.ID
+	})
+
+	t.Run("Add Member", func(t *testing.T) {
+		payload := orgHttp.AddOrganizationMemberRequest{UserID: member.ID}
+		w := executeRequest("POST", "/v1/organizations/"+orgID+"/members", payload, ownerToken)
+		assert.Equal(t, http.StatusCreated, w.Code)
+	})
+
+	t.Run("List Members", func(t *testing.T) {
+		w := executeRequest("GET", "/v1/organizations/"+orgID+"/members", nil, ownerToken)
+		assert.Equal(t, http.StatusOK, w.Code)
+		var resp response.PageResponse[orgHttp.MemberResponse]
+		json.Unmarshal(w.Body.Bytes(), &resp)
+		assert.Equal(t, 1, resp.Total)
+		assert.Equal(t, member.ID, resp.Items[0].ID)
+	})
+
+	t.Run("Remove Member", func(t *testing.T) {
+		w := executeRequest("DELETE", "/v1/organizations/"+orgID+"/members/"+member.ID, nil, ownerToken)
+		assert.Equal(t, http.StatusNoContent, w.Code)
+	})
+
+	t.Run("List Members Empty", func(t *testing.T) {
+		w := executeRequest("GET", "/v1/organizations/"+orgID+"/members", nil, ownerToken)
+		var resp response.PageResponse[orgHttp.MemberResponse]
+		json.Unmarshal(w.Body.Bytes(), &resp)
+		assert.Equal(t, 0, resp.Total)
+	})
+
+	t.Run("Add Fail Non-Existent User", func(t *testing.T) {
+		fakeID := "00000000-0000-0000-0000-000000000000"
+		payload := orgHttp.AddOrganizationMemberRequest{UserID: fakeID}
+		w := executeRequest("POST", "/v1/organizations/"+orgID+"/members", payload, ownerToken)
+		assert.Equal(t, http.StatusNotFound, w.Code)
+	})
+
+	t.Run("Try to Add Manager without Member", func(t *testing.T) {
+		payload := orgHttp.AddOrganizationManagerRequest{UserID: nonMember.ID}
+		w := executeRequest("POST", "/v1/organizations/"+orgID+"/managers", payload, ownerToken)
+		assert.Equal(t, http.StatusBadRequest, w.Code, "Should fail with prerequisite error")
 	})
 }

@@ -298,3 +298,142 @@ func (h *OrganizationHandler) RemoveManager(c *gin.Context) {
 
 	c.Status(http.StatusNoContent)
 }
+
+// ListMembers retrieves members of an organization.
+func (h *OrganizationHandler) ListMembers(c *gin.Context) {
+	var uri request.ByIDRequest
+	if err := c.ShouldBindUri(&uri); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request", "details": err.Error()})
+		return
+	}
+
+	// Bind query parameters
+	var req ListMemberRequest
+	if err := c.ShouldBindQuery(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid query parameters", "details": err.Error()})
+		return
+	}
+
+	if err := req.Validate(); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	userID := auth.GetUserID(c)
+	// Permission check: Manager or above can list members
+	hasPerm, err := h.service.IsManagerOrAbove(c.Request.Context(), uri.ID, userID)
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+	if !hasPerm {
+		c.JSON(http.StatusForbidden, gin.H{"error": "permission denied"})
+		return
+	}
+
+	filter := organization.ManagerFilter{
+		Page:      req.Page,
+		PageSize:  req.PageSize,
+		SortBy:    req.SortBy,
+		SortOrder: req.SortOrder,
+	}
+
+	// Default sort
+	if filter.SortBy == "" {
+		filter.SortBy = "name"
+	}
+	if filter.SortOrder == "" {
+		filter.SortOrder = "ASC"
+	} else {
+		filter.SortOrder = strings.ToUpper(filter.SortOrder)
+	}
+
+	members, total, err := h.service.ListMembers(c.Request.Context(), uri.ID, filter)
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+
+	items := make([]MemberResponse, len(members))
+	for i, m := range members {
+		items[i] = NewMemberResponse(m)
+	}
+
+	resp := response.NewPageResponse(items, req.Page, req.PageSize, total)
+	c.JSON(http.StatusOK, resp)
+}
+
+// AddMember adds a member to an organization.
+// Access Control: System Admin or Organization Owner.
+func (h *OrganizationHandler) AddMember(c *gin.Context) {
+	var uri request.ByIDRequest
+	if err := c.ShouldBindUri(&uri); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request", "details": err.Error()})
+		return
+	}
+
+	var body AddOrganizationMemberRequest
+	if err := c.ShouldBindJSON(&body); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request body", "details": err.Error()})
+		return
+	}
+
+	if err := body.Validate(); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	// Validate UUID format
+	if _, err := uuid.Parse(body.UserID); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid user UUID"})
+		return
+	}
+
+	actorID := auth.GetUserID(c)
+	// Permission check: Must be Owner or SysAdmin to add members.
+	isOwner, err := h.service.IsOwnerOrAbove(c.Request.Context(), uri.ID, actorID)
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+	if !isOwner {
+		c.JSON(http.StatusForbidden, gin.H{"error": "permission denied: only owner can add members"})
+		return
+	}
+
+	if err := h.service.AddMember(c.Request.Context(), uri.ID, body.UserID); err != nil {
+		response.Error(c, err)
+		return
+	}
+
+	c.Status(http.StatusCreated)
+}
+
+// RemoveMember removes a member from an organization.
+// Access Control: System Admin or Organization Owner.
+func (h *OrganizationHandler) RemoveMember(c *gin.Context) {
+	var req OrgMemberRequest
+	if err := c.ShouldBindUri(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request", "details": err.Error()})
+		return
+	}
+
+	actorID := auth.GetUserID(c)
+	// Permission check: Must be Owner or SysAdmin to remove members.
+	isOwner, err := h.service.IsOwnerOrAbove(c.Request.Context(), req.ID, actorID)
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+	if !isOwner {
+		c.JSON(http.StatusForbidden, gin.H{"error": "permission denied: only owner can remove members"})
+		return
+	}
+
+	if err := h.service.RemoveMember(c.Request.Context(), req.ID, req.UserID); err != nil {
+		response.Error(c, err)
+		return
+	}
+
+	c.Status(http.StatusNoContent)
+}
