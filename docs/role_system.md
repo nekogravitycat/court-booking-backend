@@ -33,7 +33,17 @@
   - 可以建立、更新和刪除場域 (Locations)。
   - 可以指派/取消指派場地管理員。
 
-### 3. 組織管理員 (Organization Manager)
+### 3. 組織成員 (Organization Member)
+
+**識別方式：** 存在於 `organization_members` 資料表中。
+
+- **範圍：** 特定組織。
+- **角色定位：**
+  - 這是組織內的基礎身分。
+  - 所有 Manager / Location Manager 都必須由此身分晉升。
+  - 僅具備基本的讀取權限 (視具體實作而定)，主要是作為身分綁定的基礎。
+
+### 4. 組織管理員 (Organization Manager)
 
 **識別方式：** 存在於 `organization_managers` 資料表中。
 
@@ -46,7 +56,7 @@
   - 可以管理場館（建立/更新/刪除）。
   - 可以管理場館管理員 (Location Managers)。
 
-### 4. 場館管理員 (Location Manager)
+### 5. 場館管理員 (Location Manager)
 
 **識別方式：** 存在於 `location_managers` 資料表中。
 
@@ -62,15 +72,29 @@
   - 若使用者已是 **Organization Manager** 或 **Owner**，則**不能**擔任場館管理員。
   - 系統內的高階管理職與場館專屬職責是分開的。
 
-### 5. 組織成員 (Organization Member)
+## 權限授與流程 (Permission Granting Flow)
 
-**識別方式：** 存在於 `organization_members` 資料表中。
+```mermaid
+graph TD
+    User((User)) -->|Join/Add| Member[Organization Member]
+    Member -->|Assign| OrgMgr[Organization Manager]
+    Member -->|Assign| LocMgr[Location Manager]
+    User -->|Create| Owner[Organization Owner]
 
-- **範圍：** 特定組織。
-- **角色定位：**
-  - 這是組織內的基礎身分。
-  - 所有 Manager / Location Manager 都必須由此身分晉升。
-  - 僅具備基本的讀取權限 (視具體實作而定)，主要是作為身分綁定的基礎。
+    subgraph Prerequisites
+    Member
+    end
+
+    subgraph Roles
+    OrgMgr
+    LocMgr
+    end
+
+    OrgMgr <-.->|Mutex| LocMgr
+    Owner <-.->|Mutex| Member
+    Owner <-.->|Mutex| OrgMgr
+    Owner <-.->|Mutex| LocMgr
+```
 
 ## 權限邏輯 (Permission Logic)
 

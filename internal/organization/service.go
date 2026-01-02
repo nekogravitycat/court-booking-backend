@@ -238,8 +238,14 @@ func (s *service) ListOrganizationManagers(ctx context.Context, orgID string, fi
 
 func (s *service) AddMember(ctx context.Context, orgID string, userID string) error {
 	// Verify organization exists
-	if _, err := s.repo.GetByID(ctx, orgID); err != nil {
+	org, err := s.repo.GetByID(ctx, orgID)
+	if err != nil {
 		return err
+	}
+
+	// Mutual Exclusion: Owner cannot be a member
+	if org.OwnerID == userID {
+		return apperror.New(409, "user is the owner of this organization")
 	}
 
 	// Verify user exists
