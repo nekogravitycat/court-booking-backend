@@ -26,8 +26,6 @@ type Repository interface {
 	RemoveOrganizationManager(ctx context.Context, orgID string, userID string) error
 	IsOrganizationManager(ctx context.Context, orgID string, userID string) (bool, error)
 	ListOrganizationManagers(ctx context.Context, orgID string, filter ManagerFilter) ([]*user.User, int, error)
-	// Helpers
-	RemoveAllLocationManagersForUser(ctx context.Context, userID string) error
 }
 
 type pgxRepository struct {
@@ -261,15 +259,12 @@ func (r *pgxRepository) ListOrganizationManagers(ctx context.Context, orgID stri
 
 	orderBy := "u.display_name"
 	if filter.SortBy != "" {
-		if filter.SortBy == "created_at" {
-			orderBy = "om.created_at" // Assuming organization_managers has created_at or we join user.created_at?
-			// Wait, organization_managers usually doesn't have created_at in the join above unless we select it.
-			// The current join is on users. u.created_at is available in users table.
-			// Let's check the user table schema or just use u.created_at.
+		switch filter.SortBy {
+		case "created_at":
 			orderBy = "u.created_at"
-		} else if filter.SortBy == "name" {
+		case "name":
 			orderBy = "u.display_name"
-		} else {
+		default:
 			orderBy = "u." + filter.SortBy
 		}
 	}
@@ -277,14 +272,15 @@ func (r *pgxRepository) ListOrganizationManagers(ctx context.Context, orgID stri
 	// Correcting SortBy logic. The user might send 'name' or 'email'.
 	// The previous implementation used u.display_name ASC.
 
-	if filter.SortBy == "name" {
+	switch filter.SortBy {
+	case "name":
 		orderBy = "u.display_name"
-	} else if filter.SortBy == "email" {
+	case "email":
 		orderBy = "u.email"
-	} else if filter.SortBy == "created_at" {
+	case "created_at":
 		orderBy = "u.created_at"
-	} else {
-		orderBy = "u.display_name" // Default
+	default:
+		orderBy = "u.display_name"
 	}
 
 	orderDir := "ASC"
@@ -327,20 +323,4 @@ func (r *pgxRepository) ListOrganizationManagers(ctx context.Context, orgID stri
 		users = append(users, &u)
 	}
 	return users, total, nil
-}
-
-func (r *pgxRepository) RemoveAllLocationManagersForUser(ctx context.Context, userID string) error {
-	psql := squirrel.StatementBuilder.PlaceholderFormat(squirrel.Dollar)
-	query, args, err := psql.Delete("public.location_managers").
-		Where(squirrel.Eq{"user_id": userID}).
-		ToSql()
-	if err != nil {
-		return fmt.Errorf("build remove all location admins query failed: %w", err)
-	}
-
-	_, err = r.pool.Exec(ctx, query, args...)
-	if err != nil {
-		return fmt.Errorf("RemoveAllLocationManagersForUser failed: %w", err)
-	}
-	return nil
 }

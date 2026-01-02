@@ -316,9 +316,10 @@ func (r *pgxRepository) ListLocationManagers(ctx context.Context, locationID str
 
 	// Sorting
 	orderDir := "ASC"
-	if params.SortOrder == "DESC" {
+	switch params.SortOrder {
+	case "DESC":
 		orderDir = "DESC"
-	} else if params.SortOrder == "ASC" {
+	case "ASC":
 		orderDir = "ASC"
 	}
 	query = query.OrderBy("u.display_name " + orderDir)
