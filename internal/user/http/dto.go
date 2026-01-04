@@ -11,10 +11,11 @@ import (
 // ListUsersRequest defines query parameters for listing users.
 type ListUsersRequest struct {
 	request.ListParams
-	Email       string `form:"email"`
-	DisplayName string `form:"display_name"`
-	IsActive    *bool  `form:"is_active"`
-	SortBy      string `form:"sort_by" binding:"omitempty,oneof=name email created_at"`
+	Email       string   `form:"email"`
+	IDs         []string `form:"ids"`
+	DisplayName string   `form:"display_name"`
+	IsActive    *bool    `form:"is_active"`
+	SortBy      string   `form:"sort_by" binding:"omitempty,oneof=name email created_at"`
 }
 
 // Validate performs custom validation for ListUsersRequest.

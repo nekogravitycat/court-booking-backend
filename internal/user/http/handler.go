@@ -149,6 +149,7 @@ func (h *UserHandler) List(c *gin.Context) {
 		SortBy:      req.SortBy,
 		SortOrder:   req.SortOrder,
 		Email:       req.Email,
+		IDs:         req.IDs,
 		DisplayName: req.DisplayName,
 		IsActive:    req.IsActive,
 	}

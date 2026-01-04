@@ -147,6 +147,30 @@ func TestUserManagementPermissions(t *testing.T) {
 		assert.Equal(t, 1, resp.Total)
 		assert.Equal(t, "admin@example.com", resp.Items[0].Email)
 	})
+
+	t.Run("Admin List Users Filtered By IDs", func(t *testing.T) {
+		// Filter by ID of adminUser and normalUser
+		url := "/v1/users?ids=" + adminUser.ID + "&ids=" + normalUser.ID
+		w := executeRequest("GET", url, nil, adminToken)
+		assert.Equal(t, http.StatusOK, w.Code)
+
+		var resp response.PageResponse[userHttp.UserResponse]
+		json.Unmarshal(w.Body.Bytes(), &resp)
+
+		// Should return both users
+		assert.Equal(t, 2, resp.Total)
+
+		// Verify strict filtering: Ask for adminUser only
+		urlSingle := "/v1/users?ids=" + adminUser.ID
+		wSingle := executeRequest("GET", urlSingle, nil, adminToken)
+		assert.Equal(t, http.StatusOK, wSingle.Code)
+
+		var respSingle response.PageResponse[userHttp.UserResponse]
+		json.Unmarshal(wSingle.Body.Bytes(), &respSingle)
+
+		assert.Equal(t, 1, respSingle.Total)
+		assert.Equal(t, adminUser.ID, respSingle.Items[0].ID)
+	})
 }
 
 func TestUserNotFoundAndInvalidInput(t *testing.T) {
