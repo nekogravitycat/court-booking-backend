@@ -20,11 +20,16 @@ $$;
 -- Purpose: System or organization-related announcements / news.
 -- =========================================================
 CREATE TABLE IF NOT EXISTS public.announcements (
+  -- Identity
   id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),      -- Unique identifier for the announcement
-  created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),              -- Timestamp when the announcement was posted
-  updated_at  TIMESTAMPTZ NOT NULL DEFAULT now(),              -- Timestamp of the last edit
+
+  -- Content
   title       TEXT NOT NULL,                                   -- Headline/Title of the announcement
-  content     TEXT NOT NULL                                    -- Main body text of the announcement
+  content     TEXT NOT NULL,                                   -- Main body text of the announcement
+
+  -- Meta / Audit
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),              -- Timestamp when the announcement was posted
+  updated_at  TIMESTAMPTZ NOT NULL DEFAULT now()               -- Timestamp of the last edit
 );
 
 -- =========================================================
@@ -33,14 +38,21 @@ CREATE TABLE IF NOT EXISTS public.announcements (
 --          Organization-level roles are handled via organizations.owner_id and organization_managers.
 -- =========================================================
 CREATE TABLE IF NOT EXISTS public.users (
+  -- Identity
   id              UUID PRIMARY KEY DEFAULT gen_random_uuid(), -- Unique identifier for the user
+
+  -- Authentication & Profile
   email           TEXT NOT NULL UNIQUE,                       -- User's email address, serves as the login username
   password_hash   TEXT NOT NULL,                              -- Bcrypt/Argon2 hash of the user's password
   display_name    TEXT,                                       -- Publicly visible name (optional)
-  created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),         -- Timestamp when the account was registered
-  last_login_at   TIMESTAMPTZ,                                -- Timestamp of the most recent successful login
+
+  -- Authorization
+  is_system_admin BOOLEAN NOT NULL DEFAULT false,             -- "God Mode" flag: grants full access to all organizations and system settings
+
+  -- Meta / Audit
   is_active       BOOLEAN NOT NULL DEFAULT true,              -- Status flag: false indicates a suspended or soft-deleted account
-  is_system_admin BOOLEAN NOT NULL DEFAULT false              -- "God Mode" flag: grants full access to all organizations and system settings
+  last_login_at   TIMESTAMPTZ,                                -- Timestamp of the most recent successful login
+  created_at      TIMESTAMPTZ NOT NULL DEFAULT now()          -- Timestamp when the account was registered
 );
 
 -- =========================================================
@@ -49,11 +61,18 @@ CREATE TABLE IF NOT EXISTS public.users (
 --          Other entities (locations, resource_types, etc.) belong to an organization.
 -- =========================================================
 CREATE TABLE IF NOT EXISTS public.organizations (
+  -- Identity
   id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),      -- Unique identifier for the organization
+
+  -- Relationships
   owner_id    UUID NOT NULL,                                   -- Reference to the User who owns this organization (1 owner per org)
-  created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),              -- Timestamp when the organization was established in the system
+
+  -- Core Data
   name        TEXT NOT NULL,                                   -- Display name of the organization
+
+  -- Meta / Audit
   is_active   BOOLEAN NOT NULL DEFAULT true,                   -- Status flag: false prevents all operations for this organization
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),              -- Timestamp when the organization was established in the system
 
   -- Constraint: Enforces that the 'owner_id' must correspond to a valid user in the users table.
   CONSTRAINT organizations_owner_id_fkey
@@ -66,23 +85,28 @@ CREATE TABLE IF NOT EXISTS public.organizations (
 --          Resources (courts/rooms) are conceptually inside locations.
 -- =========================================================
 CREATE TABLE IF NOT EXISTS public.locations (
+  -- Identity
   id                   UUID PRIMARY KEY DEFAULT gen_random_uuid(),      -- Unique identifier for the physical location
   
-  -- Constraint: Creates a composite unique key to allow other tables (like location_managers) 
-  -- to reference both ID and OrgID simultaneously, ensuring strict hierarchy ownership.
-  UNIQUE (id, organization_id),                                         
-  
-  created_at           TIMESTAMPTZ NOT NULL DEFAULT now(),              -- Timestamp when the location was added
+  -- Relationships
   organization_id      UUID NOT NULL,                                   -- The parent organization this location belongs to
+
+  -- Core Settings & Status
   name                 TEXT NOT NULL,                                   -- Name of the branch (e.g., "Downtown Arena")
   capacity             BIGINT NOT NULL,                                 -- Maximum person capacity for this venue
+  opening              BOOLEAN NOT NULL,                                -- Operational status: true if currently open for business
+  
+  -- Operations
   opening_hours_start  TIME WITHOUT TIME ZONE NOT NULL,                 -- Daily opening time (local time implies no date component)
   opening_hours_end    TIME WITHOUT TIME ZONE NOT NULL,                 -- Daily closing time (local time)
+
+  -- Details & Content
   location_info        TEXT NOT NULL,                                   -- Address and contact details
-  opening              BOOLEAN NOT NULL,                                -- Operational status: true if currently open for business
   rule                 TEXT NOT NULL,                                   -- Specific usage rules or terms for this location
   facility             TEXT NOT NULL,                                   -- List or description of available facilities (amenities)
   description          TEXT NOT NULL,                                   -- Marketing description or "About Us" for the location
+
+  -- Geography
   longitude            NUMERIC NOT NULL CHECK (
                           longitude >= '-180.0'::NUMERIC
                           AND longitude <= 180.0
@@ -91,6 +115,13 @@ CREATE TABLE IF NOT EXISTS public.locations (
                           latitude >= '-90.0'::NUMERIC
                           AND latitude <= 90.0
                         ),                                              -- Geographic latitude with validation (-90 to 90)
+
+  -- Meta / Audit
+  created_at           TIMESTAMPTZ NOT NULL DEFAULT now(),              -- Timestamp when the location was added
+
+  -- Constraint: Creates a composite unique key to allow other tables (like location_managers) 
+  -- to reference both ID and OrgID simultaneously, ensuring strict hierarchy ownership.
+  UNIQUE (id, organization_id),
 
   -- Constraint: Ensures the location is linked to a valid organization.
   CONSTRAINT locations_organization_id_fkey
@@ -103,11 +134,18 @@ CREATE TABLE IF NOT EXISTS public.locations (
 --          (e.g. badminton court, tennis court, meeting room).
 -- =========================================================
 CREATE TABLE IF NOT EXISTS public.resource_types (
+  -- Identity
   id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),      -- Unique identifier for the resource category
-  created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),              -- Timestamp when this type was defined
+
+  -- Relationships
   organization_id UUID NOT NULL,                                   -- The organization that defines this resource type
+
+  -- Content
   name            TEXT NOT NULL,                                   -- Name of the type (e.g., "Badminton Court")
   description     TEXT NOT NULL DEFAULT '',                        -- Optional details describing this type of resource
+
+  -- Meta / Audit
+  created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),              -- Timestamp when this type was defined
 
   -- Constraint: Links the resource type to a specific organization.
   CONSTRAINT resource_types_organization_id_fkey
@@ -121,11 +159,18 @@ CREATE TABLE IF NOT EXISTS public.resource_types (
 --          For example: Court A, Court B under "badminton_court" at Location X.
 -- =========================================================
 CREATE TABLE IF NOT EXISTS public.resources (
+  -- Identity
   id                UUID PRIMARY KEY DEFAULT gen_random_uuid(),      -- Unique identifier for the specific bookable item
-  name              TEXT NOT NULL,                                   -- Name/Number of the resource (e.g., "Court 1")
-  created_at        TIMESTAMPTZ NOT NULL DEFAULT now(),              -- Timestamp when the resource was added
+
+  -- Relationships
   resource_type_id  UUID NOT NULL,                                   -- Classification of the resource (refers to resource_types)
   location_id       UUID NOT NULL,                                   -- Physical location where this resource exists
+
+  -- Content
+  name              TEXT NOT NULL,                                   -- Name/Number of the resource (e.g., "Court 1")
+
+  -- Meta / Audit
+  created_at        TIMESTAMPTZ NOT NULL DEFAULT now(),              -- Timestamp when the resource was added
 
   -- Constraint: Ensures valid categorization of the resource.
   CONSTRAINT resources_resource_type_id_fkey
@@ -142,14 +187,23 @@ CREATE TABLE IF NOT EXISTS public.resources (
 --          a continuous time range, made by a user.
 -- =========================================================
 CREATE TABLE IF NOT EXISTS public.bookings (
+  -- Identity
   id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),      -- Unique identifier for the reservation
-  created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),              -- Timestamp when the booking was made
-  updated_at  TIMESTAMPTZ NOT NULL DEFAULT now(),              -- Timestamp when the booking was last modified
+
+  -- Relationships
   resource_id UUID NOT NULL,                                   -- The specific resource (court/room) being booked
   user_id     UUID NOT NULL,                                   -- The user who owns the reservation
+
+  -- Schedule
   start_time  TIMESTAMPTZ NOT NULL,                            -- Start of the reservation period (UTC recommended)
   end_time    TIMESTAMPTZ NOT NULL,                            -- End of the reservation period (UTC recommended)
+
+  -- Status
   status      booking_status NOT NULL DEFAULT 'pending',       -- Current state (pending, confirmed, cancelled)
+
+  -- Meta / Audit
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),              -- Timestamp when the booking was made
+  updated_at  TIMESTAMPTZ NOT NULL DEFAULT now(),              -- Timestamp when the booking was last modified
 
   -- Constraint: Links booking to a specific resource.
   CONSTRAINT bookings_resource_id_fkey
@@ -170,8 +224,11 @@ CREATE TABLE IF NOT EXISTS public.bookings (
 --          Must be a member to be a manager.
 -- =========================================================
 CREATE TABLE IF NOT EXISTS public.organization_members (
+  -- Relationships (Composite Key)
   organization_id UUID NOT NULL,                               -- The organization the user belongs to
   user_id         UUID NOT NULL,                               -- The user being added as a member
+
+  -- Meta / Audit
   created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),          -- Timestamp when the user joined the organization
   
   -- Composite Primary Key: A user can only be a member of a specific organization once.
@@ -192,6 +249,7 @@ CREATE TABLE IF NOT EXISTS public.organization_members (
 --          The owner is defined in the organizations table.
 -- =========================================================
 CREATE TABLE IF NOT EXISTS public.organization_managers (
+  -- Relationships (Composite Key)
   organization_id UUID NOT NULL,                               -- The organization ID
   user_id         UUID NOT NULL,                               -- The user ID designated as a manager
   
@@ -212,6 +270,7 @@ CREATE TABLE IF NOT EXISTS public.organization_managers (
 -- Purpose: Grants manager permission to specific locations.
 -- =========================================================
 CREATE TABLE IF NOT EXISTS public.location_managers (
+  -- Relationships (Composite Key)
   location_id     UUID NOT NULL,                               -- The specific location to be managed
   organization_id UUID NOT NULL,                               -- The organization owning that location
   user_id         UUID NOT NULL,                               -- The user designated as location manager
