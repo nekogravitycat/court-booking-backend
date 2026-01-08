@@ -16,10 +16,12 @@ type OrganizationResponse struct {
 	CreatedAt time.Time `json:"created_at"`
 }
 
-// OrganizationTag is a brief representation of an organization (ID and Name).
 type OrganizationTag struct {
-	ID   string `json:"id"`
-	Name string `json:"name"`
+	ID                  string   `json:"id"`
+	Name                string   `json:"name"`
+	Owner               bool     `json:"owner"`
+	OrganizationManager bool     `json:"organization_manager"`
+	LocationManager     []string `json:"location_manager"`
 }
 
 // OrgMemberRequest is a common struct for endpoints that require both OrgID and UserID path parameters.

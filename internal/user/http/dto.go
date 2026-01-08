@@ -56,8 +56,11 @@ func NewUserResponse(u *user.User) UserResponse {
 	if u.Organizations != nil {
 		for _, org := range u.Organizations {
 			orgs = append(orgs, orgHttp.OrganizationTag{
-				ID:   org.ID,
-				Name: org.Name,
+				ID:                  org.ID,
+				Name:                org.Name,
+				Owner:               org.Owner,
+				OrganizationManager: org.OrganizationManager,
+				LocationManager:     org.LocationManager,
 			})
 		}
 	}
