@@ -76,7 +76,7 @@ CREATE TABLE IF NOT EXISTS public.organizations (
 
   -- Constraint: Enforces that the 'owner_id' must correspond to a valid user in the users table.
   CONSTRAINT organizations_owner_id_fkey
-    FOREIGN KEY (owner_id) REFERENCES public.users(id)
+    FOREIGN KEY (owner_id) REFERENCES public.users(id) ON DELETE RESTRICT
 );
 
 -- =========================================================
@@ -125,7 +125,7 @@ CREATE TABLE IF NOT EXISTS public.locations (
 
   -- Constraint: Ensures the location is linked to a valid organization.
   CONSTRAINT locations_organization_id_fkey
-    FOREIGN KEY (organization_id) REFERENCES public.organizations(id)
+    FOREIGN KEY (organization_id) REFERENCES public.organizations(id) ON DELETE CASCADE
 );
 
 -- =========================================================
@@ -149,7 +149,7 @@ CREATE TABLE IF NOT EXISTS public.resource_types (
 
   -- Constraint: Links the resource type to a specific organization.
   CONSTRAINT resource_types_organization_id_fkey
-    FOREIGN KEY (organization_id) REFERENCES public.organizations(id)
+    FOREIGN KEY (organization_id) REFERENCES public.organizations(id) ON DELETE CASCADE
 );
 
 -- =========================================================
@@ -174,11 +174,11 @@ CREATE TABLE IF NOT EXISTS public.resources (
 
   -- Constraint: Ensures valid categorization of the resource.
   CONSTRAINT resources_resource_type_id_fkey
-    FOREIGN KEY (resource_type_id) REFERENCES public.resource_types(id),
+    FOREIGN KEY (resource_type_id) REFERENCES public.resource_types(id) ON DELETE RESTRICT,
   
   -- Constraint: Ensures the resource is assigned to a valid physical location.
   CONSTRAINT resources_location_id_fkey
-    FOREIGN KEY (location_id) REFERENCES public.locations(id)
+    FOREIGN KEY (location_id) REFERENCES public.locations(id) ON DELETE CASCADE
 );
 
 -- =========================================================
@@ -207,11 +207,11 @@ CREATE TABLE IF NOT EXISTS public.bookings (
 
   -- Constraint: Links booking to a specific resource.
   CONSTRAINT bookings_resource_id_fkey
-    FOREIGN KEY (resource_id) REFERENCES public.resources(id),
+    FOREIGN KEY (resource_id) REFERENCES public.resources(id) ON DELETE RESTRICT,
   
   -- Constraint: Links booking to a valid user account.
   CONSTRAINT bookings_user_id_fkey
-    FOREIGN KEY (user_id) REFERENCES public.users(id),
+    FOREIGN KEY (user_id) REFERENCES public.users(id) ON DELETE RESTRICT,
   
   -- Constraint: Logic check to ensure the end time is strictly after the start time.
   CONSTRAINT bookings_time_range_valid
