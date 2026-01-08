@@ -49,6 +49,18 @@ OrganizationTag:
       format: uuid
     name:
       type: string
+    owner:
+      type: boolean
+    organization_manager:
+      type: boolean
+    location_manager:
+      type: array
+      items:
+        type: string
+        format: uuid
   required:
     - id
     - name
+    - owner
+    - organization_manager
+    - location_manager
