@@ -44,7 +44,13 @@ func (r *pgxUserRepository) GetByEmail(ctx context.Context, email string) (*User
 		"u.last_login_at", "u.is_active", "u.is_system_admin",
 		`COALESCE(
 				(
-					SELECT json_agg(json_build_object('id', o.id, 'name', o.name))
+					SELECT json_agg(json_build_object(
+						'id', o.id,
+						'name', o.name,
+						'owner', (o.owner_id = u.id),
+						'organization_manager', EXISTS(SELECT 1 FROM public.organization_managers om WHERE om.organization_id = o.id AND om.user_id = u.id),
+						'location_manager', COALESCE((SELECT json_agg(lm.location_id) FROM public.location_managers lm WHERE lm.organization_id = o.id AND lm.user_id = u.id), '[]'::json)
+					))
 					FROM public.organizations o
 					WHERE (o.owner_id = u.id OR o.id IN (
 						SELECT organization_id FROM public.organization_members WHERE user_id = u.id
@@ -99,7 +105,13 @@ func (r *pgxUserRepository) GetByID(ctx context.Context, id string) (*User, erro
 		"u.last_login_at", "u.is_active", "u.is_system_admin",
 		`COALESCE(
 				(
-					SELECT json_agg(json_build_object('id', o.id, 'name', o.name))
+					SELECT json_agg(json_build_object(
+						'id', o.id,
+						'name', o.name,
+						'owner', (o.owner_id = u.id),
+						'organization_manager', EXISTS(SELECT 1 FROM public.organization_managers om WHERE om.organization_id = o.id AND om.user_id = u.id),
+						'location_manager', COALESCE((SELECT json_agg(lm.location_id) FROM public.location_managers lm WHERE lm.organization_id = o.id AND lm.user_id = u.id), '[]'::json)
+					))
 					FROM public.organizations o
 					WHERE (o.owner_id = u.id OR o.id IN (
 						SELECT organization_id FROM public.organization_members WHERE user_id = u.id
@@ -199,7 +211,13 @@ func (r *pgxUserRepository) List(ctx context.Context, filter UserFilter) ([]*Use
 		"count(*) OVER() AS total_count",
 		`COALESCE(
 				(
-					SELECT json_agg(json_build_object('id', o.id, 'name', o.name))
+					SELECT json_agg(json_build_object(
+						'id', o.id,
+						'name', o.name,
+						'owner', (o.owner_id = u.id),
+						'organization_manager', EXISTS(SELECT 1 FROM public.organization_managers om WHERE om.organization_id = o.id AND om.user_id = u.id),
+						'location_manager', COALESCE((SELECT json_agg(lm.location_id) FROM public.location_managers lm WHERE lm.organization_id = o.id AND lm.user_id = u.id), '[]'::json)
+					))
 					FROM public.organizations o
 					WHERE (o.owner_id = u.id OR o.id IN (
 						SELECT organization_id FROM public.organization_members WHERE user_id = u.id

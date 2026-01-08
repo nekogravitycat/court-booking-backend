@@ -44,6 +44,9 @@ type UserFilter struct {
 
 // UserOrganizationBrief holds minimal organization info for list views.
 type UserOrganizationBrief struct {
-	ID   string `json:"id"`
-	Name string `json:"name"`
+	ID                  string   `json:"id"`
+	Name                string   `json:"name"`
+	Owner               bool     `json:"owner"`
+	OrganizationManager bool     `json:"organization_manager"`
+	LocationManager     []string `json:"location_manager"`
 }
