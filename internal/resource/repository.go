@@ -81,6 +81,9 @@ func (r *pgxRepository) List(ctx context.Context, filter Filter) ([]*Resource, i
 		Join("public.resource_types rt ON r.resource_type_id = rt.id").
 		Join("public.locations l ON r.location_id = l.id")
 
+	if filter.OrganizationID != "" {
+		query = query.Where(squirrel.Eq{"l.organization_id": filter.OrganizationID})
+	}
 	if filter.LocationID != "" {
 		query = query.Where(squirrel.Eq{"r.location_id": filter.LocationID})
 	}

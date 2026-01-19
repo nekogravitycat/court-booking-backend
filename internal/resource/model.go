@@ -28,6 +28,7 @@ type Resource struct {
 
 // Filter defines parameters for listing resources.
 type Filter struct {
+	OrganizationID string
 	LocationID     string
 	ResourceTypeID string
 	Page           int

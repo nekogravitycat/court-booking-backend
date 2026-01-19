@@ -16,6 +16,12 @@ listResources:
       - $ref: "../components/parameters.yml#/sort_by"
         description: "Sort field (enum: name, created_at)"
       - $ref: "../components/parameters.yml#/sort_order"
+      - name: organization_id
+        in: query
+        description: "Filter by organization ID"
+        schema:
+          type: string
+          format: uuid
       - name: resource_type_id
         in: query
         schema:

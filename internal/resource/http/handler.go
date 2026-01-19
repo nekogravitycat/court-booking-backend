@@ -40,6 +40,7 @@ func (h *Handler) List(c *gin.Context) {
 	}
 
 	filter := resource.Filter{
+		OrganizationID: req.OrganizationID,
 		LocationID:     req.LocationID,
 		ResourceTypeID: req.ResourceTypeID,
 		Page:           req.Page,

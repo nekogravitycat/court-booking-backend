@@ -11,6 +11,7 @@ import (
 
 type ListResourcesRequest struct {
 	request.ListParams
+	OrganizationID string `form:"organization_id" binding:"omitempty,uuid"`
 	LocationID     string `form:"location_id" binding:"omitempty,uuid"`
 	ResourceTypeID string `form:"resource_type_id" binding:"omitempty,uuid"`
 	SortBy         string `form:"sort_by" binding:"omitempty,oneof=name created_at"`
