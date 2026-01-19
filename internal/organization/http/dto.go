@@ -14,6 +14,7 @@ type OrganizationResponse struct {
 	Name      string    `json:"name"`
 	OwnerID   string    `json:"owner_id"`
 	CreatedAt time.Time `json:"created_at"`
+	IsActive  bool      `json:"is_active"`
 }
 
 type OrganizationTag struct {
@@ -75,6 +76,7 @@ func NewOrganizationResponse(o *organization.Organization) OrganizationResponse 
 		Name:      o.Name,
 		OwnerID:   o.OwnerID,
 		CreatedAt: o.CreatedAt,
+		IsActive:  o.IsActive,
 	}
 }
 

@@ -12,6 +12,8 @@ OrganizationResponse:
     created_at:
       type: string
       format: date-time
+    is_active:
+      type: boolean
   required:
     - id
     - name

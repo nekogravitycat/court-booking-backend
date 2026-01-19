@@ -44,6 +44,7 @@ func TestOrganizationCRUD(t *testing.T) {
 		require.NoError(t, err)
 		assert.NotEmpty(t, orgResp.ID)
 		assert.Equal(t, "Badminton Club", orgResp.Name)
+		assert.True(t, orgResp.IsActive, "Organization should be active by default")
 
 		// Assign the ID to the outer variable for subsequent tests
 		orgID = orgResp.ID
@@ -58,6 +59,7 @@ func TestOrganizationCRUD(t *testing.T) {
 		require.NoError(t, err)
 		assert.Equal(t, 1, listResp.Total)
 		assert.Len(t, listResp.Items, 1)
+		assert.True(t, listResp.Items[0].IsActive, "Listed organization should be active")
 	})
 
 	// Moved before Delete/Update logic to ensure the resource exists and is active
@@ -84,13 +86,6 @@ func TestOrganizationCRUD(t *testing.T) {
 		path := fmt.Sprintf("/v1/organizations/%s", orgID)
 		wDelete := executeRequest("DELETE", path, nil, adminToken)
 		assert.Equal(t, http.StatusNoContent, wDelete.Code)
-	})
-
-	t.Run("Verify Soft Delete", func(t *testing.T) {
-		wListAfter := executeRequest("GET", "/v1/organizations", nil, adminToken)
-		var listRespAfter response.PageResponse[orgHttp.OrganizationResponse]
-		_ = json.Unmarshal(wListAfter.Body.Bytes(), &listRespAfter)
-		assert.Equal(t, 0, listRespAfter.Total, "Should not list soft deleted organizations")
 	})
 
 	t.Run("Create Organization Validation (Empty Name)", func(t *testing.T) {

@@ -68,7 +68,6 @@ func (r *pgxRepository) GetByID(ctx context.Context, id string) (*Organization, 
 	query, args, err := psql.Select("id", "name", "owner_id", "created_at", "is_active").
 		From("public.organizations").
 		Where(squirrel.Eq{"id": id}).
-		Where(squirrel.Eq{"is_active": true}).
 		ToSql()
 	if err != nil {
 		return nil, fmt.Errorf("build get organization query failed: %w", err)
@@ -90,8 +89,7 @@ func (r *pgxRepository) List(ctx context.Context, filter OrganizationFilter) ([]
 	// Base query with window function for total count
 	psql := squirrel.StatementBuilder.PlaceholderFormat(squirrel.Dollar)
 	queryBuilder := psql.Select("id", "name", "owner_id", "created_at", "is_active", "count(*) OVER() AS total_count").
-		From("public.organizations").
-		Where(squirrel.Eq{"is_active": true})
+		From("public.organizations")
 
 	orderBy := "id"
 	if filter.SortBy != "" {
