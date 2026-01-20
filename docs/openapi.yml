@@ -31,8 +31,6 @@ tags:
     description: 場域管理
   - name: Location Managers
     description: 場域管理員管理
-  - name: ResourceTypes
-    description: 場地類型管理 (如：羽球場、會議室)
   - name: Resources
     description: 場地管理 (實際可預約單位，如：A球場、B會議室)
   - name: Bookings
@@ -118,22 +116,13 @@ components:
       $ref: "./components/schemas/location.yml#/UpdateLocationRequest"
 
     # --------------------------
-    # ResourceType Models
-    # --------------------------
-    ResourceTypeResponse:
-      $ref: "./components/schemas/resourcetype.yml#/ResourceTypeResponse"
-
-    CreateResourceTypeRequest:
-      $ref: "./components/schemas/resourcetype.yml#/CreateResourceTypeRequest"
-
-    # --------------------------
     # Resource Models
     # --------------------------
     ResourceResponse:
       $ref: "./components/schemas/resource.yml#/ResourceResponse"
 
     CreateResourceRequest:
-      $ref: "./components/schemas/resource.yml.yml#/CreateResourceRequest"
+      $ref: "./components/schemas/resource.yml#/CreateResourceRequest"
 
     UpdateResourceRequest:
       $ref: "./components/schemas/resource.yml#/UpdateResourceRequest"
@@ -231,15 +220,6 @@ paths:
 
   /locations/{id}/managers/{user_id}:
     $ref: "./paths/locations.yml#/removeLocationManager"
-
-  # ============================
-  # Resource Types
-  # ============================
-  /resource-types:
-    $ref: "./paths/resourcetypes.yml#/listResourceTypes"
-
-  /resource-types/{id}:
-    $ref: "./paths/resourcetypes.yml#/resourceTypeDetail"
 
   # ============================
   # Resources

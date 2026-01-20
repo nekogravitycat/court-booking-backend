@@ -22,11 +22,18 @@ listResources:
         schema:
           type: string
           format: uuid
-      - name: resource_type_id
+      - name: resource_type
         in: query
+        description: "Filter by resource type"
         schema:
           type: string
-          format: uuid
+          enum:
+            - badminton
+            - tennis
+            - basketball
+            - table_tennis
+            - volleyball
+            - football
       - name: location_id
         in: query
         schema:

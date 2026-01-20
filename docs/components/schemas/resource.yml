@@ -6,8 +6,18 @@ ResourceResponse:
       format: uuid
     name:
       type: string
+    price:
+      type: integer
+      description: Hourly rate or booking fee
     resource_type:
-      $ref: "./resourcetype.yml#/ResourceTypeTag"
+      type: string
+      enum:
+        - badminton
+        - tennis
+        - basketball
+        - table_tennis
+        - volleyball
+        - football
     location:
       $ref: "./location.yml#/LocationTag"
     created_at:
@@ -16,6 +26,7 @@ ResourceResponse:
   required:
     - id
     - name
+    - price
     - resource_type
     - location
     - created_at
@@ -25,22 +36,34 @@ CreateResourceRequest:
   properties:
     name:
       type: string
+    price:
+      type: integer
+      minimum: 0
     location_id:
       type: string
       format: uuid
-    resource_type_id:
+    resource_type:
       type: string
-      format: uuid
+      enum:
+        - badminton
+        - tennis
+        - basketball
+        - table_tennis
+        - volleyball
+        - football
   required:
     - name
     - location_id
-    - resource_type_id
+    - resource_type
 
 UpdateResourceRequest:
   type: object
   properties:
     name:
       type: string
+    price:
+      type: integer
+      minimum: 0
 
 ResourceTag:
   type: object
