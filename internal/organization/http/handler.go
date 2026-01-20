@@ -383,12 +383,6 @@ func (h *OrganizationHandler) AddMember(c *gin.Context) {
 		return
 	}
 
-	// Validate UUID format
-	if _, err := uuid.Parse(body.UserID); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid user UUID"})
-		return
-	}
-
 	actorID := auth.GetUserID(c)
 	// Permission check: Must be Owner or SysAdmin to add members.
 	isOwner, err := h.service.IsOwnerOrAbove(c.Request.Context(), uri.ID, actorID)
@@ -401,7 +395,7 @@ func (h *OrganizationHandler) AddMember(c *gin.Context) {
 		return
 	}
 
-	if err := h.service.AddMember(c.Request.Context(), uri.ID, body.UserID); err != nil {
+	if err := h.service.AddMember(c.Request.Context(), uri.ID, body.Email); err != nil {
 		response.Error(c, err)
 		return
 	}

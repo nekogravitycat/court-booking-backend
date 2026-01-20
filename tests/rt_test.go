@@ -57,7 +57,7 @@ func TestResourceTypeCRUDAndPermissions(t *testing.T) {
 		// Assign Roles for Org A
 		// Owner is set. Add Manager:
 		executeRequest("POST", fmt.Sprintf("/v1/organizations/%s/members", orgA_ID),
-			orgHttp.AddOrganizationMemberRequest{UserID: adminA.ID}, sysAdminToken)
+			orgHttp.AddOrganizationMemberRequest{Email: adminA.Email}, sysAdminToken)
 		executeRequest("POST", fmt.Sprintf("/v1/organizations/%s/managers", orgA_ID),
 			orgHttp.AddOrganizationManagerRequest{UserID: adminA.ID}, sysAdminToken)
 
@@ -74,7 +74,7 @@ func TestResourceTypeCRUDAndPermissions(t *testing.T) {
 
 		// Assign Admin Role for Org B
 		executeRequest("POST", fmt.Sprintf("/v1/organizations/%s/members", orgB_ID),
-			orgHttp.AddOrganizationMemberRequest{UserID: adminB.ID}, sysAdminToken)
+			orgHttp.AddOrganizationMemberRequest{Email: adminB.Email}, sysAdminToken)
 		executeRequest("POST", fmt.Sprintf("/v1/organizations/%s/managers", orgB_ID),
 			orgHttp.AddOrganizationManagerRequest{UserID: adminB.ID}, sysAdminToken)
 	})

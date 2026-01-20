@@ -21,6 +21,7 @@ type Service interface {
 	Register(ctx context.Context, email, password, displayName string) (*User, error)
 	Login(ctx context.Context, email, password string) (*User, error)
 	GetByID(ctx context.Context, id string) (*User, error)
+	GetByEmail(ctx context.Context, email string) (*User, error)
 
 	List(ctx context.Context, filter UserFilter) ([]*User, int, error)
 	Update(ctx context.Context, id string, req UpdateUserRequest) (*User, error)
@@ -128,6 +129,11 @@ func (s *service) Login(ctx context.Context, email, password string) (*User, err
 
 func (s *service) GetByID(ctx context.Context, id string) (*User, error) {
 	return s.repo.GetByID(ctx, id)
+}
+
+func (s *service) GetByEmail(ctx context.Context, email string) (*User, error) {
+	cleanEmail := normalizeEmail(email)
+	return s.repo.GetByEmail(ctx, cleanEmail)
 }
 
 // normalizeEmail trims spaces and lowercases the email.

@@ -92,7 +92,7 @@ func TestLocationPermissions(t *testing.T) {
 	t.Run("Assign Admin1 to Location", func(t *testing.T) {
 		// Location Manager Check: Must be member of Org
 		executeRequest("POST", fmt.Sprintf("/v1/organizations/%s/members", orgID),
-			orgHttp.AddOrganizationMemberRequest{UserID: admin1.ID}, sysToken)
+			orgHttp.AddOrganizationMemberRequest{Email: admin1.Email}, sysToken)
 
 		assignReq := map[string]string{"user_id": admin1.ID}
 		path := fmt.Sprintf("/v1/locations/%s/managers", locID)

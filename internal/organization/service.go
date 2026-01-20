@@ -40,7 +40,7 @@ type Service interface {
 	RemoveOrganizationManager(ctx context.Context, orgID string, userID string) error
 	ListOrganizationManagers(ctx context.Context, orgID string, filter ManagerFilter) ([]*user.User, int, error)
 	// Organization Member methods
-	AddMember(ctx context.Context, orgID string, userID string) error
+	AddMember(ctx context.Context, orgID string, email string) error
 	RemoveMember(ctx context.Context, orgID string, userID string) error
 	ListMembers(ctx context.Context, orgID string, filter ManagerFilter) ([]*user.User, int, error)
 	// Permission methods
@@ -236,24 +236,27 @@ func (s *service) ListOrganizationManagers(ctx context.Context, orgID string, fi
 //   Organization Member methods
 // -----------------------------
 
-func (s *service) AddMember(ctx context.Context, orgID string, userID string) error {
+func (s *service) AddMember(ctx context.Context, orgID string, email string) error {
 	// Verify organization exists
 	org, err := s.repo.GetByID(ctx, orgID)
 	if err != nil {
 		return err
 	}
 
-	// Mutual Exclusion: Owner cannot be a member
-	if org.OwnerID == userID {
-		return apperror.New(409, "user is the owner of this organization")
-	}
-
-	// Verify user exists
-	if _, err := s.userService.GetByID(ctx, userID); err != nil {
+	// Lookup user by email
+	foundUser, err := s.userService.GetByEmail(ctx, email)
+	if err != nil {
 		if errors.Is(err, user.ErrNotFound) {
 			return ErrUserNotFound
 		}
 		return err
+	}
+
+	userID := foundUser.ID
+
+	// Mutual Exclusion: Owner cannot be a member
+	if org.OwnerID == userID {
+		return apperror.New(409, "user is the owner of this organization")
 	}
 
 	return s.repo.AddMember(ctx, orgID, userID)

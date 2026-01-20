@@ -180,7 +180,7 @@ func TestOrganizationManagers(t *testing.T) {
 	t.Run("Add Manager", func(t *testing.T) {
 		// Step 0: Add as Member first (Prerequisite)
 		memberPayload := orgHttp.AddOrganizationMemberRequest{
-			UserID: managerUser.ID,
+			Email: managerUser.Email,
 		}
 		wMember := executeRequest("POST", "/v1/organizations/"+orgID+"/members", memberPayload, ownerToken)
 		require.Equal(t, http.StatusCreated, wMember.Code, "Should be able to add member")
@@ -288,7 +288,7 @@ func TestOrganizationMembers(t *testing.T) {
 	})
 
 	t.Run("Add Member", func(t *testing.T) {
-		payload := orgHttp.AddOrganizationMemberRequest{UserID: member.ID}
+		payload := orgHttp.AddOrganizationMemberRequest{Email: member.Email}
 		w := executeRequest("POST", "/v1/organizations/"+orgID+"/members", payload, ownerToken)
 		assert.Equal(t, http.StatusCreated, w.Code)
 	})
@@ -315,8 +315,8 @@ func TestOrganizationMembers(t *testing.T) {
 	})
 
 	t.Run("Add Fail Non-Existent User", func(t *testing.T) {
-		fakeID := "00000000-0000-0000-0000-000000000000"
-		payload := orgHttp.AddOrganizationMemberRequest{UserID: fakeID}
+		fakeEmail := "nonexistent@test.com"
+		payload := orgHttp.AddOrganizationMemberRequest{Email: fakeEmail}
 		w := executeRequest("POST", "/v1/organizations/"+orgID+"/members", payload, ownerToken)
 		assert.Equal(t, http.StatusNotFound, w.Code)
 	})

@@ -32,8 +32,10 @@ AddOrganizationManagerRequest:
 AddMemberRequest:
   type: object
   properties:
-    user_id:
+    email:
       type: string
-      format: uuid
+      format: email
+      description: Email address of the user to add as a member
+      example: user@example.com
   required:
-    - user_id
+    - email

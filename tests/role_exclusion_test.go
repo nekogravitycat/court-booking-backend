@@ -63,7 +63,7 @@ func TestRoleMutualExclusionAndUnifiedList(t *testing.T) {
 	t.Run("Add Location Manager Success", func(t *testing.T) {
 		// Prerequisite: Add as Member
 		executeRequest("POST", fmt.Sprintf("/v1/organizations/%s/members", orgID),
-			orgHttp.AddOrganizationMemberRequest{UserID: locAdmin.ID}, ownerToken)
+			orgHttp.AddOrganizationMemberRequest{Email: locAdmin.Email}, ownerToken)
 
 		payload := map[string]string{"user_id": locAdmin.ID}
 		w := executeRequest("POST", fmt.Sprintf("/v1/locations/%s/managers", locID), payload, ownerToken)
@@ -85,7 +85,7 @@ func TestRoleMutualExclusionAndUnifiedList(t *testing.T) {
 	t.Run("Add Org Manager Success", func(t *testing.T) {
 		// Prerequisite: Add as Member
 		executeRequest("POST", fmt.Sprintf("/v1/organizations/%s/members", orgID),
-			orgHttp.AddOrganizationMemberRequest{UserID: orgAdmin.ID}, ownerToken)
+			orgHttp.AddOrganizationMemberRequest{Email: orgAdmin.Email}, ownerToken)
 
 		payload := orgHttp.AddOrganizationManagerRequest{UserID: orgAdmin.ID}
 		w := executeRequest("POST", fmt.Sprintf("/v1/organizations/%s/managers", orgID), payload, ownerToken)

@@ -42,7 +42,7 @@ listMembers:
       - Organization Members
     summary: "新增 Member"
     description: |
-      將使用者加入至 Organization 成為一般成員 (Member)。
+      使用電子郵件地址將使用者加入至 Organization 成為一般成員 (Member)。
       這是成為 Manager 的前置條件。
 
       **權限 Access Control**:

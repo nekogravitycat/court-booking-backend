@@ -41,7 +41,7 @@ func TestOwnerMutex(t *testing.T) {
 	// 2. Try to add Owner as Member -> Should Fail (Mutex)
 	t.Run("Owner Cannot Be Member", func(t *testing.T) {
 		payload := orgHttp.AddOrganizationMemberRequest{
-			UserID: owner.ID,
+			Email: owner.Email,
 		}
 		w := executeRequest("POST", "/v1/organizations/"+orgID+"/members", payload, ownerToken)
 
