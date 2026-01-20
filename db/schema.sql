@@ -163,6 +163,7 @@ CREATE TABLE IF NOT EXISTS public.resources (
 
   -- Content
   name              TEXT NOT NULL,                                   -- Name/Number of the resource (e.g., "Court 1")
+  price             INTEGER NOT NULL DEFAULT 0 CHECK (price >= 0),   -- Hourly rate or booking fee for the resource
 
   -- Meta / Audit
   created_at        TIMESTAMPTZ NOT NULL DEFAULT now(),              -- Timestamp when the resource was added

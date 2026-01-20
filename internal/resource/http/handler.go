@@ -106,6 +106,7 @@ func (h *Handler) Create(c *gin.Context) {
 
 	req := resource.CreateRequest{
 		Name:         body.Name,
+		Price:        body.Price,
 		LocationID:   body.LocationID,
 		ResourceType: body.ResourceType,
 	}
@@ -180,7 +181,8 @@ func (h *Handler) Update(c *gin.Context) {
 	}
 
 	req := resource.UpdateRequest{
-		Name: body.Name,
+		Name:  body.Name,
+		Price: body.Price,
 	}
 
 	res, err := h.service.Update(c.Request.Context(), uri.ID, req)

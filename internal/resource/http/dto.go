@@ -24,6 +24,7 @@ func (r *ListResourcesRequest) Validate() error {
 type ResourceResponse struct {
 	ID           string              `json:"id"`
 	Name         string              `json:"name"`
+	Price        int                 `json:"price"`
 	ResourceType string              `json:"resource_type"`
 	Location     locHttp.LocationTag `json:"location"`
 	CreatedAt    time.Time           `json:"created_at"`
@@ -39,6 +40,7 @@ func NewResponse(r *resource.Resource) ResourceResponse {
 	return ResourceResponse{
 		ID:           r.ID,
 		Name:         r.Name,
+		Price:        r.Price,
 		ResourceType: r.ResourceType,
 		Location:     locHttp.LocationTag{ID: r.LocationID, Name: r.LocationName},
 		CreatedAt:    r.CreatedAt,
@@ -47,6 +49,7 @@ func NewResponse(r *resource.Resource) ResourceResponse {
 
 type CreateRequest struct {
 	Name         string `json:"name" binding:"required"`
+	Price        int    `json:"price" binding:"min=0"`
 	LocationID   string `json:"location_id" binding:"required,uuid"`
 	ResourceType string `json:"resource_type" binding:"required"`
 }
@@ -57,7 +60,8 @@ func (r *CreateRequest) Validate() error {
 }
 
 type UpdateRequest struct {
-	Name *string `json:"name" binding:"omitempty,min=1,max=100"`
+	Name  *string `json:"name" binding:"omitempty,min=1,max=100"`
+	Price *int    `json:"price" binding:"omitempty,min=0"`
 }
 
 // Validate performs custom validation for UpdateRequest.

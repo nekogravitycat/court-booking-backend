@@ -2,19 +2,23 @@ package resource
 
 import (
 	"context"
+	"net/http"
 	"strings"
 
 	"github.com/nekogravitycat/court-booking-backend/internal/location"
+	"github.com/nekogravitycat/court-booking-backend/internal/pkg/apperror"
 )
 
 type CreateRequest struct {
 	Name         string
+	Price        int
 	LocationID   string
 	ResourceType string
 }
 
 type UpdateRequest struct {
-	Name *string
+	Name  *string
+	Price *int
 }
 
 type Service interface {
@@ -40,6 +44,9 @@ func NewService(repo Repository, locService location.Service) Service {
 func (s *service) Create(ctx context.Context, req CreateRequest) (*Resource, error) {
 	if strings.TrimSpace(req.Name) == "" {
 		return nil, ErrEmptyName
+	}
+	if req.Price < 0 {
+		return nil, apperror.New(http.StatusBadRequest, "price cannot be negative")
 	}
 	if req.LocationID == "" {
 		return nil, ErrInvalidLocation
@@ -68,6 +75,7 @@ func (s *service) Create(ctx context.Context, req CreateRequest) (*Resource, err
 
 	res := &Resource{
 		Name:         req.Name,
+		Price:        req.Price,
 		LocationID:   req.LocationID,
 		ResourceType: req.ResourceType,
 	}
@@ -97,6 +105,12 @@ func (s *service) Update(ctx context.Context, id string, req UpdateRequest) (*Re
 			return nil, ErrEmptyName
 		}
 		res.Name = *req.Name
+	}
+	if req.Price != nil {
+		if *req.Price < 0 {
+			return nil, apperror.New(http.StatusBadRequest, "price cannot be negative")
+		}
+		res.Price = *req.Price
 	}
 
 	if err := s.repo.Update(ctx, res); err != nil {

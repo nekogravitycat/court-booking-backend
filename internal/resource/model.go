@@ -31,6 +31,7 @@ type Resource struct {
 	LocationID   string
 	LocationName string
 	Name         string
+	Price        int
 	CreatedAt    time.Time
 }
 

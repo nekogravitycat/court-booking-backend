@@ -98,6 +98,7 @@ func TestResourceCRUDAndPermissions(t *testing.T) {
 		// Case: Missing Name (Binding validation)
 		invalidPayload := resHttp.CreateRequest{
 			Name:         "",
+			Price:        100,
 			LocationID:   locA_ID,
 			ResourceType: "badminton",
 		}
@@ -119,6 +120,16 @@ func TestResourceCRUDAndPermissions(t *testing.T) {
 		}
 		wType := executeRequest("POST", "/v1/resources", invalidTypePayload, adminAToken)
 		assert.Equal(t, http.StatusBadRequest, wType.Code, "Should return 400 for JSON type mismatch")
+
+		// Case: Negative Price (Binding validation)
+		invalidPricePayload := resHttp.CreateRequest{
+			Name:         "Negative Price Court",
+			Price:        -10,
+			LocationID:   locA_ID,
+			ResourceType: "badminton",
+		}
+		wPrice := executeRequest("POST", "/v1/resources", invalidPricePayload, adminAToken)
+		assert.Equal(t, http.StatusBadRequest, wPrice.Code, "Should return 400 when price is negative")
 	})
 
 	t.Run("Create Resource: Business Logic Consistency", func(t *testing.T) {
@@ -149,6 +160,7 @@ func TestResourceCRUDAndPermissions(t *testing.T) {
 	t.Run("Create Resource: Permission Denied", func(t *testing.T) {
 		validPayload := resHttp.CreateRequest{
 			Name:         "Court 1",
+			Price:        150,
 			LocationID:   locA_ID,
 			ResourceType: "badminton",
 		}
@@ -167,6 +179,7 @@ func TestResourceCRUDAndPermissions(t *testing.T) {
 	t.Run("Create Resource: Success", func(t *testing.T) {
 		validPayload := resHttp.CreateRequest{
 			Name:         "Badminton Court 1",
+			Price:        200,
 			LocationID:   locA_ID,
 			ResourceType: "badminton",
 		}
@@ -179,6 +192,7 @@ func TestResourceCRUDAndPermissions(t *testing.T) {
 		err := json.Unmarshal(w.Body.Bytes(), &resp)
 		require.NoError(t, err)
 		assert.Equal(t, "Badminton Court 1", resp.Name)
+		assert.Equal(t, 200, resp.Price)
 		assert.Equal(t, locA_ID, resp.Location.ID)
 		assert.NotEmpty(t, resp.ID)
 
@@ -231,12 +245,19 @@ func TestResourceCRUDAndPermissions(t *testing.T) {
 		invalidPayload := resHttp.UpdateRequest{Name: &emptyName}
 		wInvalid := executeRequest("PATCH", path, invalidPayload, adminAToken)
 		assert.Equal(t, http.StatusBadRequest, wInvalid.Code, "Should return 400 when updating with empty name")
+
+		// Case: Negative Price
+		negPrice := -5
+		invalidPricePayload := resHttp.UpdateRequest{Price: &negPrice}
+		wInvalidPrice := executeRequest("PATCH", path, invalidPricePayload, adminAToken)
+		assert.Equal(t, http.StatusBadRequest, wInvalidPrice.Code, "Should return 400 when updating with negative price")
 	})
 
 	t.Run("Update Resource: Success", func(t *testing.T) {
 		path := fmt.Sprintf("/v1/resources/%s", resourceID)
 		newName := "Renamed Court 1"
-		validPayload := resHttp.UpdateRequest{Name: &newName}
+		newPrice := 300
+		validPayload := resHttp.UpdateRequest{Name: &newName, Price: &newPrice}
 
 		wSuccess := executeRequest("PATCH", path, validPayload, adminAToken)
 		assert.Equal(t, http.StatusOK, wSuccess.Code)
@@ -244,6 +265,7 @@ func TestResourceCRUDAndPermissions(t *testing.T) {
 		var resp resHttp.ResourceResponse
 		json.Unmarshal(wSuccess.Body.Bytes(), &resp)
 		assert.Equal(t, "Renamed Court 1", resp.Name)
+		assert.Equal(t, 300, resp.Price)
 	})
 
 	t.Run("Delete Resource: Permission Boundaries", func(t *testing.T) {
