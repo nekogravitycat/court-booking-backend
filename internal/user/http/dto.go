@@ -25,14 +25,14 @@ func (r *ListUsersRequest) Validate() error {
 
 // UserResponse is the shape of user data returned in API responses.
 type UserResponse struct {
-	ID            string                    `json:"id"`
-	Email         string                    `json:"email"`
-	DisplayName   *string                   `json:"display_name"`
-	CreatedAt     time.Time                 `json:"created_at"`
-	LastLoginAt   *time.Time                `json:"last_login_at"`
-	IsActive      bool                      `json:"is_active"`
-	IsSystemAdmin bool                      `json:"is_system_admin"`
-	Organizations []orgHttp.OrganizationTag `json:"organizations"`
+	ID            string                      `json:"id"`
+	Email         string                      `json:"email"`
+	DisplayName   *string                     `json:"display_name"`
+	CreatedAt     time.Time                   `json:"created_at"`
+	LastLoginAt   *time.Time                  `json:"last_login_at"`
+	IsActive      bool                        `json:"is_active"`
+	IsSystemAdmin bool                        `json:"is_system_admin"`
+	Organizations []orgHttp.OrganizationBrief `json:"organizations"`
 }
 
 // UserTag is a brief representation of a user.
@@ -52,10 +52,10 @@ func NewUserResponse(u *user.User) UserResponse {
 	}
 
 	// Map the organizations
-	orgs := make([]orgHttp.OrganizationTag, 0, len(u.Organizations))
+	orgs := make([]orgHttp.OrganizationBrief, 0, len(u.Organizations))
 	if u.Organizations != nil {
 		for _, org := range u.Organizations {
-			orgs = append(orgs, orgHttp.OrganizationTag{
+			orgs = append(orgs, orgHttp.OrganizationBrief{
 				ID:                  org.ID,
 				Name:                org.Name,
 				Owner:               org.Owner,

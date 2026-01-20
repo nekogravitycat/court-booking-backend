@@ -43,7 +43,7 @@ UpdateOrganizationRequest:
       type: string
       format: uuid
 
-OrganizationTag:
+OrganizationBrief:
   type: object
   properties:
     id:
@@ -66,3 +66,15 @@ OrganizationTag:
     - owner
     - organization_manager
     - location_manager
+
+OrganizationTag:
+  type: object
+  properties:
+    id:
+      type: string
+      format: uuid
+    name:
+      type: string
+  required:
+    - id
+    - name

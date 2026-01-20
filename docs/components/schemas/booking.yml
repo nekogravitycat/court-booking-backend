@@ -8,6 +8,10 @@ BookingResponse:
       $ref: "./resource.yml#/ResourceTag"
     user:
       $ref: "./user.yml#/UserTag"
+    location:
+      $ref: "./location.yml#/LocationTag"
+    organization:
+      $ref: "./organization.yml#/OrganizationTag"
     start_time:
       type: string
       format: date-time
@@ -27,6 +31,8 @@ BookingResponse:
     - id
     - resource
     - user
+    - location
+    - organization
     - start_time
     - end_time
     - status

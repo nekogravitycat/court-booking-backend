@@ -50,11 +50,14 @@ func (r *pgxRepository) GetByID(ctx context.Context, id string) (*Booking, error
 	psql := squirrel.StatementBuilder.PlaceholderFormat(squirrel.Dollar)
 	query, args, err := psql.Select(
 		"b.id", "b.resource_id", "r.name", "b.user_id", "u.display_name",
+		"l.id", "l.name", "o.id", "o.name",
 		"b.start_time", "b.end_time", "b.status", "b.created_at", "b.updated_at",
 	).
 		From("public.bookings b").
 		Join("public.resources r ON b.resource_id = r.id").
 		Join("public.users u ON b.user_id = u.id").
+		Join("public.locations l ON r.location_id = l.id").
+		Join("public.organizations o ON l.organization_id = o.id").
 		Where(squirrel.Eq{"b.id": id}).
 		ToSql()
 	if err != nil {
@@ -66,6 +69,7 @@ func (r *pgxRepository) GetByID(ctx context.Context, id string) (*Booking, error
 	var b Booking
 	if err := row.Scan(
 		&b.ID, &b.ResourceID, &b.ResourceName, &b.UserID, &b.UserName,
+		&b.LocationID, &b.LocationName, &b.OrganizationID, &b.OrganizationName,
 		&b.StartTime, &b.EndTime, &b.Status, &b.CreatedAt, &b.UpdatedAt,
 	); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -80,12 +84,15 @@ func (r *pgxRepository) List(ctx context.Context, filter Filter) ([]*Booking, in
 	psql := squirrel.StatementBuilder.PlaceholderFormat(squirrel.Dollar)
 	query := psql.Select(
 		"b.id", "b.resource_id", "r.name", "b.user_id", "u.display_name",
+		"l.id", "l.name", "o.id", "o.name",
 		"b.start_time", "b.end_time", "b.status", "b.created_at", "b.updated_at",
 		"count(*) OVER() as total_count",
 	).
 		From("public.bookings b").
 		Join("public.resources r ON b.resource_id = r.id").
-		Join("public.users u ON b.user_id = u.id")
+		Join("public.users u ON b.user_id = u.id").
+		Join("public.locations l ON r.location_id = l.id").
+		Join("public.organizations o ON l.organization_id = o.id")
 
 	if filter.UserID != "" {
 		query = query.Where(squirrel.Eq{"b.user_id": filter.UserID})
@@ -146,6 +153,7 @@ func (r *pgxRepository) List(ctx context.Context, filter Filter) ([]*Booking, in
 		var b Booking
 		if err := rows.Scan(
 			&b.ID, &b.ResourceID, &b.ResourceName, &b.UserID, &b.UserName,
+			&b.LocationID, &b.LocationName, &b.OrganizationID, &b.OrganizationName,
 			&b.StartTime, &b.EndTime, &b.Status, &b.CreatedAt, &b.UpdatedAt, &total,
 		); err != nil {
 			return nil, 0, fmt.Errorf("scan booking failed: %w", err)

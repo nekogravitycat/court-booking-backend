@@ -4,6 +4,8 @@ import (
 	"time"
 
 	"github.com/nekogravitycat/court-booking-backend/internal/booking"
+	locHttp "github.com/nekogravitycat/court-booking-backend/internal/location/http"
+	orgHttp "github.com/nekogravitycat/court-booking-backend/internal/organization/http"
 	"github.com/nekogravitycat/court-booking-backend/internal/pkg/request"
 	resHttp "github.com/nekogravitycat/court-booking-backend/internal/resource/http"
 	userHttp "github.com/nekogravitycat/court-booking-backend/internal/user/http"
@@ -31,26 +33,30 @@ func (r *ListBookingsRequest) Validate() error {
 }
 
 type BookingResponse struct {
-	ID        string              `json:"id"`
-	Resource  resHttp.ResourceTag `json:"resource"`
-	User      userHttp.UserTag    `json:"user"`
-	StartTime time.Time           `json:"start_time"`
-	EndTime   time.Time           `json:"end_time"`
-	Status    string              `json:"status"`
-	CreatedAt time.Time           `json:"created_at"`
-	UpdatedAt time.Time           `json:"updated_at"`
+	ID           string                  `json:"id"`
+	Resource     resHttp.ResourceTag     `json:"resource"`
+	User         userHttp.UserTag        `json:"user"`
+	Location     locHttp.LocationTag     `json:"location"`
+	Organization orgHttp.OrganizationTag `json:"organization"`
+	StartTime    time.Time               `json:"start_time"`
+	EndTime      time.Time               `json:"end_time"`
+	Status       string                  `json:"status"`
+	CreatedAt    time.Time               `json:"created_at"`
+	UpdatedAt    time.Time               `json:"updated_at"`
 }
 
 func NewBookingResponse(b *booking.Booking) BookingResponse {
 	return BookingResponse{
-		ID:        b.ID,
-		Resource:  resHttp.ResourceTag{ID: b.ResourceID, Name: b.ResourceName},
-		User:      userHttp.UserTag{ID: b.UserID, Name: b.UserName},
-		StartTime: b.StartTime,
-		EndTime:   b.EndTime,
-		Status:    string(b.Status),
-		CreatedAt: b.CreatedAt,
-		UpdatedAt: b.UpdatedAt,
+		ID:           b.ID,
+		Resource:     resHttp.ResourceTag{ID: b.ResourceID, Name: b.ResourceName},
+		User:         userHttp.UserTag{ID: b.UserID, Name: b.UserName},
+		Location:     locHttp.LocationTag{ID: b.LocationID, Name: b.LocationName},
+		Organization: orgHttp.OrganizationTag{ID: b.OrganizationID, Name: b.OrganizationName},
+		StartTime:    b.StartTime,
+		EndTime:      b.EndTime,
+		Status:       string(b.Status),
+		CreatedAt:    b.CreatedAt,
+		UpdatedAt:    b.UpdatedAt,
 	}
 }
 

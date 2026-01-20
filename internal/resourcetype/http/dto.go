@@ -21,11 +21,11 @@ func (r *ListResourceTypesRequest) Validate() error {
 }
 
 type ResourceTypeResponse struct {
-	ID           string                  `json:"id"`
-	Organization orgHttp.OrganizationTag `json:"organization"`
-	Name         string                  `json:"name"`
-	Description  string                  `json:"description"`
-	CreatedAt    time.Time               `json:"created_at"`
+	ID           string                    `json:"id"`
+	Organization orgHttp.OrganizationBrief `json:"organization"`
+	Name         string                    `json:"name"`
+	Description  string                    `json:"description"`
+	CreatedAt    time.Time                 `json:"created_at"`
 }
 
 // ResourceTypeTag is a brief representation of a resource type.
@@ -37,7 +37,7 @@ type ResourceTypeTag struct {
 func NewResponse(rt *resourcetype.ResourceType) ResourceTypeResponse {
 	return ResourceTypeResponse{
 		ID:           rt.ID,
-		Organization: orgHttp.OrganizationTag{ID: rt.OrganizationID, Name: rt.OrganizationName},
+		Organization: orgHttp.OrganizationBrief{ID: rt.OrganizationID, Name: rt.OrganizationName},
 		Name:         rt.Name,
 		Description:  rt.Description,
 		CreatedAt:    rt.CreatedAt,

@@ -27,16 +27,20 @@ const (
 )
 
 type Booking struct {
-	ID           string
-	ResourceID   string
-	ResourceName string
-	UserID       string
-	UserName     string
-	StartTime    time.Time
-	EndTime      time.Time
-	Status       Status
-	CreatedAt    time.Time
-	UpdatedAt    time.Time
+	ID               string
+	ResourceID       string
+	ResourceName     string
+	UserID           string
+	UserName         string
+	LocationID       string
+	LocationName     string
+	OrganizationID   string
+	OrganizationName string
+	StartTime        time.Time
+	EndTime          time.Time
+	Status           Status
+	CreatedAt        time.Time
+	UpdatedAt        time.Time
 }
 
 type Filter struct {

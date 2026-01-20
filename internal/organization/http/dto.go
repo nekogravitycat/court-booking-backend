@@ -17,12 +17,18 @@ type OrganizationResponse struct {
 	IsActive  bool      `json:"is_active"`
 }
 
-type OrganizationTag struct {
+type OrganizationBrief struct {
 	ID                  string   `json:"id"`
 	Name                string   `json:"name"`
 	Owner               bool     `json:"owner"`
 	OrganizationManager bool     `json:"organization_manager"`
 	LocationManager     []string `json:"location_manager"`
+}
+
+// OrganizationTag is a brief representation of an organization with just ID and name.
+type OrganizationTag struct {
+	ID   string `json:"id"`
+	Name string `json:"name"`
 }
 
 // OrgMemberRequest is a common struct for endpoints that require both OrgID and UserID path parameters.

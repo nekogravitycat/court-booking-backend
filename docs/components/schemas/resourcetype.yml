@@ -5,7 +5,7 @@ ResourceTypeResponse:
       type: string
       format: uuid
     organization:
-      $ref: "./organization.yml#/OrganizationTag"
+      $ref: "./organization.yml#/OrganizationBrief"
     name:
       type: string
     description:
