@@ -16,6 +16,25 @@ END
 $$;
 
 -- =========================================================
+-- Enum: universal_resource_type
+-- Purpose: Standard resource types across all organizations
+-- =========================================================
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'universal_resource_type') THEN
+        CREATE TYPE universal_resource_type AS ENUM (
+          'badminton',
+          'tennis',
+          'basketball',
+          'table_tennis',
+          'volleyball',
+          'football'
+        );
+    END IF;
+END
+$$;
+
+-- =========================================================
 -- Table: announcements
 -- Purpose: System or organization-related announcements / news.
 -- =========================================================
@@ -129,41 +148,17 @@ CREATE TABLE IF NOT EXISTS public.locations (
 );
 
 -- =========================================================
--- Table: resource_types
--- Purpose: Types of resources for an organization
---          (e.g. badminton court, tennis court, meeting room).
--- =========================================================
-CREATE TABLE IF NOT EXISTS public.resource_types (
-  -- Identity
-  id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),      -- Unique identifier for the resource category
-
-  -- Relationships
-  organization_id UUID NOT NULL,                                   -- The organization that defines this resource type
-
-  -- Content
-  name            TEXT NOT NULL,                                   -- Name of the type (e.g., "Badminton Court")
-  description     TEXT NOT NULL DEFAULT '',                        -- Optional details describing this type of resource
-
-  -- Meta / Audit
-  created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),              -- Timestamp when this type was defined
-
-  -- Constraint: Links the resource type to a specific organization.
-  CONSTRAINT resource_types_organization_id_fkey
-    FOREIGN KEY (organization_id) REFERENCES public.organizations(id) ON DELETE CASCADE
-);
-
--- =========================================================
 -- Table: resources
--- Purpose: Bookable units (actual courts/rooms), linked to a resource_type
+-- Purpose: Bookable units (actual courts/rooms), linked to a resource type
 --          and a location.
---          For example: Court A, Court B under "badminton_court" at Location X.
+--          For example: Court A, Court B under "badminton" type at Location X.
 -- =========================================================
 CREATE TABLE IF NOT EXISTS public.resources (
   -- Identity
   id                UUID PRIMARY KEY DEFAULT gen_random_uuid(),      -- Unique identifier for the specific bookable item
 
   -- Relationships
-  resource_type_id  UUID NOT NULL,                                   -- Classification of the resource (refers to resource_types)
+  resource_type     universal_resource_type NOT NULL,               -- Type of the resource (badminton, tennis, etc.)
   location_id       UUID NOT NULL,                                   -- Physical location where this resource exists
 
   -- Content
@@ -172,9 +167,6 @@ CREATE TABLE IF NOT EXISTS public.resources (
   -- Meta / Audit
   created_at        TIMESTAMPTZ NOT NULL DEFAULT now(),              -- Timestamp when the resource was added
 
-  -- Constraint: Ensures valid categorization of the resource.
-  CONSTRAINT resources_resource_type_id_fkey
-    FOREIGN KEY (resource_type_id) REFERENCES public.resource_types(id) ON DELETE RESTRICT,
   
   -- Constraint: Ensures the resource is assigned to a valid physical location.
   CONSTRAINT resources_location_id_fkey
@@ -303,13 +295,9 @@ CREATE TABLE IF NOT EXISTS public.location_managers (
 CREATE INDEX IF NOT EXISTS idx_locations_org
   ON public.locations (organization_id);
 
--- Index: Optimizes lookups for resource types within an organization.
-CREATE INDEX IF NOT EXISTS idx_resource_types_org
-  ON public.resource_types (organization_id);
-
--- Index: Optimizes filtering resources by their type (e.g. "Find all Badminton Courts").
+-- Index: Optimizes filtering resources by their type (e.g. "Find all Badminton resources").
 CREATE INDEX IF NOT EXISTS idx_resources_type
-  ON public.resources (resource_type_id);
+  ON public.resources (resource_type);
 
 -- Index: Optimizes lookups for all resources in a specific physical location.
 CREATE INDEX IF NOT EXISTS idx_resources_location

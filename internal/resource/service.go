@@ -5,13 +5,12 @@ import (
 	"strings"
 
 	"github.com/nekogravitycat/court-booking-backend/internal/location"
-	"github.com/nekogravitycat/court-booking-backend/internal/resourcetype"
 )
 
 type CreateRequest struct {
-	Name           string
-	LocationID     string
-	ResourceTypeID string
+	Name         string
+	LocationID   string
+	ResourceType string
 }
 
 type UpdateRequest struct {
@@ -29,16 +28,12 @@ type Service interface {
 type service struct {
 	repo       Repository
 	locService location.Service
-	rtService  resourcetype.Service
 }
 
-// NewService creates a new resource service.
-// Note: We need access to location and resource type services for validation.
-func NewService(repo Repository, locService location.Service, rtService resourcetype.Service) Service {
+func NewService(repo Repository, locService location.Service) Service {
 	return &service{
 		repo:       repo,
 		locService: locService,
-		rtService:  rtService,
 	}
 }
 
@@ -49,31 +44,32 @@ func (s *service) Create(ctx context.Context, req CreateRequest) (*Resource, err
 	if req.LocationID == "" {
 		return nil, ErrInvalidLocation
 	}
-	if req.ResourceTypeID == "" {
+	if req.ResourceType == "" {
+		return nil, ErrInvalidResourceType
+	}
+
+	// Validate resource type is a valid enum value
+	validType := false
+	for _, t := range ValidResourceTypes {
+		if req.ResourceType == t {
+			validType = true
+			break
+		}
+	}
+	if !validType {
 		return nil, ErrInvalidResourceType
 	}
 
 	// Validation: Check if Location exists
-	loc, err := s.locService.GetByID(ctx, req.LocationID)
+	_, err := s.locService.GetByID(ctx, req.LocationID)
 	if err != nil {
 		return nil, ErrInvalidLocation
 	}
 
-	// Validation: Check if ResourceType exists
-	rt, err := s.rtService.GetByID(ctx, req.ResourceTypeID)
-	if err != nil {
-		return nil, ErrInvalidResourceType
-	}
-
-	// Consistency Check: Location and ResourceType must belong to the same Organization
-	if loc.OrganizationID != rt.OrganizationID {
-		return nil, ErrOrgMismatch
-	}
-
 	res := &Resource{
-		Name:           req.Name,
-		LocationID:     req.LocationID,
-		ResourceTypeID: req.ResourceTypeID,
+		Name:         req.Name,
+		LocationID:   req.LocationID,
+		ResourceType: req.ResourceType,
 	}
 
 	if err := s.repo.Create(ctx, res); err != nil {

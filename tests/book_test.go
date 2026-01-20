@@ -15,7 +15,6 @@ import (
 	orgHttp "github.com/nekogravitycat/court-booking-backend/internal/organization/http"
 	"github.com/nekogravitycat/court-booking-backend/internal/pkg/response"
 	resHttp "github.com/nekogravitycat/court-booking-backend/internal/resource/http"
-	rtHttp "github.com/nekogravitycat/court-booking-backend/internal/resourcetype/http"
 )
 
 func TestBookingCRUDAndPermissions(t *testing.T) {
@@ -77,17 +76,11 @@ func TestBookingCRUDAndPermissions(t *testing.T) {
 		var locA locHttp.LocationResponse
 		json.Unmarshal(wLoc.Body.Bytes(), &locA)
 
-		// 4. Create Resource Type in Org A
-		rtPayload := rtHttp.CreateRequest{OrganizationID: orgA.ID, Name: "Tennis"}
-		wRT := executeRequest("POST", "/v1/resource-types", rtPayload, orgAdminAToken)
-		var rtA rtHttp.ResourceTypeResponse
-		json.Unmarshal(wRT.Body.Bytes(), &rtA)
-
-		// 5. Create Resource (The Asset to be booked)
+		// 4. Create Resource (The Asset to be booked)
 		resPayload := resHttp.CreateRequest{
-			Name:           "Tennis Court 1",
-			LocationID:     locA.ID,
-			ResourceTypeID: rtA.ID,
+			Name:         "Tennis Court 1",
+			LocationID:   locA.ID,
+			ResourceType: "tennis",
 		}
 		wRes := executeRequest("POST", "/v1/resources", resPayload, orgAdminAToken)
 		var resA resHttp.ResourceResponse

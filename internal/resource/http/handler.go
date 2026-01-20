@@ -42,7 +42,7 @@ func (h *Handler) List(c *gin.Context) {
 	filter := resource.Filter{
 		OrganizationID: req.OrganizationID,
 		LocationID:     req.LocationID,
-		ResourceTypeID: req.ResourceTypeID,
+		ResourceType:   req.ResourceType,
 		Page:           req.Page,
 		PageSize:       req.PageSize,
 		SortBy:         req.SortBy,
@@ -105,9 +105,9 @@ func (h *Handler) Create(c *gin.Context) {
 	}
 
 	req := resource.CreateRequest{
-		Name:           body.Name,
-		LocationID:     body.LocationID,
-		ResourceTypeID: body.ResourceTypeID,
+		Name:         body.Name,
+		LocationID:   body.LocationID,
+		ResourceType: body.ResourceType,
 	}
 
 	res, err := h.service.Create(c.Request.Context(), req)

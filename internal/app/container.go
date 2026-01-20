@@ -12,7 +12,6 @@ import (
 	"github.com/nekogravitycat/court-booking-backend/internal/location"
 	"github.com/nekogravitycat/court-booking-backend/internal/organization"
 	"github.com/nekogravitycat/court-booking-backend/internal/resource"
-	"github.com/nekogravitycat/court-booking-backend/internal/resourcetype"
 	"github.com/nekogravitycat/court-booking-backend/internal/user"
 )
 
@@ -51,13 +50,9 @@ func NewContainer(cfg Config) *Container {
 
 	locService := location.NewService(locRepo, orgService, userService)
 
-	// ResourceType Module
-	rtRepo := resourcetype.NewPgxRepository(cfg.DBPool)
-	rtService := resourcetype.NewService(rtRepo)
-
 	// Resource Module
 	resRepo := resource.NewPgxRepository(cfg.DBPool)
-	resService := resource.NewService(resRepo, locService, rtService)
+	resService := resource.NewService(resRepo, locService)
 
 	// Booking Module
 	bookingRepo := booking.NewPgxRepository(cfg.DBPool)
@@ -74,7 +69,6 @@ func NewContainer(cfg Config) *Container {
 		UserService:    userService,
 		OrgService:     orgService,
 		LocService:     locService,
-		RTService:      rtService,
 		ResService:     resService,
 		BookingService: bookingService,
 		AnnService:     annService,

@@ -13,7 +13,6 @@ import (
 	orgHttp "github.com/nekogravitycat/court-booking-backend/internal/organization/http"
 	"github.com/nekogravitycat/court-booking-backend/internal/pkg/response"
 	resHttp "github.com/nekogravitycat/court-booking-backend/internal/resource/http"
-	rtHttp "github.com/nekogravitycat/court-booking-backend/internal/resourcetype/http"
 )
 
 func TestResourceCRUDAndPermissions(t *testing.T) {
@@ -44,7 +43,6 @@ func TestResourceCRUDAndPermissions(t *testing.T) {
 	// Shared ID variables
 	var orgA_ID, orgB_ID string
 	var locA_ID string
-	var rtA_ID, rtB_ID string
 	var resourceID string
 
 	// ==== Setup Prerequisites (Orgs, Locs, RTs) ====
@@ -93,37 +91,24 @@ func TestResourceCRUDAndPermissions(t *testing.T) {
 		wLocB := executeRequest("POST", "/v1/locations", locPayloadB, ownerBToken)
 		var locRespB locHttp.LocationResponse
 		json.Unmarshal(wLocB.Body.Bytes(), &locRespB)
-
-		// Create Resource Types (RT A in Org A, RT B in Org B)
-		rtPayloadA := rtHttp.CreateRequest{OrganizationID: orgA_ID, Name: "Type A"}
-		wRTA := executeRequest("POST", "/v1/resource-types", rtPayloadA, adminAToken)
-		var rtRespA rtHttp.ResourceTypeResponse
-		json.Unmarshal(wRTA.Body.Bytes(), &rtRespA)
-		rtA_ID = rtRespA.ID
-
-		rtPayloadB := rtHttp.CreateRequest{OrganizationID: orgB_ID, Name: "Type B"}
-		wRTB := executeRequest("POST", "/v1/resource-types", rtPayloadB, adminBToken)
-		var rtRespB rtHttp.ResourceTypeResponse
-		json.Unmarshal(wRTB.Body.Bytes(), &rtRespB)
-		rtB_ID = rtRespB.ID
 	})
 
 	// ==== Input Validation Tests (Bad Request) ====
 	t.Run("Create Resource: Input Validation", func(t *testing.T) {
 		// Case: Missing Name (Binding validation)
 		invalidPayload := resHttp.CreateRequest{
-			Name:           "",
-			LocationID:     locA_ID,
-			ResourceTypeID: rtA_ID,
+			Name:         "",
+			LocationID:   locA_ID,
+			ResourceType: "badminton",
 		}
 		w := executeRequest("POST", "/v1/resources", invalidPayload, adminAToken)
 		assert.Equal(t, http.StatusBadRequest, w.Code, "Should return 400 when required name is empty")
 
 		// Case: Invalid UUIDs (Binding validation)
 		invalidIDsPayload := map[string]any{
-			"name":             "Test Court",
-			"location_id":      "not-a-uuid",
-			"resource_type_id": rtA_ID,
+			"name":          "Test Court",
+			"location_id":   "not-a-uuid",
+			"resource_type": "badminton",
 		}
 		wIDs := executeRequest("POST", "/v1/resources", invalidIDsPayload, adminAToken)
 		assert.Equal(t, http.StatusBadRequest, wIDs.Code, "Should return 400 for invalid UUID format")
@@ -137,23 +122,9 @@ func TestResourceCRUDAndPermissions(t *testing.T) {
 	})
 
 	t.Run("Create Resource: Business Logic Consistency", func(t *testing.T) {
-		// Attempt to create a resource linking Location A (Org A) and Resource Type B (Org B).
-		// This is a logical error, not just a formatting error.
-		// The server should catch this inconsistency and return 400 Bad Request, not 500.
-		mismatchPayload := resHttp.CreateRequest{
-			Name:           "Inconsistent Resource",
-			LocationID:     locA_ID, // Org A
-			ResourceTypeID: rtB_ID,  // Org B
-		}
-
-		w := executeRequest("POST", "/v1/resources", mismatchPayload, adminAToken)
-
-		// Verify we get a 400 Bad Request
-		assert.Equal(t, http.StatusBadRequest, w.Code, "Should return 400 for organization mismatch between Location and ResourceType")
-
-		var errResp map[string]string
-		json.Unmarshal(w.Body.Bytes(), &errResp)
-		assert.Contains(t, errResp["error"], "must belong to the same organization", "Error message should explain the mismatch")
+		// This test is no longer relevant since enum is universal across all orgs
+		// Skip this test as organization mismatch check was removed
+		t.Skip("Org mismatch check removed with universal enum")
 	})
 
 	t.Run("Interact with Invalid UUID Path Parameter", func(t *testing.T) {
@@ -177,9 +148,9 @@ func TestResourceCRUDAndPermissions(t *testing.T) {
 	// ==== Permission Control Tests ====
 	t.Run("Create Resource: Permission Denied", func(t *testing.T) {
 		validPayload := resHttp.CreateRequest{
-			Name:           "Court 1",
-			LocationID:     locA_ID,
-			ResourceTypeID: rtA_ID,
+			Name:         "Court 1",
+			LocationID:   locA_ID,
+			ResourceType: "badminton",
 		}
 
 		// 2. Stranger -> Forbidden
@@ -195,9 +166,9 @@ func TestResourceCRUDAndPermissions(t *testing.T) {
 	// ==== Happy Path (Success Cases) ====
 	t.Run("Create Resource: Success", func(t *testing.T) {
 		validPayload := resHttp.CreateRequest{
-			Name:           "Badminton Court 1",
-			LocationID:     locA_ID,
-			ResourceTypeID: rtA_ID,
+			Name:         "Badminton Court 1",
+			LocationID:   locA_ID,
+			ResourceType: "badminton",
 		}
 
 		// Owner of Org A should succeed
@@ -223,7 +194,7 @@ func TestResourceCRUDAndPermissions(t *testing.T) {
 		var listResp response.PageResponse[resHttp.ResourceResponse]
 		json.Unmarshal(w.Body.Bytes(), &listResp)
 		assert.GreaterOrEqual(t, listResp.Total, 1)
-		pathRT := fmt.Sprintf("/v1/resources?resource_type_id=%s", rtA_ID)
+		pathRT := "/v1/resources?resource_type=badminton"
 		wRT := executeRequest("GET", pathRT, nil, strangerToken)
 		assert.Equal(t, http.StatusOK, wRT.Code)
 	})

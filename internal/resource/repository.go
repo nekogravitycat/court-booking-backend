@@ -29,8 +29,8 @@ func NewPgxRepository(pool *pgxpool.Pool) Repository {
 func (r *pgxRepository) Create(ctx context.Context, res *Resource) error {
 	psql := squirrel.StatementBuilder.PlaceholderFormat(squirrel.Dollar)
 	query, args, err := psql.Insert("public.resources").
-		Columns("resource_type_id", "location_id", "name").
-		Values(res.ResourceTypeID, res.LocationID, res.Name).
+		Columns("resource_type", "location_id", "name").
+		Values(res.ResourceType, res.LocationID, res.Name).
 		Suffix("RETURNING id, created_at").
 		ToSql()
 	if err != nil {
@@ -48,10 +48,9 @@ func (r *pgxRepository) Create(ctx context.Context, res *Resource) error {
 func (r *pgxRepository) GetByID(ctx context.Context, id string) (*Resource, error) {
 	psql := squirrel.StatementBuilder.PlaceholderFormat(squirrel.Dollar)
 	query, args, err := psql.Select(
-		"r.id", "r.resource_type_id", "rt.name", "r.location_id", "l.name", "r.name", "r.created_at",
+		"r.id", "r.resource_type", "r.location_id", "l.name", "r.name", "r.created_at",
 	).
 		From("public.resources r").
-		Join("public.resource_types rt ON r.resource_type_id = rt.id").
 		Join("public.locations l ON r.location_id = l.id").
 		Where(squirrel.Eq{"r.id": id}).
 		ToSql()
@@ -62,7 +61,7 @@ func (r *pgxRepository) GetByID(ctx context.Context, id string) (*Resource, erro
 	row := r.pool.QueryRow(ctx, query, args...)
 
 	var res Resource
-	if err := row.Scan(&res.ID, &res.ResourceTypeID, &res.ResourceTypeName, &res.LocationID, &res.LocationName, &res.Name, &res.CreatedAt); err != nil {
+	if err := row.Scan(&res.ID, &res.ResourceType, &res.LocationID, &res.LocationName, &res.Name, &res.CreatedAt); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, ErrNotFound
 		}
@@ -74,11 +73,10 @@ func (r *pgxRepository) GetByID(ctx context.Context, id string) (*Resource, erro
 func (r *pgxRepository) List(ctx context.Context, filter Filter) ([]*Resource, int, error) {
 	psql := squirrel.StatementBuilder.PlaceholderFormat(squirrel.Dollar)
 	query := psql.Select(
-		"r.id", "r.resource_type_id", "rt.name", "r.location_id", "l.name", "r.name", "r.created_at",
+		"r.id", "r.resource_type", "r.location_id", "l.name", "r.name", "r.created_at",
 		"count(*) OVER() as total_count",
 	).
 		From("public.resources r").
-		Join("public.resource_types rt ON r.resource_type_id = rt.id").
 		Join("public.locations l ON r.location_id = l.id")
 
 	if filter.OrganizationID != "" {
@@ -87,8 +85,8 @@ func (r *pgxRepository) List(ctx context.Context, filter Filter) ([]*Resource, i
 	if filter.LocationID != "" {
 		query = query.Where(squirrel.Eq{"r.location_id": filter.LocationID})
 	}
-	if filter.ResourceTypeID != "" {
-		query = query.Where(squirrel.Eq{"r.resource_type_id": filter.ResourceTypeID})
+	if filter.ResourceType != "" {
+		query = query.Where(squirrel.Eq{"r.resource_type": filter.ResourceType})
 	}
 
 	// Sorting
@@ -132,7 +130,7 @@ func (r *pgxRepository) List(ctx context.Context, filter Filter) ([]*Resource, i
 	for rows.Next() {
 		var res Resource
 		if err := rows.Scan(
-			&res.ID, &res.ResourceTypeID, &res.ResourceTypeName, &res.LocationID, &res.LocationName,
+			&res.ID, &res.ResourceType, &res.LocationID, &res.LocationName,
 			&res.Name, &res.CreatedAt, &total,
 		); err != nil {
 			return nil, 0, fmt.Errorf("scan resource failed: %w", err)
