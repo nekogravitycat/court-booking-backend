@@ -20,27 +20,23 @@
 ### 分層說明
 
 1.  **HTTP Layer (`internal/*/http`)**
-
     - 負責處理 HTTP 請求與回應。
     - 定義 Request/Response DTO (Data Transfer Object)。
     - 驗證輸入資料，將請求轉發給 Service 層。
     - 不包含商業邏輯，僅處理路由與資料格式轉換。
 
 2.  **Service Layer (`internal/*/service.go`)**
-
     - 核心商業邏輯層。
     - 處理業務規則（如：檢查密碼強度、驗證預約時間是否重疊）。
     - 呼叫 Repository 獲取資料。
     - **與 HTTP 無關**：此層不知道它是被 API 呼叫還是 CLI 呼叫。
 
 3.  **Repository Layer (`internal/*/repository.go`)**
-
     - 資料存取層 (Data Access Layer)。
     - 使用 `pgx` 執行 Raw SQL 與資料庫互動。
     - 負責將資料庫 Row 映射為 Go Struct (Model)。
 
 4.  **Model (`internal/*/model.go`)**
-
     - 定義核心領域物件 (Domain Entities)。
     - 定義 Enum 與過濾器結構 (Filter)。
 
@@ -170,26 +166,6 @@
     # 確保設置了測試環境變數 (通常 main_test.go 會嘗試讀取 ../.env)
     go test ./tests/... -v
     ```
-
-## 🤖 LLM Context 打包 (Repomix)
-
-為了方便讓 LLM 快速理解專案全貌與架構，本專案配置了 [Repomix](https://github.com/yamadashy/repomix) 工具。它可以將整個 codebase 打包成單一的 XML 檔案，並自動過濾掉 `.gitignore` 中的檔案與敏感資訊。
-
-### 如何使用
-
-確保你已安裝 Node.js 環境，然後在專案根目錄執行：W
-
-```bash
-npx repomix
-```
-
-### 輸出結果
-
-執行完畢後，會在根目錄產生 `codebase-for-llm.xml`。
-你可以直接將此檔案上傳給 LLM，讓其進行程式碼審查、重構建議或是功能開發輔助。
-
-- **設定檔**：`repomix.config.json`
-- **安全檢查**：Repomix 會自動掃描並排除潛在的敏感資訊 (Secret/API Key)。
 
 ## 📋 開發規範
 

@@ -1,5 +1,7 @@
 .env
-codebase-for-llm.*
+
+# Local storage for uploaded files
+storage/
 
 # Binaries for programs and plugins
 *.exe
