@@ -7,6 +7,7 @@ import (
 
 	"errors"
 
+	"github.com/nekogravitycat/court-booking-backend/internal/file"
 	"github.com/nekogravitycat/court-booking-backend/internal/organization"
 	"github.com/nekogravitycat/court-booking-backend/internal/pkg/apperror"
 	"github.com/nekogravitycat/court-booking-backend/internal/pkg/request"
@@ -49,6 +50,8 @@ type Service interface {
 	GetByID(ctx context.Context, id string) (*Location, error)
 	List(ctx context.Context, filter LocationFilter) ([]*Location, int, error)
 	Update(ctx context.Context, id string, req UpdateLocationRequest) (*Location, error)
+	UpdateCover(ctx context.Context, id string, fileID string) error
+	RemoveCover(ctx context.Context, id string) error
 	Delete(ctx context.Context, id string) error
 	// Location Manager management
 	AddLocationManager(ctx context.Context, locationID string, userID string) error
@@ -65,10 +68,11 @@ type service struct {
 	repo        Repository
 	orgService  organization.Service
 	userService user.Service
+	fileService file.Service
 }
 
-func NewService(repo Repository, orgService organization.Service, userService user.Service) Service {
-	return &service{repo: repo, orgService: orgService, userService: userService}
+func NewService(repo Repository, orgService organization.Service, userService user.Service, fileService file.Service) Service {
+	return &service{repo: repo, orgService: orgService, userService: userService, fileService: fileService}
 }
 
 // validateLocation checks the logical rules for a Location struct.
@@ -211,12 +215,58 @@ func (s *service) Update(ctx context.Context, id string, req UpdateLocationReque
 	return loc, nil
 }
 
-func (s *service) Delete(ctx context.Context, id string) error {
-	// Check existence
-	if _, err := s.repo.GetByID(ctx, id); err != nil {
+func (s *service) UpdateCover(ctx context.Context, id string, fileID string) error {
+	loc, err := s.repo.GetByID(ctx, id)
+	if err != nil {
 		return err
 	}
-	return s.repo.Delete(ctx, id)
+
+	// Clean up old cover if exists
+	if loc.Cover != nil && *loc.Cover != "" {
+		// Best effort delete, don't block update if fail (or maybe should log?)
+		_ = s.fileService.Delete(ctx, *loc.Cover)
+	}
+
+	loc.Cover = &fileID
+	return s.repo.Update(ctx, loc)
+}
+
+func (s *service) RemoveCover(ctx context.Context, id string) error {
+	loc, err := s.repo.GetByID(ctx, id)
+	if err != nil {
+		return err
+	}
+
+	// Delete the old cover file if exists
+	if loc.Cover != nil && *loc.Cover != "" {
+		if err := s.fileService.Delete(ctx, *loc.Cover); err != nil {
+			// Log error but don't block the removal
+			_ = err
+		}
+	}
+
+	// Set cover to nil
+	loc.Cover = nil
+	return s.repo.Update(ctx, loc)
+}
+
+func (s *service) Delete(ctx context.Context, id string) error {
+	// Check existence
+	loc, err := s.repo.GetByID(ctx, id)
+	if err != nil {
+		return err
+	}
+
+	if err := s.repo.Delete(ctx, id); err != nil {
+		return err
+	}
+
+	// Clean up cover file
+	if loc.Cover != nil && *loc.Cover != "" {
+		_ = s.fileService.Delete(ctx, *loc.Cover)
+	}
+
+	return nil
 }
 
 // ------------------------

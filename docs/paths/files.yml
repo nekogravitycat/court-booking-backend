@@ -1,0 +1,89 @@
+serveFile:
+  get:
+    tags:
+      - Files
+    summary: "取得檔案內容"
+    description: |
+      取得已上傳檔案的原始內容。此端點用於提供存取已上傳的檔案 (如圖片、文件等)。
+
+      **Access Control**:
+      - **Login Required**: 此端點需要身份驗證，僅限已登入使用者存取。
+    parameters:
+      - name: id
+        in: path
+        required: true
+        description: File ID (UUID)
+        schema:
+          type: string
+          format: uuid
+    responses:
+      "200":
+        description: File content
+        content:
+          "*/*":
+            schema:
+              type: string
+              format: binary
+        headers:
+          Content-Type:
+            description: MIME type of the file
+            schema:
+              type: string
+              example: "image/jpeg"
+          Content-Disposition:
+            description: Suggested filename for download
+            schema:
+              type: string
+              example: 'inline; filename="photo.jpg"'
+      "404":
+        description: File not found
+        content:
+          application/json:
+            schema:
+              $ref: "../components/schemas/common.yml#/ErrorResponse"
+
+serveThumbnail:
+  get:
+    tags:
+      - Files
+    summary: "取得縮圖"
+    description: |
+      取得已上傳圖片檔案的縮圖版本。縮圖會在上傳時自動產生（僅限圖片檔案）。
+
+      **Access Control**:
+      - **Login Required**: 此端點需要身份驗證，僅限已登入使用者存取。
+
+      **圖片格式**: 縮圖統一為 JPEG 格式，尺寸為 200x200。
+    parameters:
+      - name: id
+        in: path
+        required: true
+        description: File ID (UUID)
+        schema:
+          type: string
+          format: uuid
+    responses:
+      "200":
+        description: Thumbnail image
+        content:
+          image/jpeg:
+            schema:
+              type: string
+              format: binary
+        headers:
+          Content-Type:
+            description: Always image/jpeg for thumbnails
+            schema:
+              type: string
+              example: "image/jpeg"
+          Content-Disposition:
+            description: Suggested filename for download
+            schema:
+              type: string
+              example: 'inline; filename="photo_thumb.jpg"'
+      "404":
+        description: File not found or thumbnail not available (non-image file)
+        content:
+          application/json:
+            schema:
+              $ref: "../components/schemas/common.yml#/ErrorResponse"

@@ -3,6 +3,7 @@ package http
 import (
 	"time"
 
+	"github.com/nekogravitycat/court-booking-backend/internal/file"
 	"github.com/nekogravitycat/court-booking-backend/internal/location"
 	orgHttp "github.com/nekogravitycat/court-booking-backend/internal/organization/http"
 	"github.com/nekogravitycat/court-booking-backend/internal/pkg/request"
@@ -10,20 +11,22 @@ import (
 )
 
 type LocationResponse struct {
-	ID                string                    `json:"id"`
-	Organization      orgHttp.OrganizationBrief `json:"organization"`
-	Name              string                    `json:"name"`
-	CreatedAt         time.Time                 `json:"created_at"`
-	Capacity          int64                     `json:"capacity"`
-	OpeningHoursStart string                    `json:"opening_hours_start"`
-	OpeningHoursEnd   string                    `json:"opening_hours_end"`
-	LocationInfo      string                    `json:"location_info"`
-	Opening           bool                      `json:"opening"`
-	Rule              string                    `json:"rule"`
-	Facility          string                    `json:"facility"`
-	Description       string                    `json:"description"`
-	Longitude         float64                   `json:"longitude"`
-	Latitude          float64                   `json:"latitude"`
+	ID                string                  `json:"id"`
+	Organization      orgHttp.OrganizationTag `json:"organization"`
+	Name              string                  `json:"name"`
+	CreatedAt         time.Time               `json:"created_at"`
+	Capacity          int64                   `json:"capacity"`
+	OpeningHoursStart string                  `json:"opening_hours_start"`
+	OpeningHoursEnd   string                  `json:"opening_hours_end"`
+	LocationInfo      string                  `json:"location_info"`
+	Opening           bool                    `json:"opening"`
+	Rule              string                  `json:"rule"`
+	Facility          string                  `json:"facility"`
+	Description       string                  `json:"description"`
+	Longitude         float64                 `json:"longitude"`
+	Latitude          float64                 `json:"latitude"`
+	Cover             *string                 `json:"cover"`           // URL to cover image
+	CoverThumbnail    *string                 `json:"cover_thumbnail"` // URL to cover thumbnail
 }
 
 // LocationTag is a brief representation of a location.
@@ -33,9 +36,20 @@ type LocationTag struct {
 }
 
 func NewLocationResponse(l *location.Location) LocationResponse {
+	var coverURL *string
+	var coverThumbnailURL *string
+
+	if l.Cover != nil {
+		url := file.FileURL(*l.Cover)
+		coverURL = &url
+
+		thumbURL := file.ThumbnailURL(*l.Cover)
+		coverThumbnailURL = &thumbURL
+	}
+
 	return LocationResponse{
 		ID:                l.ID,
-		Organization:      orgHttp.OrganizationBrief{ID: l.OrganizationID, Name: l.OrganizationName},
+		Organization:      orgHttp.OrganizationTag{ID: l.OrganizationID, Name: l.OrganizationName},
 		Name:              l.Name,
 		CreatedAt:         l.CreatedAt,
 		Capacity:          l.Capacity,
@@ -48,6 +62,8 @@ func NewLocationResponse(l *location.Location) LocationResponse {
 		Description:       l.Description,
 		Longitude:         l.Longitude,
 		Latitude:          l.Latitude,
+		Cover:             coverURL,
+		CoverThumbnail:    coverThumbnailURL,
 	}
 }
 

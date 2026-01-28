@@ -93,9 +93,35 @@ CREATE TABLE IF NOT EXISTS public.organizations (
   is_active   BOOLEAN NOT NULL DEFAULT true,                   -- Status flag: false prevents all operations for this organization
   created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),              -- Timestamp when the organization was established in the system
 
-  -- Constraint: Enforces that the 'owner_id' must correspond to a valid user in the users table.
   CONSTRAINT organizations_owner_id_fkey
     FOREIGN KEY (owner_id) REFERENCES public.users(id) ON DELETE RESTRICT
+);
+
+-- =========================================================
+-- Table: files
+-- Purpose: Stores metadata for uploaded files (images, documents).
+--          Actual content is stored in local storage or cloud.
+-- =========================================================
+CREATE TABLE IF NOT EXISTS public.files (
+  -- Identity
+  id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),      -- Unique identifier
+  
+  -- Ownership
+  user_id         UUID NOT NULL,                                   -- Uploader
+
+  -- File Metadata
+  filename        TEXT NOT NULL,                                   -- Original filename
+  storage_path    TEXT NOT NULL,                                   -- Path on disk/cloud
+  thumbnail_path  TEXT,                                            -- Path to thumbnail (if image)
+  content_type    TEXT NOT NULL,                                   -- MIME type
+  size            BIGINT NOT NULL,                                 -- File size in bytes
+
+  -- Meta / Audit
+  created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),              -- When it was uploaded
+
+  -- Constraint: Link to user
+  CONSTRAINT files_user_id_fkey
+    FOREIGN KEY (user_id) REFERENCES public.users(id) ON DELETE RESTRICT
 );
 
 -- =========================================================
@@ -109,6 +135,7 @@ CREATE TABLE IF NOT EXISTS public.locations (
   
   -- Relationships
   organization_id      UUID NOT NULL,                                   -- The parent organization this location belongs to
+  cover                UUID,                                            -- Reference to the cover image file
 
   -- Core Settings & Status
   name                 TEXT NOT NULL,                                   -- Name of the branch (e.g., "Downtown Arena")
@@ -144,7 +171,11 @@ CREATE TABLE IF NOT EXISTS public.locations (
 
   -- Constraint: Ensures the location is linked to a valid organization.
   CONSTRAINT locations_organization_id_fkey
-    FOREIGN KEY (organization_id) REFERENCES public.organizations(id) ON DELETE CASCADE
+    FOREIGN KEY (organization_id) REFERENCES public.organizations(id) ON DELETE CASCADE,
+
+  -- Constraint: Links cover image to files table.
+  CONSTRAINT locations_cover_fkey
+    FOREIGN KEY (cover) REFERENCES public.files(id) ON DELETE SET NULL
 );
 
 -- =========================================================

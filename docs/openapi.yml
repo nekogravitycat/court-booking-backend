@@ -37,6 +37,8 @@ tags:
     description: 場地預約管理
   - name: Announcements
     description: 系統公告管理
+  - name: Files
+    description: 檔案存取
 
 components:
   securitySchemes:
@@ -212,6 +214,9 @@ paths:
   /locations/{id}:
     $ref: "./paths/locations.yml#/locationDetail"
 
+  /locations/{id}/cover:
+    $ref: "./paths/locations.yml#/uploadCover"
+
   # ============================
   # Location Managers
   # ============================
@@ -247,6 +252,15 @@ paths:
 
   /announcements/{id}:
     $ref: "./paths/announcements.yml#/announcementDetail"
+
+  # ============================
+  # Files (Login Required)
+  # ============================
+  /files/{id}:
+    $ref: "./paths/files.yml#/serveFile"
+
+  /files/{id}/thumbnail:
+    $ref: "./paths/files.yml#/serveThumbnail"
 
   # ============================
   # Shared / Common Schemas for Reference

@@ -36,6 +36,9 @@ RUN adduser -D -g '' appuser
 # Copy the binary from the builder stage
 COPY --from=builder /app/server .
 
+# Create storage directory and set ownership
+RUN mkdir -p storage && chown -R appuser:appuser storage
+
 # Use the non-root user
 USER appuser
 

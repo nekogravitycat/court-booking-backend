@@ -1,7 +1,6 @@
 package api
 
 import (
-	"slices"
 	"strings"
 
 	"github.com/gin-contrib/cors"
@@ -12,6 +11,8 @@ import (
 	"github.com/nekogravitycat/court-booking-backend/internal/auth"
 	"github.com/nekogravitycat/court-booking-backend/internal/booking"
 	bookingHttp "github.com/nekogravitycat/court-booking-backend/internal/booking/http"
+	"github.com/nekogravitycat/court-booking-backend/internal/file"
+	fileHttp "github.com/nekogravitycat/court-booking-backend/internal/file/http"
 	"github.com/nekogravitycat/court-booking-backend/internal/location"
 	locHttp "github.com/nekogravitycat/court-booking-backend/internal/location/http"
 	"github.com/nekogravitycat/court-booking-backend/internal/organization"
@@ -32,6 +33,7 @@ type Config struct {
 	ResService     resource.Service
 	BookingService booking.Service
 	AnnService     announcement.Service
+	FileService    file.Service
 	JWTManager     *auth.JWTManager
 }
 
@@ -60,22 +62,9 @@ func NewRouter(cfg Config) *gin.Engine {
 		// Production: Strict mode, only allow exact domain match
 		config.AllowOrigins = allowedOrigins
 	} else {
-		// Dev / Local: Use AllowOriginFunc to check dynamically
+		// Dev / Local: Allow all origins
 		config.AllowOriginFunc = func(origin string) bool {
-			// Allow Prod Origins
-			if slices.Contains(allowedOrigins, origin) {
-				return true
-			}
-			// Allow localhost with ANY port
-			if strings.HasPrefix(origin, "http://localhost") || strings.HasPrefix(origin, "https://localhost") {
-				return true
-			}
-			// Allow 127.0.0.1 with ANY port
-			if strings.HasPrefix(origin, "http://127.0.0.1") || strings.HasPrefix(origin, "https://127.0.0.1") {
-				return true
-			}
-
-			return false
+			return true
 		}
 	}
 
@@ -88,9 +77,10 @@ func NewRouter(cfg Config) *gin.Engine {
 	sysAdminMiddleware := RequireSystemAdmin(cfg.UserService)
 
 	// Initialize Handlers (Injecting Services from cfg)
+	fileHandler := fileHttp.NewHandler(cfg.FileService)
 	userHandler := userHttp.NewHandler(cfg.UserService, cfg.JWTManager)
 	orgHandler := orgHttp.NewHandler(cfg.OrgService)
-	locHandler := locHttp.NewHandler(cfg.LocService, cfg.OrgService)
+	locHandler := locHttp.NewHandler(cfg.LocService, cfg.OrgService, cfg.FileService, fileHandler)
 	resHandler := resHttp.NewHandler(cfg.ResService, cfg.LocService, cfg.OrgService)
 	bookingHandler := bookingHttp.NewHandler(cfg.BookingService, cfg.UserService, cfg.ResService, cfg.LocService, cfg.OrgService)
 	annHandler := annHttp.NewHandler(cfg.AnnService)
@@ -98,6 +88,7 @@ func NewRouter(cfg Config) *gin.Engine {
 	// Register Routes
 	v1 := r.Group("/v1")
 	{
+		fileHttp.RegisterRoutes(v1, fileHandler, authMiddleware)
 		userHttp.RegisterRoutes(v1, userHandler, authMiddleware, sysAdminMiddleware)
 		orgHttp.RegisterRoutes(v1, orgHandler, authMiddleware, sysAdminMiddleware)
 		locHttp.RegisterRoutes(v1, locHandler, authMiddleware)

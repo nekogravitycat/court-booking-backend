@@ -196,6 +196,95 @@ locationDetail:
       "404":
         description: Location not found
 
+uploadCover:
+  put:
+    tags:
+      - Locations
+    summary: "上傳場域封面圖"
+    description: |
+      為特定 Location 上傳封面圖片。上傳成功後，封面圖 URL 會顯示在 Location 的 `cover` 欄位中。
+
+      **權限 Access Control**:
+      - **System Admin**: 完全存取權限。
+      - **Organization Owner / Manager**: 可管理所屬 Organization 下的 Location。
+      - **Location Manager**: 可管理自己所負責的 Location。
+    security:
+      - bearerAuth: []
+    parameters:
+      - name: id
+        in: path
+        required: true
+        description: Location ID
+        schema:
+          type: string
+          format: uuid
+    requestBody:
+      required: true
+      content:
+        multipart/form-data:
+          schema:
+            type: object
+            required:
+              - file
+            properties:
+              file:
+                type: string
+                format: binary
+                description: "Cover image file (JPEG, PNG, etc.)"
+    responses:
+      "200":
+        description: Cover uploaded successfully
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                message:
+                  type: string
+                  example: "cover uploaded successfully"
+                file_id:
+                  type: string
+                  format: uuid
+                  description: "ID of the uploaded file"
+                thumbnail_url:
+                  type: string
+                  nullable: true
+                  description: "Path to thumbnail (if generated)"
+      "400":
+        description: Invalid request or file
+      "403":
+        description: Permission denied
+      "404":
+        description: Location not found
+  delete:
+    tags:
+      - Locations
+    summary: "移除場域封面圖"
+    description: |
+      移除特定 Location 的封面圖片。移除成功後，Location 的 `cover` 和 `cover_thumbnail` 欄位會變為 `null`。
+
+      **權限 Access Control**:
+      - **System Admin**: 完全存取權限。
+      - **Organization Owner / Manager**: 可管理所屬 Organization 下的 Location。
+      - **Location Manager**: 可管理自己所負責的 Location。
+    security:
+      - bearerAuth: []
+    parameters:
+      - name: id
+        in: path
+        required: true
+        description: Location ID
+        schema:
+          type: string
+          format: uuid
+    responses:
+      "204":
+        description: Cover removed successfully
+      "403":
+        description: Permission denied
+      "404":
+        description: Location not found
+
 locationManagers:
   get:
     tags:

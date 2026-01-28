@@ -1,12 +1,15 @@
 package http
 
 import (
+	"context"
 	"net/http"
 	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/nekogravitycat/court-booking-backend/internal/auth"
+	"github.com/nekogravitycat/court-booking-backend/internal/file"
+	filehttp "github.com/nekogravitycat/court-booking-backend/internal/file/http"
 	"github.com/nekogravitycat/court-booking-backend/internal/location"
 	"github.com/nekogravitycat/court-booking-backend/internal/organization"
 	"github.com/nekogravitycat/court-booking-backend/internal/pkg/request"
@@ -14,14 +17,18 @@ import (
 )
 
 type LocationHandler struct {
-	service    location.Service
-	orgService organization.Service
+	service     location.Service
+	orgService  organization.Service
+	fileService file.Service
+	fileHandler *filehttp.Handler
 }
 
-func NewHandler(service location.Service, orgService organization.Service) *LocationHandler {
+func NewHandler(service location.Service, orgService organization.Service, fileService file.Service, fileHandler *filehttp.Handler) *LocationHandler {
 	return &LocationHandler{
-		service:    service,
-		orgService: orgService,
+		service:     service,
+		orgService:  orgService,
+		fileService: fileService,
+		fileHandler: fileHandler,
 	}
 }
 
@@ -200,6 +207,59 @@ func (h *LocationHandler) Update(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, NewLocationResponse(loc))
+}
+
+// UploadCover uploads a cover image for a location.
+func (h *LocationHandler) UploadCover(c *gin.Context) {
+	var uri request.ByIDRequest
+	if err := c.ShouldBindUri(&uri); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request", "details": err.Error()})
+		return
+	}
+
+	// Permission check
+	allowed, err := h.service.IsLocationManagerOrAbove(c.Request.Context(), uri.ID, auth.GetUserID(c))
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+	if !allowed {
+		c.JSON(http.StatusForbidden, gin.H{"error": "forbidden: you do not have permission to upload cover for this location"})
+		return
+	}
+
+	h.fileHandler.HandleFileUpload(c, filehttp.FileUploadConfig{
+		AfterUpload: func(ctx context.Context, fileID string) error {
+			return h.service.UpdateCover(ctx, uri.ID, fileID)
+		},
+	})
+}
+
+// RemoveCover removes the cover image from a location.
+func (h *LocationHandler) RemoveCover(c *gin.Context) {
+	var uri request.ByIDRequest
+	if err := c.ShouldBindUri(&uri); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request", "details": err.Error()})
+		return
+	}
+
+	// Permission check
+	allowed, err := h.service.IsLocationManagerOrAbove(c.Request.Context(), uri.ID, auth.GetUserID(c))
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+	if !allowed {
+		c.JSON(http.StatusForbidden, gin.H{"error": "forbidden: you do not have permission to remove cover for this location"})
+		return
+	}
+
+	if err := h.service.RemoveCover(c.Request.Context(), uri.ID); err != nil {
+		response.Error(c, err)
+		return
+	}
+
+	c.Status(http.StatusNoContent)
 }
 
 // Delete removes a location.

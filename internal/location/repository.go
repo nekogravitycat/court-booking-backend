@@ -42,11 +42,11 @@ func (r *pgxRepository) Create(ctx context.Context, loc *Location) error {
 	query, args, err := psql.Insert("public.locations").
 		Columns(
 			"organization_id", "name", "capacity", "opening_hours_start", "opening_hours_end",
-			"location_info", "opening", "rule", "facility", "description", "longitude", "latitude",
+			"location_info", "opening", "rule", "facility", "description", "longitude", "latitude", "cover",
 		).
 		Values(
 			loc.OrganizationID, loc.Name, loc.Capacity, loc.OpeningHoursStart, loc.OpeningHoursEnd,
-			loc.LocationInfo, loc.Opening, loc.Rule, loc.Facility, loc.Description, loc.Longitude, loc.Latitude,
+			loc.LocationInfo, loc.Opening, loc.Rule, loc.Facility, loc.Description, loc.Longitude, loc.Latitude, loc.Cover,
 		).
 		Suffix("RETURNING id, created_at").
 		ToSql()
@@ -68,7 +68,7 @@ func (r *pgxRepository) GetByID(ctx context.Context, id string) (*Location, erro
 	query, args, err := psql.Select(
 		"l.id", "l.organization_id", "o.name", "l.name", "l.created_at", "l.capacity",
 		"l.opening_hours_start::text", "l.opening_hours_end::text",
-		"l.location_info", "l.opening", "l.rule", "l.facility", "l.description", "l.longitude", "l.latitude",
+		"l.location_info", "l.opening", "l.rule", "l.facility", "l.description", "l.longitude", "l.latitude", "l.cover",
 	).
 		From("public.locations l").
 		Join("public.organizations o ON l.organization_id = o.id").
@@ -86,7 +86,7 @@ func (r *pgxRepository) GetByID(ctx context.Context, id string) (*Location, erro
 	err = row.Scan(
 		&l.ID, &l.OrganizationID, &l.OrganizationName, &l.Name, &l.CreatedAt, &l.Capacity,
 		&l.OpeningHoursStart, &l.OpeningHoursEnd,
-		&l.LocationInfo, &l.Opening, &l.Rule, &l.Facility, &l.Description, &l.Longitude, &l.Latitude,
+		&l.LocationInfo, &l.Opening, &l.Rule, &l.Facility, &l.Description, &l.Longitude, &l.Latitude, &l.Cover,
 	)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -102,7 +102,7 @@ func (r *pgxRepository) List(ctx context.Context, filter LocationFilter) ([]*Loc
 	query := psql.Select(
 		"l.id", "l.organization_id", "o.name", "l.name", "l.created_at", "l.capacity",
 		"l.opening_hours_start::text", "l.opening_hours_end::text",
-		"l.location_info", "l.opening", "l.rule", "l.facility", "l.description", "l.longitude", "l.latitude",
+		"l.location_info", "l.opening", "l.rule", "l.facility", "l.description", "l.longitude", "l.latitude", "l.cover",
 		"count(*) OVER() as total_count",
 	).
 		From("public.locations l").
@@ -186,7 +186,7 @@ func (r *pgxRepository) List(ctx context.Context, filter LocationFilter) ([]*Loc
 		if err := rows.Scan(
 			&l.ID, &l.OrganizationID, &l.OrganizationName, &l.Name, &l.CreatedAt, &l.Capacity,
 			&l.OpeningHoursStart, &l.OpeningHoursEnd,
-			&l.LocationInfo, &l.Opening, &l.Rule, &l.Facility, &l.Description, &l.Longitude, &l.Latitude,
+			&l.LocationInfo, &l.Opening, &l.Rule, &l.Facility, &l.Description, &l.Longitude, &l.Latitude, &l.Cover,
 			&total,
 		); err != nil {
 			return nil, 0, fmt.Errorf("scan location failed: %w", err)
@@ -211,6 +211,7 @@ func (r *pgxRepository) Update(ctx context.Context, loc *Location) error {
 		Set("description", loc.Description).
 		Set("longitude", loc.Longitude).
 		Set("latitude", loc.Latitude).
+		Set("cover", loc.Cover).
 		Where(squirrel.Eq{"id": loc.ID}).
 		ToSql()
 	if err != nil {

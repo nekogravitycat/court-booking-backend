@@ -27,6 +27,8 @@ services:
     restart: always
     ports:
       - "8080:8080"
+    volumes:
+      - ./storage:/app/storage
     environment:
       APP_ENV: ${APP_ENV}
       PROD_ORIGINS: ${PROD_ORIGINS}

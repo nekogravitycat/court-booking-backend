@@ -36,6 +36,7 @@ type Location struct {
 	Description       string
 	Longitude         float64
 	Latitude          float64
+	Cover             *string // ID of cover image file
 }
 
 // LocationFilter defines parameters for listing locations.

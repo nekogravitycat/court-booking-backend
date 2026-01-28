@@ -5,7 +5,7 @@ LocationResponse:
       type: string
       format: uuid
     organization:
-      $ref: "./organization.yml#/OrganizationBrief"
+      $ref: "./organization.yml#/OrganizationTag"
     name:
       type: string
     created_at:
@@ -38,6 +38,16 @@ LocationResponse:
     latitude:
       type: number
       format: double
+    cover:
+      type: string
+      description: "URL to cover image (e.g., /files/{file-id})"
+      example: "/files/a1b2c3d4-e5f6-7890-abcd-ef1234567890"
+      nullable: true
+    cover_thumbnail:
+      type: string
+      description: "URL to cover thumbnail (e.g., /files/{file-id}/thumbnail)"
+      example: "/files/a1b2c3d4-e5f6-7890-abcd-ef1234567890/thumbnail"
+      nullable: true
   required:
     - id
     - organization

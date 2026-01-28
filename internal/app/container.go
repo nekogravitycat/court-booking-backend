@@ -9,8 +9,10 @@ import (
 	"github.com/nekogravitycat/court-booking-backend/internal/api"
 	"github.com/nekogravitycat/court-booking-backend/internal/auth"
 	"github.com/nekogravitycat/court-booking-backend/internal/booking"
+	"github.com/nekogravitycat/court-booking-backend/internal/file"
 	"github.com/nekogravitycat/court-booking-backend/internal/location"
 	"github.com/nekogravitycat/court-booking-backend/internal/organization"
+	"github.com/nekogravitycat/court-booking-backend/internal/pkg/storage"
 	"github.com/nekogravitycat/court-booking-backend/internal/resource"
 	"github.com/nekogravitycat/court-booking-backend/internal/user"
 )
@@ -48,7 +50,15 @@ func NewContainer(cfg Config) *Container {
 	orgRepo := organization.NewPgxRepository(cfg.DBPool)
 	orgService := organization.NewService(orgRepo, userService, locRepo)
 
-	locService := location.NewService(locRepo, orgService, userService)
+	// File Module
+	store, err := storage.NewLocalStorage("storage")
+	if err != nil {
+		panic(err) // Critical failure if storage cannot be initialized
+	}
+	fileRepo := file.NewRepository(cfg.DBPool)
+	fileService := file.NewService(fileRepo, store)
+
+	locService := location.NewService(locRepo, orgService, userService, fileService)
 
 	// Resource Module
 	resRepo := resource.NewPgxRepository(cfg.DBPool)
@@ -72,6 +82,7 @@ func NewContainer(cfg Config) *Container {
 		ResService:     resService,
 		BookingService: bookingService,
 		AnnService:     annService,
+		FileService:    fileService,
 		JWTManager:     jwtManager,
 	}
 
