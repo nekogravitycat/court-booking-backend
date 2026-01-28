@@ -1,7 +1,7 @@
 .env
 
 # Local storage for uploaded files
-storage/
+/storage/
 
 # Binaries for programs and plugins
 *.exe
