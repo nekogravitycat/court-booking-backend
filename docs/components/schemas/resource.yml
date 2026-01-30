@@ -18,6 +18,16 @@ ResourceResponse:
         - table_tennis
         - volleyball
         - football
+    cover:
+      type: string
+      format: uri
+      nullable: true
+      description: "資源封面圖片的 URL (如果有設定)"
+    cover_thumbnail:
+      type: string
+      format: uri
+      nullable: true
+      description: "資源封面縮圖的 URL (如果有設定)"
     location:
       $ref: "./location.yml#/LocationTag"
     created_at:

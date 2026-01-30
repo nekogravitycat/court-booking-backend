@@ -1,23 +1,32 @@
 package http
 
 import (
+	"context"
 	"net/http"
 	"strings"
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 	"github.com/nekogravitycat/court-booking-backend/internal/auth"
+	"github.com/nekogravitycat/court-booking-backend/internal/file"
+	filehttp "github.com/nekogravitycat/court-booking-backend/internal/file/http"
 	"github.com/nekogravitycat/court-booking-backend/internal/organization"
 	"github.com/nekogravitycat/court-booking-backend/internal/pkg/request"
 	"github.com/nekogravitycat/court-booking-backend/internal/pkg/response"
 )
 
 type OrganizationHandler struct {
-	service organization.Service
+	service     organization.Service
+	fileService file.Service
+	fileHandler *filehttp.Handler
 }
 
-func NewHandler(service organization.Service) *OrganizationHandler {
-	return &OrganizationHandler{service: service}
+func NewHandler(service organization.Service, fileService file.Service, fileHandler *filehttp.Handler) *OrganizationHandler {
+	return &OrganizationHandler{
+		service:     service,
+		fileService: fileService,
+		fileHandler: fileHandler,
+	}
 }
 
 // List retrieves a paginated list of active organizations.
@@ -425,6 +434,64 @@ func (h *OrganizationHandler) RemoveMember(c *gin.Context) {
 	}
 
 	if err := h.service.RemoveMember(c.Request.Context(), req.ID, req.UserID); err != nil {
+		response.Error(c, err)
+		return
+	}
+
+	c.Status(http.StatusNoContent)
+}
+
+// UploadCover uploads a cover image for an organization.
+func (h *OrganizationHandler) UploadCover(c *gin.Context) {
+	var uri request.ByIDRequest
+	if err := c.ShouldBindUri(&uri); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request", "details": err.Error()})
+		return
+	}
+
+	// Permission check: Owner or above
+	currentUserID := auth.GetUserID(c)
+	allowed, err := h.service.IsOwnerOrAbove(c.Request.Context(), uri.ID, currentUserID)
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+	if !allowed {
+		c.JSON(http.StatusForbidden, gin.H{"error": "forbidden: only owners can upload organization cover"})
+		return
+	}
+
+	h.fileHandler.HandleFileUpload(c, filehttp.FileUploadConfig{
+		MaxSizeBytes: 5 * 1024 * 1024, // 5MB
+		AllowedTypes: []string{"image/jpeg", "image/png"},
+		ResizeImage:  true,
+		AfterUpload: func(ctx context.Context, fileID string) error {
+			return h.service.UpdateCover(ctx, uri.ID, fileID)
+		},
+	})
+}
+
+// RemoveCover removes the cover image from an organization.
+func (h *OrganizationHandler) RemoveCover(c *gin.Context) {
+	var uri request.ByIDRequest
+	if err := c.ShouldBindUri(&uri); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request", "details": err.Error()})
+		return
+	}
+
+	// Permission check: Owner or above
+	currentUserID := auth.GetUserID(c)
+	allowed, err := h.service.IsOwnerOrAbove(c.Request.Context(), uri.ID, currentUserID)
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+	if !allowed {
+		c.JSON(http.StatusForbidden, gin.H{"error": "forbidden: only owners can remove organization cover"})
+		return
+	}
+
+	if err := h.service.RemoveCover(c.Request.Context(), uri.ID); err != nil {
 		response.Error(c, err)
 		return
 	}

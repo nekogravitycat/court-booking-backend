@@ -3,6 +3,7 @@ package http
 import (
 	"time"
 
+	"github.com/nekogravitycat/court-booking-backend/internal/file"
 	"github.com/nekogravitycat/court-booking-backend/internal/organization"
 	"github.com/nekogravitycat/court-booking-backend/internal/pkg/request"
 	"github.com/nekogravitycat/court-booking-backend/internal/user"
@@ -10,11 +11,13 @@ import (
 
 // OrganizationResponse matches the OAS definition.
 type OrganizationResponse struct {
-	ID        string    `json:"id"`
-	Name      string    `json:"name"`
-	OwnerID   string    `json:"owner_id"`
-	CreatedAt time.Time `json:"created_at"`
-	IsActive  bool      `json:"is_active"`
+	ID             string    `json:"id"`
+	Name           string    `json:"name"`
+	OwnerID        string    `json:"owner_id"`
+	Cover          *string   `json:"cover"`           // URL to cover image
+	CoverThumbnail *string   `json:"cover_thumbnail"` // URL to cover thumbnail
+	CreatedAt      time.Time `json:"created_at"`
+	IsActive       bool      `json:"is_active"`
 }
 
 type OrganizationBrief struct {
@@ -77,12 +80,25 @@ func (r *UpdateOrganizationRequest) Validate() error {
 }
 
 func NewOrganizationResponse(o *organization.Organization) OrganizationResponse {
+	var coverURL *string
+	var coverThumbnailURL *string
+
+	if o.Cover != nil {
+		url := file.FileURL(*o.Cover)
+		coverURL = &url
+
+		thumbURL := file.ThumbnailURL(*o.Cover)
+		coverThumbnailURL = &thumbURL
+	}
+
 	return OrganizationResponse{
-		ID:        o.ID,
-		Name:      o.Name,
-		OwnerID:   o.OwnerID,
-		CreatedAt: o.CreatedAt,
-		IsActive:  o.IsActive,
+		ID:             o.ID,
+		Name:           o.Name,
+		OwnerID:        o.OwnerID,
+		Cover:          coverURL,
+		CoverThumbnail: coverThumbnailURL,
+		CreatedAt:      o.CreatedAt,
+		IsActive:       o.IsActive,
 	}
 }
 

@@ -1,11 +1,14 @@
 package http
 
 import (
+	"context"
 	"net/http"
 	"strings"
 
 	"github.com/gin-gonic/gin"
 	"github.com/nekogravitycat/court-booking-backend/internal/auth"
+	"github.com/nekogravitycat/court-booking-backend/internal/file"
+	filehttp "github.com/nekogravitycat/court-booking-backend/internal/file/http"
 	"github.com/nekogravitycat/court-booking-backend/internal/location"
 	"github.com/nekogravitycat/court-booking-backend/internal/organization"
 	"github.com/nekogravitycat/court-booking-backend/internal/pkg/request"
@@ -14,16 +17,20 @@ import (
 )
 
 type Handler struct {
-	service    resource.Service
-	locService location.Service
-	orgService organization.Service
+	service     resource.Service
+	locService  location.Service
+	orgService  organization.Service
+	fileService file.Service
+	fileHandler *filehttp.Handler
 }
 
-func NewHandler(service resource.Service, locService location.Service, orgService organization.Service) *Handler {
+func NewHandler(service resource.Service, locService location.Service, orgService organization.Service, fileService file.Service, fileHandler *filehttp.Handler) *Handler {
 	return &Handler{
-		service:    service,
-		locService: locService,
-		orgService: orgService,
+		service:     service,
+		locService:  locService,
+		orgService:  orgService,
+		fileService: fileService,
+		fileHandler: fileHandler,
 	}
 }
 
@@ -225,6 +232,78 @@ func (h *Handler) Delete(c *gin.Context) {
 	}
 
 	if err := h.service.Delete(c.Request.Context(), req.ID); err != nil {
+		response.Error(c, err)
+		return
+	}
+
+	c.Status(http.StatusNoContent)
+}
+
+// UploadCover uploads a cover image for a resource.
+func (h *Handler) UploadCover(c *gin.Context) {
+	var uri request.ByIDRequest
+	if err := c.ShouldBindUri(&uri); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request", "details": err.Error()})
+		return
+	}
+
+	// Get resource to find location ID
+	res, err := h.service.GetByID(c.Request.Context(), uri.ID)
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+
+	// Permission check: Location manager or above
+	currentUserID := auth.GetUserID(c)
+	allowed, err := h.locService.IsLocationManagerOrAbove(c.Request.Context(), res.LocationID, currentUserID)
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+	if !allowed {
+		c.JSON(http.StatusForbidden, gin.H{"error": "forbidden: you do not have permission to upload cover for this resource"})
+		return
+	}
+
+	h.fileHandler.HandleFileUpload(c, filehttp.FileUploadConfig{
+		MaxSizeBytes: 5 * 1024 * 1024, // 5MB
+		AllowedTypes: []string{"image/jpeg", "image/png"},
+		ResizeImage:  true,
+		AfterUpload: func(ctx context.Context, fileID string) error {
+			return h.service.UpdateCover(ctx, uri.ID, fileID)
+		},
+	})
+}
+
+// RemoveCover removes the cover image from a resource.
+func (h *Handler) RemoveCover(c *gin.Context) {
+	var uri request.ByIDRequest
+	if err := c.ShouldBindUri(&uri); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request", "details": err.Error()})
+		return
+	}
+
+	// Get resource to find location ID
+	res, err := h.service.GetByID(c.Request.Context(), uri.ID)
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+
+	// Permission check: Location manager or above
+	currentUserID := auth.GetUserID(c)
+	allowed, err := h.locService.IsLocationManagerOrAbove(c.Request.Context(), res.LocationID, currentUserID)
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+	if !allowed {
+		c.JSON(http.StatusForbidden, gin.H{"error": "forbidden: you do not have permission to remove cover for this resource"})
+		return
+	}
+
+	if err := h.service.RemoveCover(c.Request.Context(), uri.ID); err != nil {
 		response.Error(c, err)
 		return
 	}

@@ -32,6 +32,7 @@ type Resource struct {
 	LocationName string
 	Name         string
 	Price        int
+	Cover        *string // ID of cover image file
 	CreatedAt    time.Time
 }
 

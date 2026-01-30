@@ -11,8 +11,10 @@ func RegisterRoutes(g *gin.RouterGroup, h *OrganizationHandler, authMiddleware, 
 	// === Authenticated Routes ===
 	orgGroup.Use(authMiddleware)
 	{
-		orgGroup.GET("", h.List)    // List active organizations
-		orgGroup.GET("/:id", h.Get) // Get organization details
+		orgGroup.GET("", h.List)                     // List active organizations
+		orgGroup.GET("/:id", h.Get)                  // Get organization details
+		orgGroup.PUT("/:id/cover", h.UploadCover)    // Upload cover image
+		orgGroup.DELETE("/:id/cover", h.RemoveCover) // Remove cover image
 
 		// --- Organization Manager Management ---
 		// Permissions are handled inside the handlers to allow Owners/Admins

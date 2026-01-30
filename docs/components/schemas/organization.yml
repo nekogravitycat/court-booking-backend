@@ -9,6 +9,16 @@ OrganizationResponse:
     owner_id:
       type: string
       format: uuid
+    cover:
+      type: string
+      format: uri
+      nullable: true
+      description: "組織封面圖片的 URL (如果有設定)"
+    cover_thumbnail:
+      type: string
+      format: uri
+      nullable: true
+      description: "組織封面縮圖的 URL (如果有設定)"
     created_at:
       type: string
       format: date-time

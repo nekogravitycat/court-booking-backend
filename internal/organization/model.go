@@ -22,6 +22,7 @@ type Organization struct {
 	ID        string
 	OwnerID   string
 	Name      string
+	Cover     *string // ID of cover image file
 	CreatedAt time.Time
 	IsActive  bool
 }

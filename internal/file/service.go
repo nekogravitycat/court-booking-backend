@@ -8,7 +8,6 @@ import (
 	"log"
 	"mime/multipart"
 	"net/http"
-	"path/filepath"
 	"slices"
 	"strings"
 	"time"
@@ -128,24 +127,7 @@ func (s *service) Upload(ctx context.Context, input UploadInput) (*File, error) 
 		return nil, ErrContentTypeNotAllowed
 	}
 
-	// === Get file extension ===
-
-	ext := strings.ToLower(filepath.Ext(header.Filename))
-	if ext == "" {
-		// Fallback: infer extension from content type
-		ext = inferExtensionFromContentType(actualContentType)
-	}
-
-	// === Generate file ID and storage path ===
-
-	// Generate UUID
-	fileID := uuid.New().String()
-
-	// Sharding path: upload/ab/UUID.ext
-	shard := fileID[:2]
-	storagePath := fmt.Sprintf("upload/%s/%s%s", shard, fileID, ext)
-
-	// === Save file to storage ===
+	// === Process file based on type ===
 
 	// Determine which reader to use (original or resized image)
 	var reader io.Reader
@@ -156,10 +138,20 @@ func (s *service) Upload(ctx context.Context, input UploadInput) (*File, error) 
 			return nil, ErrImageResizeFailed
 		}
 		reader = resizedReader
+		// Update content type to jpg
+		actualContentType = "image/jpeg"
 	} else {
 		// Use original file as-is
 		reader = bytes.NewReader(fileBytes)
 	}
+
+	// === Generate file ID and storage path, then save file to storage ===
+
+	// Generate UUID and file path
+	fileID := uuid.New().String()
+	shard := fileID[:2]
+	ext := inferExtensionFromContentType(actualContentType)
+	storagePath := fmt.Sprintf("upload/%s/%s%s", shard, fileID, ext)
 
 	// Save to storage
 	if err := s.storage.Save(ctx, storagePath, reader); err != nil {

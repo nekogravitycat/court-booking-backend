@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/nekogravitycat/court-booking-backend/internal/file"
 	"github.com/nekogravitycat/court-booking-backend/internal/location"
 	"github.com/nekogravitycat/court-booking-backend/internal/pkg/apperror"
 )
@@ -26,18 +27,22 @@ type Service interface {
 	GetByID(ctx context.Context, id string) (*Resource, error)
 	List(ctx context.Context, filter Filter) ([]*Resource, int, error)
 	Update(ctx context.Context, id string, req UpdateRequest) (*Resource, error)
+	UpdateCover(ctx context.Context, id string, fileID string) error
+	RemoveCover(ctx context.Context, id string) error
 	Delete(ctx context.Context, id string) error
 }
 
 type service struct {
-	repo       Repository
-	locService location.Service
+	repo        Repository
+	locService  location.Service
+	fileService file.Service
 }
 
-func NewService(repo Repository, locService location.Service) Service {
+func NewService(repo Repository, locService location.Service, fileService file.Service) Service {
 	return &service{
-		repo:       repo,
-		locService: locService,
+		repo:        repo,
+		locService:  locService,
+		fileService: fileService,
 	}
 }
 
@@ -120,8 +125,50 @@ func (s *service) Update(ctx context.Context, id string, req UpdateRequest) (*Re
 }
 
 func (s *service) Delete(ctx context.Context, id string) error {
-	if _, err := s.repo.GetByID(ctx, id); err != nil {
+	res, err := s.repo.GetByID(ctx, id)
+	if err != nil {
 		return err
 	}
+
+	// Clean up cover file if exists
+	if res.Cover != nil && *res.Cover != "" {
+		_ = s.fileService.Delete(ctx, *res.Cover)
+	}
+
 	return s.repo.Delete(ctx, id)
+}
+
+func (s *service) UpdateCover(ctx context.Context, id string, fileID string) error {
+	res, err := s.repo.GetByID(ctx, id)
+	if err != nil {
+		return err
+	}
+
+	// Clean up old cover if exists
+	if res.Cover != nil && *res.Cover != "" {
+		// Best effort delete, don't block update if fail
+		_ = s.fileService.Delete(ctx, *res.Cover)
+	}
+
+	res.Cover = &fileID
+	return s.repo.Update(ctx, res)
+}
+
+func (s *service) RemoveCover(ctx context.Context, id string) error {
+	res, err := s.repo.GetByID(ctx, id)
+	if err != nil {
+		return err
+	}
+
+	// Delete the old cover file if exists
+	if res.Cover != nil && *res.Cover != "" {
+		if err := s.fileService.Delete(ctx, *res.Cover); err != nil {
+			// Log error but don't block the removal
+			_ = err
+		}
+	}
+
+	// Set cover to nil
+	res.Cover = nil
+	return s.repo.Update(ctx, res)
 }

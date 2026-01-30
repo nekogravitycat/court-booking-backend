@@ -20,9 +20,11 @@ func RegisterRoutes(g *gin.RouterGroup, h *UserHandler, authMiddleware, adminMid
 	usersGroup := g.Group("/users")
 	usersGroup.Use(authMiddleware, adminMiddleware)
 	{
-		usersGroup.GET("", h.List)          // List users
-		usersGroup.GET("/:id", h.Get)       // Get user details
-		usersGroup.PATCH("/:id", h.Update)  // Update user info
-		usersGroup.DELETE("/:id", h.Delete) // Delete user
+		usersGroup.GET("", h.List)                       // List users
+		usersGroup.GET("/:id", h.Get)                    // Get user details
+		usersGroup.PATCH("/:id", h.Update)               // Update user info
+		usersGroup.DELETE("/:id", h.Delete)              // Delete user
+		usersGroup.PUT("/:id/avatar", h.UploadAvatar)    // Upload avatar
+		usersGroup.DELETE("/:id/avatar", h.RemoveAvatar) // Remove avatar
 	}
 }

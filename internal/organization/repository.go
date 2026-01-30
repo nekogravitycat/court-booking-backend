@@ -49,8 +49,8 @@ func NewPgxRepository(pool *pgxpool.Pool) Repository {
 func (r *pgxRepository) Create(ctx context.Context, org *Organization) error {
 	psql := squirrel.StatementBuilder.PlaceholderFormat(squirrel.Dollar)
 	query, args, err := psql.Insert("public.organizations").
-		Columns("name", "owner_id", "is_active").
-		Values(org.Name, org.OwnerID, org.IsActive).
+		Columns("name", "owner_id", "cover", "is_active").
+		Values(org.Name, org.OwnerID, org.Cover, org.IsActive).
 		Suffix("RETURNING id, created_at").
 		ToSql()
 	if err != nil {
@@ -65,7 +65,7 @@ func (r *pgxRepository) Create(ctx context.Context, org *Organization) error {
 
 func (r *pgxRepository) GetByID(ctx context.Context, id string) (*Organization, error) {
 	psql := squirrel.StatementBuilder.PlaceholderFormat(squirrel.Dollar)
-	query, args, err := psql.Select("id", "name", "owner_id", "created_at", "is_active").
+	query, args, err := psql.Select("id", "name", "owner_id", "cover", "created_at", "is_active").
 		From("public.organizations").
 		Where(squirrel.Eq{"id": id}).
 		ToSql()
@@ -76,7 +76,7 @@ func (r *pgxRepository) GetByID(ctx context.Context, id string) (*Organization, 
 	row := r.pool.QueryRow(ctx, query, args...)
 
 	var org Organization
-	if err := row.Scan(&org.ID, &org.Name, &org.OwnerID, &org.CreatedAt, &org.IsActive); err != nil {
+	if err := row.Scan(&org.ID, &org.Name, &org.OwnerID, &org.Cover, &org.CreatedAt, &org.IsActive); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, ErrOrgNotFound
 		}
@@ -88,7 +88,7 @@ func (r *pgxRepository) GetByID(ctx context.Context, id string) (*Organization, 
 func (r *pgxRepository) List(ctx context.Context, filter OrganizationFilter) ([]*Organization, int, error) {
 	// Base query with window function for total count
 	psql := squirrel.StatementBuilder.PlaceholderFormat(squirrel.Dollar)
-	queryBuilder := psql.Select("id", "name", "owner_id", "created_at", "is_active", "count(*) OVER() AS total_count").
+	queryBuilder := psql.Select("id", "name", "owner_id", "cover", "created_at", "is_active", "count(*) OVER() AS total_count").
 		From("public.organizations")
 
 	orderBy := "id"
@@ -130,7 +130,7 @@ func (r *pgxRepository) List(ctx context.Context, filter OrganizationFilter) ([]
 
 	for rows.Next() {
 		var o Organization
-		if err := rows.Scan(&o.ID, &o.Name, &o.OwnerID, &o.CreatedAt, &o.IsActive, &total); err != nil {
+		if err := rows.Scan(&o.ID, &o.Name, &o.OwnerID, &o.Cover, &o.CreatedAt, &o.IsActive, &total); err != nil {
 			return nil, 0, fmt.Errorf("scan failed: %w", err)
 		}
 		orgs = append(orgs, &o)
@@ -143,6 +143,7 @@ func (r *pgxRepository) Update(ctx context.Context, org *Organization) error {
 	psql := squirrel.StatementBuilder.PlaceholderFormat(squirrel.Dollar)
 	query, args, err := psql.Update("public.organizations").
 		Set("name", org.Name).
+		Set("cover", org.Cover).
 		Set("is_active", org.IsActive).
 		Where(squirrel.Eq{"id": org.ID}).
 		ToSql()

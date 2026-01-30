@@ -3,6 +3,7 @@ package http
 import (
 	"time"
 
+	"github.com/nekogravitycat/court-booking-backend/internal/file"
 	orgHttp "github.com/nekogravitycat/court-booking-backend/internal/organization/http"
 	"github.com/nekogravitycat/court-booking-backend/internal/pkg/request"
 	"github.com/nekogravitycat/court-booking-backend/internal/user"
@@ -25,14 +26,16 @@ func (r *ListUsersRequest) Validate() error {
 
 // UserResponse is the shape of user data returned in API responses.
 type UserResponse struct {
-	ID            string                      `json:"id"`
-	Email         string                      `json:"email"`
-	DisplayName   *string                     `json:"display_name"`
-	CreatedAt     time.Time                   `json:"created_at"`
-	LastLoginAt   *time.Time                  `json:"last_login_at"`
-	IsActive      bool                        `json:"is_active"`
-	IsSystemAdmin bool                        `json:"is_system_admin"`
-	Organizations []orgHttp.OrganizationBrief `json:"organizations"`
+	ID              string                      `json:"id"`
+	Email           string                      `json:"email"`
+	DisplayName     *string                     `json:"display_name"`
+	Avatar          *string                     `json:"avatar"`           // URL to avatar image
+	AvatarThumbnail *string                     `json:"avatar_thumbnail"` // URL to avatar thumbnail
+	CreatedAt       time.Time                   `json:"created_at"`
+	LastLoginAt     *time.Time                  `json:"last_login_at"`
+	IsActive        bool                        `json:"is_active"`
+	IsSystemAdmin   bool                        `json:"is_system_admin"`
+	Organizations   []orgHttp.OrganizationBrief `json:"organizations"`
 }
 
 // UserTag is a brief representation of a user.
@@ -51,6 +54,17 @@ func NewUserResponse(u *user.User) UserResponse {
 		lastLoginAt = &ll
 	}
 
+	var avatarURL *string
+	var avatarThumbnailURL *string
+
+	if u.Avatar != nil {
+		url := file.FileURL(*u.Avatar)
+		avatarURL = &url
+
+		thumbURL := file.ThumbnailURL(*u.Avatar)
+		avatarThumbnailURL = &thumbURL
+	}
+
 	// Map the organizations
 	orgs := make([]orgHttp.OrganizationBrief, 0, len(u.Organizations))
 	if u.Organizations != nil {
@@ -66,14 +80,16 @@ func NewUserResponse(u *user.User) UserResponse {
 	}
 
 	return UserResponse{
-		ID:            u.ID,
-		Email:         u.Email,
-		DisplayName:   u.DisplayName,
-		CreatedAt:     createdAt,
-		LastLoginAt:   lastLoginAt,
-		IsActive:      u.IsActive,
-		IsSystemAdmin: u.IsSystemAdmin,
-		Organizations: orgs,
+		ID:              u.ID,
+		Email:           u.Email,
+		DisplayName:     u.DisplayName,
+		Avatar:          avatarURL,
+		AvatarThumbnail: avatarThumbnailURL,
+		CreatedAt:       createdAt,
+		LastLoginAt:     lastLoginAt,
+		IsActive:        u.IsActive,
+		IsSystemAdmin:   u.IsSystemAdmin,
+		Organizations:   orgs,
 	}
 }
 

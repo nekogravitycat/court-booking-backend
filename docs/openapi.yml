@@ -16,27 +16,27 @@ security:
 
 tags:
   - name: Auth
-    description: 身份認證 (註冊 / 登入)
+    description: 身份認證
   - name: Me
-    description: 目前登入者資訊
+    description: 目前登入者
   - name: Users
-    description: 使用者管理 (System Admin Only)
+    description: 使用者
   - name: Organizations
-    description: 組織管理
+    description: 組織
   - name: Organization Members
-    description: 組織成員管理
+    description: 組織成員
   - name: Organization Managers
-    description: 組織管理員管理
+    description: 組織管理員
   - name: Locations
-    description: 場域管理
+    description: 場域
   - name: Location Managers
-    description: 場域管理員管理
+    description: 場域管理員
   - name: Resources
-    description: 場地管理 (實際可預約單位，如：A球場、B會議室)
+    description: 場地 (實際可預約單位，如：A球場、B會議室)
   - name: Bookings
-    description: 場地預約管理
+    description: 場地預約
   - name: Announcements
-    description: 系統公告管理
+    description: 系統公告
   - name: Files
     description: 檔案存取
 
@@ -178,6 +178,9 @@ paths:
   /users/{id}:
     $ref: "./paths/users.yml#/userDetail"
 
+  /users/{id}/avatar:
+    $ref: "./paths/users.yml#/avatarUpload"
+
   # ============================
   # Organizations
   # ============================
@@ -186,6 +189,9 @@ paths:
 
   /organizations/{id}:
     $ref: "./paths/organizations.yml#/organizationDetail"
+
+  /organizations/{id}/cover:
+    $ref: "./paths/organizations.yml#/coverUpload"
 
   # ============================
   # Members
@@ -234,6 +240,9 @@ paths:
 
   /resources/{id}:
     $ref: "./paths/resources.yml#/resourceDetail"
+
+  /resources/{id}/cover:
+    $ref: "./paths/resources.yml#/resourceCoverUpload"
 
   # ============================
   # Bookings

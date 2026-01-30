@@ -3,6 +3,7 @@ package http
 import (
 	"time"
 
+	"github.com/nekogravitycat/court-booking-backend/internal/file"
 	locHttp "github.com/nekogravitycat/court-booking-backend/internal/location/http"
 	"github.com/nekogravitycat/court-booking-backend/internal/pkg/request"
 	"github.com/nekogravitycat/court-booking-backend/internal/resource"
@@ -22,12 +23,14 @@ func (r *ListResourcesRequest) Validate() error {
 }
 
 type ResourceResponse struct {
-	ID           string              `json:"id"`
-	Name         string              `json:"name"`
-	Price        int                 `json:"price"`
-	ResourceType string              `json:"resource_type"`
-	Location     locHttp.LocationTag `json:"location"`
-	CreatedAt    time.Time           `json:"created_at"`
+	ID             string              `json:"id"`
+	Name           string              `json:"name"`
+	Price          int                 `json:"price"`
+	ResourceType   string              `json:"resource_type"`
+	Location       locHttp.LocationTag `json:"location"`
+	Cover          *string             `json:"cover"`           // URL to cover image
+	CoverThumbnail *string             `json:"cover_thumbnail"` // URL to cover thumbnail
+	CreatedAt      time.Time           `json:"created_at"`
 }
 
 // ResourceTag is a brief representation of a resource.
@@ -37,13 +40,26 @@ type ResourceTag struct {
 }
 
 func NewResponse(r *resource.Resource) ResourceResponse {
+	var coverURL *string
+	var coverThumbnailURL *string
+
+	if r.Cover != nil {
+		url := file.FileURL(*r.Cover)
+		coverURL = &url
+
+		thumbURL := file.ThumbnailURL(*r.Cover)
+		coverThumbnailURL = &thumbURL
+	}
+
 	return ResourceResponse{
-		ID:           r.ID,
-		Name:         r.Name,
-		Price:        r.Price,
-		ResourceType: r.ResourceType,
-		Location:     locHttp.LocationTag{ID: r.LocationID, Name: r.LocationName},
-		CreatedAt:    r.CreatedAt,
+		ID:             r.ID,
+		Name:           r.Name,
+		Price:          r.Price,
+		ResourceType:   r.ResourceType,
+		Location:       locHttp.LocationTag{ID: r.LocationID, Name: r.LocationName},
+		Cover:          coverURL,
+		CoverThumbnail: coverThumbnailURL,
+		CreatedAt:      r.CreatedAt,
 	}
 }
 

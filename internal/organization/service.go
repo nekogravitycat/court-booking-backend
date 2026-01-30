@@ -5,6 +5,7 @@ import (
 	"errors"
 	"strings"
 
+	"github.com/nekogravitycat/court-booking-backend/internal/file"
 	"github.com/nekogravitycat/court-booking-backend/internal/pkg/apperror"
 	"github.com/nekogravitycat/court-booking-backend/internal/user"
 )
@@ -34,6 +35,8 @@ type Service interface {
 	GetByID(ctx context.Context, id string) (*Organization, error)
 	List(ctx context.Context, filter OrganizationFilter) ([]*Organization, int, error)
 	Update(ctx context.Context, id string, req UpdateOrganizationRequest) (*Organization, error)
+	UpdateCover(ctx context.Context, id string, fileID string) error
+	RemoveCover(ctx context.Context, id string) error
 	Delete(ctx context.Context, id string) error
 	// Organization Manager methods
 	AddOrganizationManager(ctx context.Context, orgID string, userID string) error
@@ -58,11 +61,12 @@ type service struct {
 	repo        Repository
 	userService user.Service
 	locChecker  LocationManagerChecker
+	fileService file.Service
 }
 
 // NewService creates a new organization service.
-func NewService(repo Repository, userService user.Service, locChecker LocationManagerChecker) Service {
-	return &service{repo: repo, userService: userService, locChecker: locChecker}
+func NewService(repo Repository, userService user.Service, locChecker LocationManagerChecker, fileService file.Service) Service {
+	return &service{repo: repo, userService: userService, locChecker: locChecker, fileService: fileService}
 }
 
 // ------------------------
@@ -163,11 +167,52 @@ func (s *service) Update(ctx context.Context, id string, req UpdateOrganizationR
 
 func (s *service) Delete(ctx context.Context, id string) error {
 	// Check existence
-	_, err := s.repo.GetByID(ctx, id)
+	org, err := s.repo.GetByID(ctx, id)
 	if err != nil {
 		return err
 	}
+
+	// Clean up cover file if exists
+	if org.Cover != nil && *org.Cover != "" {
+		_ = s.fileService.Delete(ctx, *org.Cover)
+	}
+
 	return s.repo.Delete(ctx, id)
+}
+
+func (s *service) UpdateCover(ctx context.Context, id string, fileID string) error {
+	org, err := s.repo.GetByID(ctx, id)
+	if err != nil {
+		return err
+	}
+
+	// Clean up old cover if exists
+	if org.Cover != nil && *org.Cover != "" {
+		// Best effort delete, don't block update if fail
+		_ = s.fileService.Delete(ctx, *org.Cover)
+	}
+
+	org.Cover = &fileID
+	return s.repo.Update(ctx, org)
+}
+
+func (s *service) RemoveCover(ctx context.Context, id string) error {
+	org, err := s.repo.GetByID(ctx, id)
+	if err != nil {
+		return err
+	}
+
+	// Delete the old cover file if exists
+	if org.Cover != nil && *org.Cover != "" {
+		if err := s.fileService.Delete(ctx, *org.Cover); err != nil {
+			// Log error but don't block the removal
+			_ = err
+		}
+	}
+
+	// Set cover to nil
+	org.Cover = nil
+	return s.repo.Update(ctx, org)
 }
 
 // -----------------------------

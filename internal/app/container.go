@@ -49,17 +49,17 @@ func NewContainer(cfg Config) *Container {
 
 	// User Module
 	userRepo := user.NewPgxRepository(cfg.DBPool)
-	userService := user.NewService(userRepo, passwordHasher)
+	userService := user.NewService(userRepo, passwordHasher, fileService)
 
 	// Organization & Location Module
 	orgRepo := organization.NewPgxRepository(cfg.DBPool)
 	locRepo := location.NewPgxRepository(cfg.DBPool)
-	orgService := organization.NewService(orgRepo, userService, locRepo)
+	orgService := organization.NewService(orgRepo, userService, locRepo, fileService)
 	locService := location.NewService(locRepo, orgService, userService, fileService)
 
 	// Resource Module
 	resRepo := resource.NewPgxRepository(cfg.DBPool)
-	resService := resource.NewService(resRepo, locService)
+	resService := resource.NewService(resRepo, locService, fileService)
 
 	// Booking Module
 	bookingRepo := booking.NewPgxRepository(cfg.DBPool)

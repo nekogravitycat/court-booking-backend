@@ -135,3 +135,85 @@ userDetail:
         description: Forbidden
       "404":
         description: User Not found
+
+avatarUpload:
+  put:
+    tags:
+      - Users
+    summary: "上傳使用者頭像"
+    description: |
+      上傳使用者頭像圖片。
+
+      **權限 Access Control**:
+      - **使用者本人** 或 **System Admin**: 僅限使用者本人或系統管理員可更新。
+
+      **檔案限制**:
+      - 最大檔案大小: 5MB
+      - 允許格式: image/jpeg, image/png
+      - 圖片會自動調整為最大 1000x1000 像素
+      - 自動生成 200x200 縮圖
+    security:
+      - bearerAuth: []
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    requestBody:
+      required: true
+      content:
+        multipart/form-data:
+          schema:
+            type: object
+            properties:
+              file:
+                type: string
+                format: binary
+            required:
+              - file
+    responses:
+      "200":
+        description: Avatar uploaded successfully
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                file_id:
+                  type: string
+                  format: uuid
+                message:
+                  type: string
+      "400":
+        description: Invalid file format or size
+      "403":
+        description: Forbidden - 只能上傳自己的頭像
+      "404":
+        description: User not found
+  delete:
+    tags:
+      - Users
+    summary: "移除使用者頭像"
+    description: |
+      移除使用者的頭像圖片。
+
+      **權限 Access Control**:
+      - **使用者本人** 或 **System Admin**: 僅限使用者本人或系統管理員可移除。
+    security:
+      - bearerAuth: []
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    responses:
+      "204":
+        description: Avatar removed successfully (No Content)
+      "403":
+        description: Forbidden - 只能移除自己的頭像
+      "404":
+        description: User not found

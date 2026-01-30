@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/nekogravitycat/court-booking-backend/internal/auth"
+	"github.com/nekogravitycat/court-booking-backend/internal/file"
 )
 
 type UpdateUserRequest struct {
@@ -25,21 +26,25 @@ type Service interface {
 
 	List(ctx context.Context, filter UserFilter) ([]*User, int, error)
 	Update(ctx context.Context, id string, req UpdateUserRequest) (*User, error)
+	UpdateAvatar(ctx context.Context, id string, fileID string) error
+	RemoveAvatar(ctx context.Context, id string) error
 	Delete(ctx context.Context, id string) error
 }
 
 type service struct {
-	repo   Repository
-	hasher auth.PasswordHasher
+	repo        Repository
+	hasher      auth.PasswordHasher
+	fileService file.Service
 
 	minPasswordLength int
 }
 
 // NewService creates a new user Service.
-func NewService(repo Repository, hasher auth.PasswordHasher) Service {
+func NewService(repo Repository, hasher auth.PasswordHasher, fileService file.Service) Service {
 	return &service{
 		repo:              repo,
 		hasher:            hasher,
+		fileService:       fileService,
 		minPasswordLength: 8,
 	}
 }
@@ -173,10 +178,50 @@ func (s *service) Update(ctx context.Context, id string, req UpdateUserRequest) 
 
 func (s *service) Delete(ctx context.Context, id string) error {
 	// Check if user exists
-	_, err := s.repo.GetByID(ctx, id)
+	u, err := s.repo.GetByID(ctx, id)
 	if err != nil {
 		return err
 	}
 
+	// Clean up avatar file if exists
+	if u.Avatar != nil && *u.Avatar != "" {
+		_ = s.fileService.Delete(ctx, *u.Avatar)
+	}
+
 	return s.repo.Delete(ctx, id)
+}
+
+func (s *service) UpdateAvatar(ctx context.Context, id string, fileID string) error {
+	u, err := s.repo.GetByID(ctx, id)
+	if err != nil {
+		return err
+	}
+
+	// Clean up old avatar if exists
+	if u.Avatar != nil && *u.Avatar != "" {
+		// Best effort delete, don't block update if fail
+		_ = s.fileService.Delete(ctx, *u.Avatar)
+	}
+
+	u.Avatar = &fileID
+	return s.repo.Update(ctx, u)
+}
+
+func (s *service) RemoveAvatar(ctx context.Context, id string) error {
+	u, err := s.repo.GetByID(ctx, id)
+	if err != nil {
+		return err
+	}
+
+	// Delete the old avatar file if exists
+	if u.Avatar != nil && *u.Avatar != "" {
+		if err := s.fileService.Delete(ctx, *u.Avatar); err != nil {
+			// Log error but don't block the removal
+			_ = err
+		}
+	}
+
+	// Set avatar to nil
+	u.Avatar = nil
+	return s.repo.Update(ctx, u)
 }

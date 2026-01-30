@@ -52,52 +52,6 @@ CREATE TABLE IF NOT EXISTS public.announcements (
 );
 
 -- =========================================================
--- Table: users
--- Purpose: All application users (normal users, venue managers, system admins).
---          Organization-level roles are handled via organizations.owner_id and organization_managers.
--- =========================================================
-CREATE TABLE IF NOT EXISTS public.users (
-  -- Identity
-  id              UUID PRIMARY KEY DEFAULT gen_random_uuid(), -- Unique identifier for the user
-
-  -- Authentication & Profile
-  email           TEXT NOT NULL UNIQUE,                       -- User's email address, serves as the login username
-  password_hash   TEXT NOT NULL,                              -- Bcrypt/Argon2 hash of the user's password
-  display_name    TEXT,                                       -- Publicly visible name (optional)
-
-  -- Authorization
-  is_system_admin BOOLEAN NOT NULL DEFAULT false,             -- "God Mode" flag: grants full access to all organizations and system settings
-
-  -- Meta / Audit
-  is_active       BOOLEAN NOT NULL DEFAULT true,              -- Status flag: false indicates a suspended or soft-deleted account
-  last_login_at   TIMESTAMPTZ,                                -- Timestamp of the most recent successful login
-  created_at      TIMESTAMPTZ NOT NULL DEFAULT now()          -- Timestamp when the account was registered
-);
-
--- =========================================================
--- Table: organizations
--- Purpose: Top-level entity for a company / brand / venue owner.
---          Other entities (locations, resource_types, etc.) belong to an organization.
--- =========================================================
-CREATE TABLE IF NOT EXISTS public.organizations (
-  -- Identity
-  id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),      -- Unique identifier for the organization
-
-  -- Relationships
-  owner_id    UUID NOT NULL,                                   -- Reference to the User who owns this organization (1 owner per org)
-
-  -- Core Data
-  name        TEXT NOT NULL,                                   -- Display name of the organization
-
-  -- Meta / Audit
-  is_active   BOOLEAN NOT NULL DEFAULT true,                   -- Status flag: false prevents all operations for this organization
-  created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),              -- Timestamp when the organization was established in the system
-
-  CONSTRAINT organizations_owner_id_fkey
-    FOREIGN KEY (owner_id) REFERENCES public.users(id) ON DELETE RESTRICT
-);
-
--- =========================================================
 -- Table: files
 -- Purpose: Stores metadata for uploaded files (images, documents).
 --          Actual content is stored in local storage or cloud.
@@ -117,11 +71,70 @@ CREATE TABLE IF NOT EXISTS public.files (
   size            BIGINT NOT NULL,                                 -- File size in bytes
 
   -- Meta / Audit
-  created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),              -- When it was uploaded
+  created_at      TIMESTAMPTZ NOT NULL DEFAULT now()               -- When it was uploaded
+);
 
-  -- Constraint: Link to user
-  CONSTRAINT files_user_id_fkey
-    FOREIGN KEY (user_id) REFERENCES public.users(id) ON DELETE RESTRICT
+-- =========================================================
+-- Table: users
+-- Purpose: All application users (normal users, venue managers, system admins).
+--          Organization-level roles are handled via organizations.owner_id and organization_managers.
+-- =========================================================
+CREATE TABLE IF NOT EXISTS public.users (
+  -- Identity
+  id              UUID PRIMARY KEY DEFAULT gen_random_uuid(), -- Unique identifier for the user
+
+  -- Relationships
+  avatar          UUID,                                       -- Reference to the avatar image file
+
+  -- Authentication & Profile
+  email           TEXT NOT NULL UNIQUE,                       -- User's email address, serves as the login username
+  password_hash   TEXT NOT NULL,                              -- Bcrypt/Argon2 hash of the user's password
+  display_name    TEXT,                                       -- Publicly visible name (optional)
+
+  -- Authorization
+  is_system_admin BOOLEAN NOT NULL DEFAULT false,             -- "God Mode" flag: grants full access to all organizations and system settings
+
+  -- Meta / Audit
+  is_active       BOOLEAN NOT NULL DEFAULT true,              -- Status flag: false indicates a suspended or soft-deleted account
+  last_login_at   TIMESTAMPTZ,                                -- Timestamp of the most recent successful login
+  created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),         -- Timestamp when the account was registered
+
+  -- Constraint: Links avatar image to files table.
+  CONSTRAINT users_avatar_fkey
+    FOREIGN KEY (avatar) REFERENCES public.files(id) ON DELETE SET NULL
+);
+
+-- Add foreign key constraint for files.user_id after users table exists
+ALTER TABLE public.files
+  ADD CONSTRAINT files_user_id_fkey
+  FOREIGN KEY (user_id) REFERENCES public.users(id) ON DELETE RESTRICT;
+
+-- =========================================================
+-- Table: organizations
+-- Purpose: Top-level entity for a company / brand / venue owner.
+--          Other entities (locations, resource_types, etc.) belong to an organization.
+-- =========================================================
+CREATE TABLE IF NOT EXISTS public.organizations (
+  -- Identity
+  id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),      -- Unique identifier for the organization
+
+  -- Relationships
+  owner_id    UUID NOT NULL,                                   -- Reference to the User who owns this organization (1 owner per org)
+  cover       UUID,                                            -- Reference to the cover image file
+
+  -- Core Data
+  name        TEXT NOT NULL,                                   -- Display name of the organization
+
+  -- Meta / Audit
+  is_active   BOOLEAN NOT NULL DEFAULT true,                   -- Status flag: false prevents all operations for this organization
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),              -- Timestamp when the organization was established in the system
+
+  CONSTRAINT organizations_owner_id_fkey
+    FOREIGN KEY (owner_id) REFERENCES public.users(id) ON DELETE RESTRICT,
+
+  -- Constraint: Links cover image to files table.
+  CONSTRAINT organizations_cover_fkey
+    FOREIGN KEY (cover) REFERENCES public.files(id) ON DELETE SET NULL
 );
 
 -- =========================================================
@@ -191,6 +204,7 @@ CREATE TABLE IF NOT EXISTS public.resources (
   -- Relationships
   resource_type     universal_resource_type NOT NULL,               -- Type of the resource (badminton, tennis, etc.)
   location_id       UUID NOT NULL,                                   -- Physical location where this resource exists
+  cover             UUID,                                            -- Reference to the cover image file
 
   -- Content
   name              TEXT NOT NULL,                                   -- Name/Number of the resource (e.g., "Court 1")
@@ -202,7 +216,11 @@ CREATE TABLE IF NOT EXISTS public.resources (
   
   -- Constraint: Ensures the resource is assigned to a valid physical location.
   CONSTRAINT resources_location_id_fkey
-    FOREIGN KEY (location_id) REFERENCES public.locations(id) ON DELETE CASCADE
+    FOREIGN KEY (location_id) REFERENCES public.locations(id) ON DELETE CASCADE,
+
+  -- Constraint: Links cover image to files table.
+  CONSTRAINT resources_cover_fkey
+    FOREIGN KEY (cover) REFERENCES public.files(id) ON DELETE SET NULL
 );
 
 -- =========================================================

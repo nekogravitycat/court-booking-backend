@@ -10,6 +10,16 @@ UserResponse:
     display_name:
       type: string
       nullable: true
+    avatar:
+      type: string
+      format: uri
+      nullable: true
+      description: "使用者頭像圖片的 URL (如果有設定)"
+    avatar_thumbnail:
+      type: string
+      format: uri
+      nullable: true
+      description: "使用者頭像縮圖的 URL (如果有設定)"
     created_at:
       type: string
       format: date-time
