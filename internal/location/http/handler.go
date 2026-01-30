@@ -229,6 +229,9 @@ func (h *LocationHandler) UploadCover(c *gin.Context) {
 	}
 
 	h.fileHandler.HandleFileUpload(c, filehttp.FileUploadConfig{
+		MaxSizeBytes: 5 * 1024 * 1024, // 5MB
+		AllowedTypes: []string{"image/jpeg", "image/png"},
+		ResizeImage:  true,
 		AfterUpload: func(ctx context.Context, fileID string) error {
 			return h.service.UpdateCover(ctx, uri.ID, fileID)
 		},

@@ -39,17 +39,6 @@ func NewContainer(cfg Config) *Container {
 	passwordHasher := auth.NewBcryptPasswordHasherWithCost(cfg.BcryptCost)
 	jwtManager := auth.NewJWTManager(cfg.JWTSecret, cfg.JWTTTL)
 
-	// User Module
-	userRepo := user.NewPgxRepository(cfg.DBPool)
-	userService := user.NewService(userRepo, passwordHasher)
-
-	// Location Module
-	locRepo := location.NewPgxRepository(cfg.DBPool)
-
-	// Organization Module
-	orgRepo := organization.NewPgxRepository(cfg.DBPool)
-	orgService := organization.NewService(orgRepo, userService, locRepo)
-
 	// File Module
 	store, err := storage.NewLocalStorage("storage")
 	if err != nil {
@@ -58,6 +47,14 @@ func NewContainer(cfg Config) *Container {
 	fileRepo := file.NewRepository(cfg.DBPool)
 	fileService := file.NewService(fileRepo, store)
 
+	// User Module
+	userRepo := user.NewPgxRepository(cfg.DBPool)
+	userService := user.NewService(userRepo, passwordHasher)
+
+	// Organization & Location Module
+	orgRepo := organization.NewPgxRepository(cfg.DBPool)
+	locRepo := location.NewPgxRepository(cfg.DBPool)
+	orgService := organization.NewService(orgRepo, userService, locRepo)
 	locService := location.NewService(locRepo, orgService, userService, fileService)
 
 	// Resource Module

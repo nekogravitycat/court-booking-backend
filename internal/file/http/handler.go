@@ -6,6 +6,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/nekogravitycat/court-booking-backend/internal/file"
+	"github.com/nekogravitycat/court-booking-backend/internal/pkg/response"
 )
 
 type Handler struct {
@@ -29,7 +30,7 @@ func (h *Handler) ServeFile(c *gin.Context) {
 	// Download file stream and metadata
 	stream, fileInfo, err := h.fileService.Download(c.Request.Context(), id)
 	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "file not found"})
+		response.Error(c, err)
 		return
 	}
 	defer stream.Close()
@@ -57,7 +58,7 @@ func (h *Handler) ServeThumbnail(c *gin.Context) {
 	// Download thumbnail stream and metadata
 	stream, fileInfo, err := h.fileService.DownloadThumbnail(c.Request.Context(), id)
 	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "thumbnail not found"})
+		response.Error(c, err)
 		return
 	}
 	defer stream.Close()
