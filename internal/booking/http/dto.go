@@ -14,12 +14,13 @@ import (
 // ListBookingsRequest defines query parameters for listing bookings.
 type ListBookingsRequest struct {
 	request.ListParams
-	ResourceID    string     `form:"resource_id" binding:"omitempty,uuid"`
-	Status        string     `form:"status" binding:"omitempty,oneof=pending confirmed cancelled"`
-	UserID        string     `form:"user_id" binding:"omitempty,uuid"`
-	StartTimeFrom *time.Time `form:"start_time_from" time_format:"2006-01-02T15:04:05Z07:00"`
-	StartTimeTo   *time.Time `form:"start_time_to" time_format:"2006-01-02T15:04:05Z07:00"`
-	SortBy        string     `form:"sort_by" binding:"omitempty,oneof=start_time end_time created_at status"`
+	ResourceID     string     `form:"resource_id" binding:"omitempty,uuid"`
+	OrganizationID string     `form:"organization_id" binding:"omitempty,uuid"`
+	Status         string     `form:"status" binding:"omitempty,oneof=pending confirmed cancelled"`
+	UserID         string     `form:"user_id" binding:"omitempty,uuid"`
+	StartTimeFrom  *time.Time `form:"start_time_from" time_format:"2006-01-02T15:04:05Z07:00"`
+	StartTimeTo    *time.Time `form:"start_time_to" time_format:"2006-01-02T15:04:05Z07:00"`
+	SortBy         string     `form:"sort_by" binding:"omitempty,oneof=start_time end_time created_at status"`
 }
 
 // Validate performs custom validation for ListBookingsRequest.

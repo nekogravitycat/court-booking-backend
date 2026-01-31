@@ -100,6 +100,9 @@ func (r *pgxRepository) List(ctx context.Context, filter Filter) ([]*Booking, in
 	if filter.ResourceID != "" {
 		query = query.Where(squirrel.Eq{"b.resource_id": filter.ResourceID})
 	}
+	if filter.OrganizationID != "" {
+		query = query.Where(squirrel.Eq{"o.id": filter.OrganizationID})
+	}
 	if filter.Status != "" {
 		query = query.Where(squirrel.Eq{"b.status": filter.Status})
 	}

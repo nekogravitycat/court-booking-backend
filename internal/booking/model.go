@@ -44,13 +44,14 @@ type Booking struct {
 }
 
 type Filter struct {
-	UserID     string
-	ResourceID string
-	Status     string
-	StartTime  *time.Time // Filter bookings starting after this time
-	EndTime    *time.Time // Filter bookings ending before this time
-	Page       int
-	PageSize   int
-	SortBy     string
-	SortOrder  string
+	UserID         string
+	ResourceID     string
+	OrganizationID string
+	Status         string
+	StartTime      *time.Time // Filter bookings starting after this time
+	EndTime        *time.Time // Filter bookings ending before this time
+	Page           int
+	PageSize       int
+	SortBy         string
+	SortOrder      string
 }

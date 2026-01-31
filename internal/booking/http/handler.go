@@ -91,15 +91,16 @@ func (h *Handler) List(c *gin.Context) {
 	// If Normal User, forced to see only their own
 
 	filter := booking.Filter{
-		UserID:     filterUserID,
-		ResourceID: req.ResourceID,
-		Status:     req.Status,
-		StartTime:  req.StartTimeFrom,
-		EndTime:    req.StartTimeTo,
-		Page:       req.Page,
-		PageSize:   req.PageSize,
-		SortBy:     req.SortBy,
-		SortOrder:  req.SortOrder,
+		UserID:         filterUserID,
+		ResourceID:     req.ResourceID,
+		OrganizationID: req.OrganizationID,
+		Status:         req.Status,
+		StartTime:      req.StartTimeFrom,
+		EndTime:        req.StartTimeTo,
+		Page:           req.Page,
+		PageSize:       req.PageSize,
+		SortBy:         req.SortBy,
+		SortOrder:      req.SortOrder,
 	}
 
 	if filter.SortBy == "" {

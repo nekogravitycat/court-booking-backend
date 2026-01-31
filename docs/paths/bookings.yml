@@ -28,6 +28,13 @@ listBookings:
         schema:
           type: string
           format: uuid
+        description: \"Filter by resource\"
+      - name: organization_id
+        in: query
+        schema:
+          type: string
+          format: uuid
+        description: \"Filter by organization\"
       - name: status
         in: query
         schema:
