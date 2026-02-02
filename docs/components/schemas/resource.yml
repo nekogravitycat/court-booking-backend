@@ -1,3 +1,15 @@
+ResourceType:
+  type: string
+  enum:
+    - badminton
+    - tennis
+    - basketball
+    - table_tennis
+    - volleyball
+    - football
+    - classroom
+    - other
+
 ResourceResponse:
   type: object
   properties:
@@ -10,24 +22,15 @@ ResourceResponse:
       type: integer
       description: Hourly rate or booking fee
     resource_type:
-      type: string
-      enum:
-        - badminton
-        - tennis
-        - basketball
-        - table_tennis
-        - volleyball
-        - football
+      $ref: "#/ResourceType"
     cover:
       type: string
       format: uri
       nullable: true
-      description: "資源封面圖片的 URL (如果有設定)"
     cover_thumbnail:
       type: string
       format: uri
       nullable: true
-      description: "資源封面縮圖的 URL (如果有設定)"
     location:
       $ref: "./location.yml#/LocationTag"
     created_at:
@@ -53,16 +56,7 @@ CreateResourceRequest:
       type: string
       format: uuid
     resource_type:
-      type: string
-      enum:
-        - badminton
-        - tennis
-        - basketball
-        - table_tennis
-        - volleyball
-        - football
-        - classroom
-        - other
+      $ref: "#/ResourceType"
   required:
     - name
     - location_id

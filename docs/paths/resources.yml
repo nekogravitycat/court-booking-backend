@@ -26,14 +26,7 @@ listResources:
         in: query
         description: "Filter by resource type"
         schema:
-          type: string
-          enum:
-            - badminton
-            - tennis
-            - basketball
-            - table_tennis
-            - volleyball
-            - football
+          $ref: "../components/schemas/resource.yml#/ResourceType"
       - name: location_id
         in: query
         schema:

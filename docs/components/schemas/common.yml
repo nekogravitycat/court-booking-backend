@@ -6,7 +6,7 @@ ErrorResponse:
       description: 錯誤訊息描述
     details:
       type: string
-      description: 詳細錯誤資訊 (Optional)
+      description: 詳細錯誤資訊
   example:
     error: "invalid request"
 
