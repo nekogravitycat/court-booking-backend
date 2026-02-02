@@ -61,6 +61,8 @@ CreateResourceRequest:
         - table_tennis
         - volleyball
         - football
+        - classroom
+        - other
   required:
     - name
     - location_id

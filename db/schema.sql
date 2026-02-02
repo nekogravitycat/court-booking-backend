@@ -1,4 +1,8 @@
--- db/init/schema.sql
+-- Run this script to initialize the database schema.
+-- This script should be treated as the single source of truth for the database schema.
+-- It should be run in a clean database.
+-- If you need to migrate an existing database, write a separate migration script.
+
 
 -- Enable pgcrypto extension for UUID generation and other crypto helpers
 CREATE EXTENSION IF NOT EXISTS "pgcrypto";
@@ -28,7 +32,9 @@ BEGIN
           'basketball',
           'table_tennis',
           'volleyball',
-          'football'
+          'football',
+          'classroom',
+          'other'
         );
     END IF;
 END

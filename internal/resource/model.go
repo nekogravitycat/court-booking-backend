@@ -22,6 +22,8 @@ var ValidResourceTypes = []string{
 	"table_tennis",
 	"volleyball",
 	"football",
+	"classroom",
+	"other",
 }
 
 // Resource represents a bookable unit (e.g., Court A, Room 101).
