@@ -50,12 +50,9 @@
 ├── internal/           # 私有應用程式代碼
 │   ├── api/            # 全局 API 設定 (Router, Middleware)
 │   ├── app/            # 依賴注入容器 (Dependency Container)
-│   ├── auth/           # 認證模組 (JWT, Password Hashing)
 │   ├── config/         # 設定檔讀取邏輯
-│   ├── db/             # 資料庫連線池封裝
-│   ├── organization/   # [模組] 組織、場館、成員管理
-│   ├── user/           # [模組] 使用者管理
-│   └── pkg/            # 共用工具 (如 Response wrapper)
+│   ├── pkg/            # 共用工具 (如 Response wrapper)
+│   └── [modules]/      # 業務模組 (user, auth, booking, organization, file...)
 ├── tests/              # 整合測試 (Integration Tests)
 ├── compose.yml         # Docker Compose (DB & Swagger)
 └── .env                # 環境變數 (需自行建立)
@@ -77,7 +74,6 @@
   - 預約狀態流轉 (Pending -> Confirmed/Cancelled)。
 - **安全性**
   - 密碼加密存儲 (Bcrypt)。
-  - 軟刪除機制，保留歷史數據。
 
 ## 🚀 快速開始
 
@@ -135,10 +131,12 @@
 - **核心表格**：
   - `users`：平台使用者。
   - `organizations`：頂層組織單位。
-  - `organization_permissions`：連結 User 與 Organization 的權限表 (Role)。
+  - `organization_members` / `managers`：組織成員與權限管理。
   - `locations`：實體場館。
   - `resources`：可預約的單一資源。
   - `bookings`：預約紀錄。
+  - `files`：檔案上傳紀錄 (Avatar, Cover)。
+  - `announcements`：系統公告。
 
 ## 📖 API 文件
 
@@ -150,8 +148,8 @@
 2.  **原始檔案**：
     位於 `docs/openapi.yml`。
 
-3.  **API 整合指南**：
-    前端開發者可參考 `docs/api.md`，內含詳細的認證流程與回傳格式說明。
+3.  **權限系統說明**：
+    開發者可參考 `docs/role_system.md`，內含詳細的角色權限設計說明。
 
 ## 🧪 測試
 
@@ -185,9 +183,9 @@
 - **範例**:
   ```go
   var (
-      ErrNotFound      = apperror.New(http.StatusNotFound, "resource not found")
-      ErrNameRequired  = apperror.New(http.StatusBadRequest, "name is required")
-      ErrOrgIDRequired = apperror.New(http.StatusBadRequest, "organization_id is required")
+    ErrNotFound      = apperror.New(http.StatusNotFound, "resource not found")
+    ErrNameRequired  = apperror.New(http.StatusBadRequest, "name is required")
+    ErrOrgIDRequired = apperror.New(http.StatusBadRequest, "organization_id is required")
   )
   ```
 
@@ -198,7 +196,7 @@
 - **範例**:
   ```go
   if name == "" {
-      return ErrNameRequired
+    return ErrNameRequired
   }
   ```
 
@@ -211,8 +209,8 @@
 - **範例**:
   ```go
   if err := h.service.Delete(ctx, id); err != nil {
-      response.Error(c, err)
-      return
+    response.Error(c, err)
+    return
   }
   ```
 
