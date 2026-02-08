@@ -53,11 +53,11 @@ func NewBookingResponse(b *booking.Booking) BookingResponse {
 		User:         userHttp.UserTag{ID: b.UserID, Name: b.UserName},
 		Location:     locHttp.LocationTag{ID: b.LocationID, Name: b.LocationName},
 		Organization: orgHttp.OrganizationTag{ID: b.OrganizationID, Name: b.OrganizationName},
-		StartTime:    b.StartTime,
-		EndTime:      b.EndTime,
+		StartTime:    b.StartTime.UTC(),
+		EndTime:      b.EndTime.UTC(),
 		Status:       string(b.Status),
-		CreatedAt:    b.CreatedAt,
-		UpdatedAt:    b.UpdatedAt,
+		CreatedAt:    b.CreatedAt.UTC(),
+		UpdatedAt:    b.UpdatedAt.UTC(),
 	}
 }
 

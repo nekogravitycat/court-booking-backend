@@ -47,10 +47,10 @@ type UserTag struct {
 // NewUserResponse converts domain user.User to UserResponse used by the API.
 func NewUserResponse(u *user.User) UserResponse {
 	// Make a copy of time fields to avoid accidental mutation from outside.
-	createdAt := u.CreatedAt
+	createdAt := u.CreatedAt.UTC()
 	var lastLoginAt *time.Time
 	if u.LastLoginAt != nil {
-		ll := *u.LastLoginAt
+		ll := u.LastLoginAt.UTC()
 		lastLoginAt = &ll
 	}
 

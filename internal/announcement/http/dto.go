@@ -32,8 +32,8 @@ func NewResponse(a *announcement.Announcement) AnnouncementResponse {
 		ID:        a.ID,
 		Title:     a.Title,
 		Content:   a.Content,
-		CreatedAt: a.CreatedAt,
-		UpdatedAt: a.UpdatedAt,
+		CreatedAt: a.CreatedAt.UTC(),
+		UpdatedAt: a.UpdatedAt.UTC(),
 	}
 }
 

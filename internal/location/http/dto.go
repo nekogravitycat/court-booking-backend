@@ -51,7 +51,7 @@ func NewLocationResponse(l *location.Location) LocationResponse {
 		ID:                l.ID,
 		Organization:      orgHttp.OrganizationTag{ID: l.OrganizationID, Name: l.OrganizationName},
 		Name:              l.Name,
-		CreatedAt:         l.CreatedAt,
+		CreatedAt:         l.CreatedAt.UTC(),
 		Capacity:          l.Capacity,
 		OpeningHoursStart: l.OpeningHoursStart,
 		OpeningHoursEnd:   l.OpeningHoursEnd,
@@ -80,7 +80,7 @@ func NewManagerResponse(u *user.User) ManagerResponse {
 		ID:          u.ID,
 		Email:       u.Email,
 		DisplayName: u.DisplayName,
-		CreatedAt:   u.CreatedAt,
+		CreatedAt:   u.CreatedAt.UTC(),
 		IsActive:    u.IsActive,
 	}
 }

@@ -97,7 +97,7 @@ func NewOrganizationResponse(o *organization.Organization) OrganizationResponse 
 		OwnerID:        o.OwnerID,
 		Cover:          coverURL,
 		CoverThumbnail: coverThumbnailURL,
-		CreatedAt:      o.CreatedAt,
+		CreatedAt:      o.CreatedAt.UTC(),
 		IsActive:       o.IsActive,
 	}
 }
@@ -159,7 +159,7 @@ func NewManagerResponse(u *user.User) ManagerResponse {
 		ID:          u.ID,
 		Email:       u.Email,
 		DisplayName: u.DisplayName,
-		CreatedAt:   u.CreatedAt,
+		CreatedAt:   u.CreatedAt.UTC(),
 		IsActive:    u.IsActive,
 	}
 }
