@@ -99,7 +99,6 @@ func (s *service) Create(ctx context.Context, req CreateRequest) (*Booking, erro
 	if hasOverlap {
 		return nil, ErrTimeConflict
 	}
-
 	// 4. Create Booking
 	booking := &Booking{
 		ResourceID: req.ResourceID,
@@ -113,7 +112,8 @@ func (s *service) Create(ctx context.Context, req CreateRequest) (*Booking, erro
 		return nil, err
 	}
 
-	return booking, nil
+	// 5. Fetch full booking details (joins) for response
+	return s.repo.GetByID(ctx, booking.ID)
 }
 
 func (s *service) GetByID(ctx context.Context, id string) (*Booking, error) {
