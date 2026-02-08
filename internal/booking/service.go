@@ -3,12 +3,19 @@ package booking
 import (
 	"context"
 	"errors"
+	"sort"
 	"time"
 
 	"github.com/nekogravitycat/court-booking-backend/internal/location"
 	"github.com/nekogravitycat/court-booking-backend/internal/organization"
 	"github.com/nekogravitycat/court-booking-backend/internal/resource"
 )
+
+// TimeSlot represents a time range where a resource is available.
+type TimeSlot struct {
+	StartTime time.Time
+	EndTime   time.Time
+}
 
 type CreateRequest struct {
 	UserID     string
@@ -29,6 +36,7 @@ type Service interface {
 	List(ctx context.Context, filter Filter) ([]*Booking, int, error)
 	Update(ctx context.Context, id string, req UpdateRequest, updaterUserID string, isSysAdmin bool) (*Booking, error)
 	Delete(ctx context.Context, id string, deleterUserID string, isSysAdmin bool) error
+	GetAvailability(ctx context.Context, resourceID string, date time.Time) ([]TimeSlot, error)
 }
 
 type service struct {
@@ -225,4 +233,162 @@ func (s *service) Delete(ctx context.Context, id string, deleterUserID string, i
 	}
 
 	return s.repo.Delete(ctx, id)
+}
+
+func (s *service) GetAvailability(ctx context.Context, resourceID string, date time.Time) ([]TimeSlot, error) {
+	// Get Resource to find Location
+	res, err := s.resService.GetByID(ctx, resourceID)
+	if err != nil {
+		if errors.Is(err, resource.ErrNotFound) {
+			return nil, ErrResourceNotFound
+		}
+		return nil, err
+	}
+
+	// Get Location for Opening Hours
+	loc, err := s.locService.GetByID(ctx, res.LocationID)
+	if err != nil {
+		return nil, err
+	}
+
+	// List Bookings for the day
+	// We need bookings that overlap with the day:
+	// Start < EndOfDay AND End > StartOfDay
+	startOfDay := time.Date(date.Year(), date.Month(), date.Day(), 0, 0, 0, 0, time.UTC)
+	endOfDay := startOfDay.Add(24 * time.Hour)
+
+	bookings, _, err := s.repo.List(ctx, Filter{
+		ResourceID: resourceID,
+		StartTime:  &startOfDay, // Filter where EndTime >= StartOfDay (handled by repo logic: EndTime > filter.StartTime)
+		EndTime:    &endOfDay,   // Filter where StartTime <= EndOfDay (handled by repo logic: StartTime < filter.EndTime)
+		Page:       1,
+		PageSize:   1000, // Fetch all relevant bookings
+		SortBy:     "start_time",
+		SortOrder:  "ASC",
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	// Calculate Slots
+	return CalculateAvailability(date, loc.OpeningHoursStart, loc.OpeningHoursEnd, bookings)
+}
+
+// CalculateAvailability computes available time slots given the operating hours and existing bookings.
+//
+// Algorithm Design:
+//  1. Normalization: Opening and closing times are parsed and normalized to the specific date requested.
+//  2. Sorting: Bookings are sorted by start time to allow for a linear pass.
+//  3. Linear Scan: We iterate through the sorted bookings, maintaining a 'currentStart' pointer that tracks
+//     the beginning of the next potential available slot.
+//     - For each booking, we verify if there is a gap between 'currentStart' and the booking's start time.
+//     - If a gap exists, it is recorded as an available TimeSlot.
+//     - 'currentStart' is then advanced to the end of the current booking.
+//  4. Final Slot: After processing all bookings, if 'currentStart' is still before the closing time,
+//     the remaining time is added as the final available slot.
+func CalculateAvailability(date time.Time, openStr, closeStr string, bookings []*Booking) ([]TimeSlot, error) {
+	// 1. Parse Opening and Closing Times
+	layout := "15:04:05"
+	if len(openStr) == 5 {
+		layout = "15:04"
+	}
+
+	openTime, err := time.Parse(layout, openStr)
+	if err != nil {
+		return nil, err
+	}
+	// Normalizing to the given date
+	startOfDay := time.Date(date.Year(), date.Month(), date.Day(), openTime.Hour(), openTime.Minute(), openTime.Second(), 0, time.UTC)
+
+	if len(closeStr) == 5 {
+		layout = "15:04"
+	}
+	closeTime, err := time.Parse(layout, closeStr)
+	if err != nil {
+		return nil, err
+	}
+	endOfDay := time.Date(date.Year(), date.Month(), date.Day(), closeTime.Hour(), closeTime.Minute(), closeTime.Second(), 0, time.UTC)
+
+	if endOfDay.Before(startOfDay) {
+		// Handle case where closing time is past midnight (next day) - simplistic for now, assume same day
+		// For this specific requirement, let's assume valid business hours within a day or handle error
+		// Logic in Location service ensures End > Start, but that's just time comparison.
+		// Here we map to a specific date.
+		return nil, ErrInvalidTimeRange
+	}
+
+	// 2. Sort bookings by start time
+	sort.Slice(bookings, func(i, j int) bool {
+		return bookings[i].StartTime.Before(bookings[j].StartTime)
+	})
+
+	var availableSlots []TimeSlot
+	currentStart := startOfDay
+
+	for _, book := range bookings {
+		// Ignore cancelled bookings
+		if book.Status == StatusCancelled {
+			continue
+		}
+
+		// Adjust booking times to be within the operating day (clamping)
+		bookStart := book.StartTime
+		bookEnd := book.EndTime
+		if bookEnd.Before(currentStart) {
+			continue // Already passed this booking
+		}
+		if bookStart.After(endOfDay) {
+			break // Booking is after closing, no need to check further
+		}
+
+		// Clamp booking start time to current processing start time
+		/*
+			This logic handles overlapping bookings.
+
+			As we iterate through the bookings, currentStart tracks the end of the previous booking (or the opening time).
+			If the current booking starts before the previous one ended (an overlap), bookStart would be less than currentStart.
+
+			This line effectively "trims" the start of the current booking to ignore the part that overlaps with the previous one,
+			ensuring we don't start checking for available slots "backwards" in time.
+
+			For example:
+
+			Booking A: 10:00 - 11:00 (currentStart becomes 11:00).
+			Booking B: 10:30 - 11:30.
+			When processing B, bookStart (10:30) is before currentStart (11:00).
+			We clamp bookStart to 11:00.
+			The next check if bookStart.After(currentStart) is 11:00 > 11:00 (False), so no "free slot" is created (correctly).
+			currentStart is then updated to 11:30.
+		*/
+		if bookStart.Before(currentStart) {
+			bookStart = currentStart
+		}
+		// Clamp booking end time to end of business day
+		if bookEnd.After(endOfDay) {
+			bookEnd = endOfDay
+		}
+
+		// If there is a gap between currentStart and booking start, that's an available slot
+		if bookStart.After(currentStart) {
+			availableSlots = append(availableSlots, TimeSlot{
+				StartTime: currentStart,
+				EndTime:   bookStart,
+			})
+		}
+
+		// Move current pointer to end of this booking
+		if bookEnd.After(currentStart) {
+			currentStart = bookEnd
+		}
+	}
+
+	// 3. Add final slot if there is time remaining until close
+	if currentStart.Before(endOfDay) {
+		availableSlots = append(availableSlots, TimeSlot{
+			StartTime: currentStart,
+			EndTime:   endOfDay,
+		})
+	}
+
+	return availableSlots, nil
 }

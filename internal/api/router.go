@@ -81,7 +81,7 @@ func NewRouter(cfg Config) *gin.Engine {
 	userHandler := userHttp.NewHandler(cfg.UserService, cfg.JWTManager, cfg.FileService, fileHandler)
 	orgHandler := orgHttp.NewHandler(cfg.OrgService, cfg.FileService, fileHandler)
 	locHandler := locHttp.NewHandler(cfg.LocService, cfg.OrgService, cfg.FileService, fileHandler)
-	resHandler := resHttp.NewHandler(cfg.ResService, cfg.LocService, cfg.OrgService, cfg.FileService, fileHandler)
+	resHandler := resHttp.NewHandler(cfg.ResService, cfg.LocService, cfg.OrgService, cfg.BookingService, cfg.FileService, fileHandler)
 	bookingHandler := bookingHttp.NewHandler(cfg.BookingService, cfg.UserService, cfg.ResService, cfg.LocService, cfg.OrgService)
 	annHandler := annHttp.NewHandler(cfg.AnnService)
 

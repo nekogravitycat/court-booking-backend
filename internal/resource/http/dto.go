@@ -3,6 +3,7 @@ package http
 import (
 	"time"
 
+	"github.com/nekogravitycat/court-booking-backend/internal/booking"
 	"github.com/nekogravitycat/court-booking-backend/internal/file"
 	locHttp "github.com/nekogravitycat/court-booking-backend/internal/location/http"
 	"github.com/nekogravitycat/court-booking-backend/internal/pkg/request"
@@ -59,7 +60,7 @@ func NewResponse(r *resource.Resource) ResourceResponse {
 		Location:       locHttp.LocationTag{ID: r.LocationID, Name: r.LocationName},
 		Cover:          coverURL,
 		CoverThumbnail: coverThumbnailURL,
-		CreatedAt:      r.CreatedAt,
+		CreatedAt:      r.CreatedAt.UTC(),
 	}
 }
 
@@ -83,4 +84,28 @@ type UpdateRequest struct {
 // Validate performs custom validation for UpdateRequest.
 func (r *UpdateRequest) Validate() error {
 	return nil
+}
+
+type TimeSlot struct {
+	StartTime time.Time `json:"start_time"`
+	EndTime   time.Time `json:"end_time"`
+}
+
+type AvailabilityResponse struct {
+	Date  string     `json:"date"`
+	Slots []TimeSlot `json:"slots"`
+}
+
+func NewAvailabilityResponse(date time.Time, slots []booking.TimeSlot) AvailabilityResponse {
+	dtos := make([]TimeSlot, len(slots))
+	for i, s := range slots {
+		dtos[i] = TimeSlot{
+			StartTime: s.StartTime.UTC(),
+			EndTime:   s.EndTime.UTC(),
+		}
+	}
+	return AvailabilityResponse{
+		Date:  date.Format("2006-01-02"),
+		Slots: dtos,
+	}
 }

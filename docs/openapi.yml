@@ -244,6 +244,9 @@ paths:
   /resources/{id}/cover:
     $ref: "./paths/resources.yml#/resourceCoverUpload"
 
+  /resources/{id}/availability:
+    $ref: "./paths/resources.yml#/resourceAvailability"
+
   # ============================
   # Bookings
   # ============================

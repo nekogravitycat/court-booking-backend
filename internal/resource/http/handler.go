@@ -4,9 +4,11 @@ import (
 	"context"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/nekogravitycat/court-booking-backend/internal/auth"
+	"github.com/nekogravitycat/court-booking-backend/internal/booking"
 	"github.com/nekogravitycat/court-booking-backend/internal/file"
 	filehttp "github.com/nekogravitycat/court-booking-backend/internal/file/http"
 	"github.com/nekogravitycat/court-booking-backend/internal/location"
@@ -17,20 +19,22 @@ import (
 )
 
 type Handler struct {
-	service     resource.Service
-	locService  location.Service
-	orgService  organization.Service
-	fileService file.Service
-	fileHandler *filehttp.Handler
+	service        resource.Service
+	locService     location.Service
+	orgService     organization.Service
+	bookingService booking.Service
+	fileService    file.Service
+	fileHandler    *filehttp.Handler
 }
 
-func NewHandler(service resource.Service, locService location.Service, orgService organization.Service, fileService file.Service, fileHandler *filehttp.Handler) *Handler {
+func NewHandler(service resource.Service, locService location.Service, orgService organization.Service, bookingService booking.Service, fileService file.Service, fileHandler *filehttp.Handler) *Handler {
 	return &Handler{
-		service:     service,
-		locService:  locService,
-		orgService:  orgService,
-		fileService: fileService,
-		fileHandler: fileHandler,
+		service:        service,
+		locService:     locService,
+		orgService:     orgService,
+		bookingService: bookingService,
+		fileService:    fileService,
+		fileHandler:    fileHandler,
 	}
 }
 
@@ -309,4 +313,34 @@ func (h *Handler) RemoveCover(c *gin.Context) {
 	}
 
 	c.Status(http.StatusNoContent)
+}
+
+func (h *Handler) GetAvailability(c *gin.Context) {
+	var uri request.ByIDRequest
+	if err := c.ShouldBindUri(&uri); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request", "details": err.Error()})
+		return
+	}
+
+	dateStr := c.Query("date")
+	var date time.Time
+	var err error
+
+	if dateStr == "" {
+		date = time.Now()
+	} else {
+		date, err = time.Parse("2006-01-02", dateStr)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid date format, expected YYYY-MM-DD"})
+			return
+		}
+	}
+
+	slots, err := h.bookingService.GetAvailability(c.Request.Context(), uri.ID, date)
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+
+	c.JSON(http.StatusOK, NewAvailabilityResponse(date, slots))
 }

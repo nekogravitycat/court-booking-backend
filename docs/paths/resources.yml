@@ -236,3 +236,53 @@ resourceCoverUpload:
         description: Forbidden - 無權限移除此資源封面
       "404":
         description: Resource not found
+
+resourceAvailability:
+  get:
+    tags:
+      - Resources
+    summary: 查詢場地可用時段
+    description: 根據日期查詢指定場地的可用時段。
+    security:
+      - bearerAuth: []
+    parameters:
+      - in: path
+        name: id
+        required: true
+        schema:
+          type: string
+        description: 場地 ID
+      - in: query
+        name: date
+        required: false
+        schema:
+          type: string
+          format: date
+          example: "2026-02-08"
+        description: 查詢日期 (預設為當日)
+    responses:
+      "200":
+        description: 成功
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                date:
+                  type: string
+                  example: "2026-02-08"
+                slots:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      start_time:
+                        type: string
+                        format: date-time
+                      end_time:
+                        type: string
+                        format: date-time
+      "400":
+        description: 請求錯誤 (無效的日期格式或 ID)
+      "404":
+        description: 找不到場地
