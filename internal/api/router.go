@@ -17,6 +17,8 @@ import (
 	locHttp "github.com/nekogravitycat/court-booking-backend/internal/location/http"
 	"github.com/nekogravitycat/court-booking-backend/internal/organization"
 	orgHttp "github.com/nekogravitycat/court-booking-backend/internal/organization/http"
+	"github.com/nekogravitycat/court-booking-backend/internal/pickup"
+	pickupHttp "github.com/nekogravitycat/court-booking-backend/internal/pickup/http"
 	"github.com/nekogravitycat/court-booking-backend/internal/resource"
 	resHttp "github.com/nekogravitycat/court-booking-backend/internal/resource/http"
 	"github.com/nekogravitycat/court-booking-backend/internal/user"
@@ -33,6 +35,7 @@ type Config struct {
 	ResService     resource.Service
 	BookingService booking.Service
 	AnnService     announcement.Service
+	PickupService  pickup.Service
 	FileService    file.Service
 	JWTManager     *auth.JWTManager
 }
@@ -84,6 +87,7 @@ func NewRouter(cfg Config) *gin.Engine {
 	resHandler := resHttp.NewHandler(cfg.ResService, cfg.LocService, cfg.OrgService, cfg.BookingService, cfg.FileService, fileHandler)
 	bookingHandler := bookingHttp.NewHandler(cfg.BookingService, cfg.UserService, cfg.ResService, cfg.LocService, cfg.OrgService)
 	annHandler := annHttp.NewHandler(cfg.AnnService)
+	pickupHandler := pickupHttp.NewHandler(cfg.PickupService, cfg.UserService)
 
 	// Register Routes
 	v1 := r.Group("/v1")
@@ -95,6 +99,7 @@ func NewRouter(cfg Config) *gin.Engine {
 		resHttp.RegisterRoutes(v1, resHandler, authMiddleware)
 		bookingHttp.RegisterRoutes(v1, bookingHandler, authMiddleware)
 		annHttp.RegisterRoutes(v1, annHandler, authMiddleware, sysAdminMiddleware)
+		pickupHttp.RegisterRoutes(v1, pickupHandler, authMiddleware)
 	}
 
 	return r

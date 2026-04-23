@@ -39,6 +39,10 @@ tags:
     description: 系統公告
   - name: Files
     description: 檔案存取
+  - name: Pickup Groups
+    description: 臨打團
+  - name: Pickup Orders
+    description: 臨打團訂單
 
 components:
   securitySchemes:
@@ -152,6 +156,24 @@ components:
 
     UpdateAnnouncementRequest:
       $ref: "./components/schemas/announcement.yml#/UpdateAnnouncementRequest"
+
+    # --------------------------
+    # Pickup Models
+    # --------------------------
+    PickupGroupResponse:
+      $ref: "./components/schemas/pickup.yml#/PickupGroupResponse"
+
+    PickupGroupDetailResponse:
+      $ref: "./components/schemas/pickup.yml#/PickupGroupDetailResponse"
+
+    CreatePickupGroupRequest:
+      $ref: "./components/schemas/pickup.yml#/CreatePickupGroupRequest"
+
+    PickupOrderResponse:
+      $ref: "./components/schemas/pickup.yml#/PickupOrderResponse"
+
+    UpdatePickupOrderRequest:
+      $ref: "./components/schemas/pickup.yml#/UpdatePickupOrderRequest"
 
 paths:
   # ============================
@@ -273,6 +295,27 @@ paths:
 
   /files/{id}/thumbnail:
     $ref: "./paths/files.yml#/serveThumbnail"
+
+  # ============================
+  # Pickup Groups
+  # ============================
+  /pickup-groups:
+    $ref: "./paths/pickup.yml#/pickupGroups"
+
+  /pickup-groups/{id}:
+    $ref: "./paths/pickup.yml#/pickupGroupDetail"
+
+  /pickup-groups/{id}/orders:
+    $ref: "./paths/pickup.yml#/pickupGroupOrders"
+
+  # ============================
+  # Pickup Orders
+  # ============================
+  /pickup-orders:
+    $ref: "./paths/pickup.yml#/pickupOrders"
+
+  /pickup-orders/{id}:
+    $ref: "./paths/pickup.yml#/pickupOrderDetail"
 
   # ============================
   # Shared / Common Schemas for Reference

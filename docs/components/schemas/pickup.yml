@@ -1,0 +1,155 @@
+PickupGroupResponse:
+  type: object
+  properties:
+    id:
+      type: string
+      format: uuid
+    host_id:
+      type: string
+      format: uuid
+    title:
+      type: string
+    host_name:
+      type: string
+    host_phone:
+      type: string
+      nullable: true
+    start_time:
+      type: string
+      format: date-time
+    end_time:
+      type: string
+      format: date-time
+    fee:
+      type: number
+    capacity:
+      type: integer
+    location:
+      type: string
+    skill_level:
+      type: string
+      enum: [A, B, C, D]
+    status:
+      type: string
+      enum: [active, cancelled, completed]
+    current_enrolled:
+      type: integer
+    created_at:
+      type: string
+      format: date-time
+    updated_at:
+      type: string
+      format: date-time
+  required:
+    - id
+    - host_id
+    - title
+    - host_name
+    - start_time
+    - end_time
+    - fee
+    - capacity
+    - location
+    - skill_level
+    - status
+    - current_enrolled
+    - created_at
+    - updated_at
+
+PickupGroupDetailResponse:
+  allOf:
+    - $ref: "#/PickupGroupResponse"
+    - type: object
+      properties:
+        orders:
+          type: array
+          items:
+            $ref: "#/PickupOrderResponse"
+
+CreatePickupGroupRequest:
+  type: object
+  properties:
+    title:
+      type: string
+    start_time:
+      type: string
+      format: date-time
+    end_time:
+      type: string
+      format: date-time
+    fee:
+      type: number
+    capacity:
+      type: integer
+    location:
+      type: string
+    skill_level:
+      type: string
+      enum: [A, B, C, D]
+  required:
+    - title
+    - start_time
+    - end_time
+    - fee
+    - capacity
+    - location
+    - skill_level
+
+PickupOrderResponse:
+  type: object
+  properties:
+    id:
+      type: string
+      format: uuid
+    pickup_group_id:
+      type: string
+      format: uuid
+    user_id:
+      type: string
+      format: uuid
+    booker_name:
+      type: string
+    booker_phone:
+      type: string
+      nullable: true
+    payment_status:
+      type: string
+      enum: [pending, paid, failed, cancelled]
+    created_at:
+      type: string
+      format: date-time
+    updated_at:
+      type: string
+      format: date-time
+  required:
+    - id
+    - pickup_group_id
+    - user_id
+    - booker_name
+    - payment_status
+    - created_at
+    - updated_at
+
+CreatePickupOrderRequest:
+  type: object
+  description: "目前無必要欄位，因報名通常只依據路徑參數群組 ID 和 Token 中的使用者 ID 決定。"
+  properties: {}
+
+UpdatePickupOrderRequest:
+  type: object
+  properties:
+    payment_status:
+      type: string
+      enum: [pending, paid, failed, cancelled]
+  required:
+    - payment_status
+
+PickupGroupPageResponse:
+  allOf:
+    - $ref: "./common.yml#/PageResponse"
+    - type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/PickupGroupResponse"

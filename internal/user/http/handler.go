@@ -231,6 +231,7 @@ func (h *UserHandler) Update(c *gin.Context) {
 
 	req := user.UpdateUserRequest{
 		DisplayName:   body.DisplayName,
+		Phone:         body.Phone,
 		IsActive:      body.IsActive,
 		IsSystemAdmin: body.IsSystemAdmin,
 	}

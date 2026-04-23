@@ -40,7 +40,7 @@ func NewPgxRepository(pool *pgxpool.Pool) Repository {
 func (r *pgxUserRepository) GetByEmail(ctx context.Context, email string) (*User, error) {
 	psql := squirrel.StatementBuilder.PlaceholderFormat(squirrel.Dollar)
 	query, args, err := psql.Select(
-		"u.id", "u.email", "u.password_hash", "u.display_name", "u.avatar", "u.created_at",
+		"u.id", "u.email", "u.password_hash", "u.display_name", "u.phone", "u.avatar", "u.created_at",
 		"u.last_login_at", "u.is_active", "u.is_system_admin",
 		`COALESCE(
 				(
@@ -76,6 +76,7 @@ func (r *pgxUserRepository) GetByEmail(ctx context.Context, email string) (*User
 		&u.Email,
 		&u.PasswordHash,
 		&u.DisplayName,
+		&u.Phone,
 		&u.Avatar,
 		&u.CreatedAt,
 		&u.LastLoginAt,
@@ -102,7 +103,7 @@ func (r *pgxUserRepository) GetByEmail(ctx context.Context, email string) (*User
 func (r *pgxUserRepository) GetByID(ctx context.Context, id string) (*User, error) {
 	psql := squirrel.StatementBuilder.PlaceholderFormat(squirrel.Dollar)
 	query, args, err := psql.Select(
-		"u.id", "u.email", "u.password_hash", "u.display_name", "u.avatar", "u.created_at",
+		"u.id", "u.email", "u.password_hash", "u.display_name", "u.phone", "u.avatar", "u.created_at",
 		"u.last_login_at", "u.is_active", "u.is_system_admin",
 		`COALESCE(
 				(
@@ -138,6 +139,7 @@ func (r *pgxUserRepository) GetByID(ctx context.Context, id string) (*User, erro
 		&u.Email,
 		&u.PasswordHash,
 		&u.DisplayName,
+		&u.Phone,
 		&u.Avatar,
 		&u.CreatedAt,
 		&u.LastLoginAt,
@@ -208,7 +210,7 @@ func (r *pgxUserRepository) UpdateLastLogin(ctx context.Context, id string, t ti
 func (r *pgxUserRepository) List(ctx context.Context, filter UserFilter) ([]*User, int, error) {
 	psql := squirrel.StatementBuilder.PlaceholderFormat(squirrel.Dollar)
 	queryBuilder := psql.Select(
-		"u.id", "u.email", "u.password_hash", "u.display_name", "u.avatar", "u.created_at",
+		"u.id", "u.email", "u.password_hash", "u.display_name", "u.phone", "u.avatar", "u.created_at",
 		"u.last_login_at", "u.is_active", "u.is_system_admin",
 		"count(*) OVER() AS total_count",
 		`COALESCE(
@@ -290,6 +292,7 @@ func (r *pgxUserRepository) List(ctx context.Context, filter UserFilter) ([]*Use
 			&u.Email,
 			&u.PasswordHash,
 			&u.DisplayName,
+			&u.Phone,
 			&u.Avatar,
 			&u.CreatedAt,
 			&u.LastLoginAt,
@@ -321,6 +324,7 @@ func (r *pgxUserRepository) Update(ctx context.Context, u *User) error {
 	psql := squirrel.StatementBuilder.PlaceholderFormat(squirrel.Dollar)
 	query, args, err := psql.Update("public.users").
 		Set("display_name", u.DisplayName).
+		Set("phone", u.Phone).
 		Set("avatar", u.Avatar).
 		Set("is_active", u.IsActive).
 		Set("is_system_admin", u.IsSystemAdmin).

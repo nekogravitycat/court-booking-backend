@@ -22,6 +22,7 @@ type User struct {
 	Email         string
 	PasswordHash  string
 	DisplayName   *string
+	Phone         *string
 	Avatar        *string // ID of avatar image file
 	CreatedAt     time.Time
 	LastLoginAt   *time.Time

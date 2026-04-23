@@ -29,6 +29,7 @@ type UserResponse struct {
 	ID              string                      `json:"id"`
 	Email           string                      `json:"email"`
 	DisplayName     *string                     `json:"display_name"`
+	Phone           *string                     `json:"phone"`
 	Avatar          *string                     `json:"avatar"`           // URL to avatar image
 	AvatarThumbnail *string                     `json:"avatar_thumbnail"` // URL to avatar thumbnail
 	CreatedAt       time.Time                   `json:"created_at"`
@@ -83,6 +84,7 @@ func NewUserResponse(u *user.User) UserResponse {
 		ID:              u.ID,
 		Email:           u.Email,
 		DisplayName:     u.DisplayName,
+		Phone:           u.Phone,
 		Avatar:          avatarURL,
 		AvatarThumbnail: avatarThumbnailURL,
 		CreatedAt:       createdAt,
@@ -120,6 +122,7 @@ func (r *LoginRequest) Validate() error {
 // Use pointers to distinguish between "field not sent" and "field sent as false/empty".
 type UpdateUserRequest struct {
 	DisplayName   *string `json:"display_name"`
+	Phone         *string `json:"phone"`
 	IsActive      *bool   `json:"is_active"`
 	IsSystemAdmin *bool   `json:"is_system_admin"`
 }

@@ -13,6 +13,7 @@ import (
 
 type UpdateUserRequest struct {
 	DisplayName   *string
+	Phone         *string
 	IsActive      *bool
 	IsSystemAdmin *bool
 }
@@ -160,6 +161,9 @@ func (s *service) Update(ctx context.Context, id string, req UpdateUserRequest) 
 	// 2. Apply updates if provided
 	if req.DisplayName != nil {
 		u.DisplayName = req.DisplayName
+	}
+	if req.Phone != nil {
+		u.Phone = req.Phone
 	}
 	if req.IsActive != nil {
 		u.IsActive = *req.IsActive

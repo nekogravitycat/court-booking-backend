@@ -96,6 +96,7 @@ CREATE TABLE IF NOT EXISTS public.users (
   email           TEXT NOT NULL UNIQUE,                       -- User's email address, serves as the login username
   password_hash   TEXT NOT NULL,                              -- Bcrypt/Argon2 hash of the user's password
   display_name    TEXT,                                       -- Publicly visible name (optional)
+  phone           TEXT,                                       -- Contact phone number (optional)
 
   -- Authorization
   is_system_admin BOOLEAN NOT NULL DEFAULT false,             -- "God Mode" flag: grants full access to all organizations and system settings
@@ -367,3 +368,130 @@ CREATE INDEX IF NOT EXISTS idx_bookings_resource_time
 -- Index: Optimizes retrieving a user's booking history or upcoming schedule.
 CREATE INDEX IF NOT EXISTS idx_bookings_user_time
   ON public.bookings (user_id, start_time);
+
+-- =========================================================
+-- Enum: pickup_skill_level
+-- Purpose: Skill level requirement for a pickup group
+-- =========================================================
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'pickup_skill_level') THEN
+        CREATE TYPE pickup_skill_level AS ENUM ('A', 'B', 'C', 'D');
+    END IF;
+END
+$$;
+
+-- =========================================================
+-- Enum: pickup_status
+-- Purpose: Lifecycle status for a pickup group
+-- =========================================================
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'pickup_status') THEN
+        CREATE TYPE pickup_status AS ENUM ('active', 'cancelled', 'completed');
+    END IF;
+END
+$$;
+
+-- =========================================================
+-- Enum: pickup_payment_status
+-- Purpose: Payment status for a pickup order
+-- =========================================================
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'pickup_payment_status') THEN
+        CREATE TYPE pickup_payment_status AS ENUM ('pending', 'paid', 'failed', 'cancelled');
+    END IF;
+END
+$$;
+
+-- =========================================================
+-- Table: pickup_groups
+-- Purpose: A pickup (casual / walk-in) activity event created by a host.
+--          Stores host info as a snapshot to preserve historical records.
+-- =========================================================
+CREATE TABLE IF NOT EXISTS public.pickup_groups (
+  -- Identity
+  id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+
+  -- Host snapshot (denormalized for immutability)
+  host_id     UUID NOT NULL,                                  -- FK to users, identifies the host
+  host_name   TEXT NOT NULL,                                  -- Snapshot of host display name at creation time
+  host_phone  TEXT NOT NULL,                                  -- Snapshot of host phone at creation time
+
+  -- Event details
+  title       TEXT NOT NULL,                                  -- Title of the pickup event
+  start_time  TIMESTAMPTZ NOT NULL,                           -- Event start time (UTC)
+  end_time    TIMESTAMPTZ NOT NULL,                           -- Event end time (UTC)
+  fee         INTEGER NOT NULL DEFAULT 0,                     -- Registration fee per person
+  capacity    INTEGER NOT NULL,                               -- Maximum number of participants
+  location    TEXT NOT NULL,                                  -- Free-text location description
+  skill_level pickup_skill_level NOT NULL,                    -- Required skill level (A/B/C/D)
+  status      pickup_status NOT NULL DEFAULT 'active',        -- Group lifecycle status
+
+  -- Meta / Audit
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+
+  CONSTRAINT pickup_groups_host_id_fkey
+    FOREIGN KEY (host_id) REFERENCES public.users(id) ON DELETE RESTRICT,
+
+  CONSTRAINT pickup_groups_time_range_valid
+    CHECK (end_time > start_time),
+
+  CONSTRAINT pickup_groups_capacity_positive
+    CHECK (capacity > 0),
+
+  CONSTRAINT pickup_groups_fee_non_negative
+    CHECK (fee >= 0)
+);
+
+-- =========================================================
+-- Table: pickup_orders
+-- Purpose: A single participant's enrollment in a pickup group.
+--          One row per person. Stores booker info as a snapshot.
+-- =========================================================
+CREATE TABLE IF NOT EXISTS public.pickup_orders (
+  -- Identity
+  id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+
+  -- Relationships
+  pickup_group_id UUID NOT NULL,                              -- The pickup group being joined
+  user_id         UUID NOT NULL,                              -- The enrolling user
+
+  -- Booker snapshot (denormalized for immutability)
+  booker_name     TEXT NOT NULL,                              -- Snapshot of booker display name at enrollment time
+  booker_phone    TEXT NOT NULL,                              -- Snapshot of booker phone at enrollment time
+
+  -- Status
+  payment_status  pickup_payment_status NOT NULL DEFAULT 'pending',
+
+  -- Meta / Audit
+  created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
+
+  CONSTRAINT pickup_orders_group_id_fkey
+    FOREIGN KEY (pickup_group_id) REFERENCES public.pickup_groups(id) ON DELETE RESTRICT,
+
+  CONSTRAINT pickup_orders_user_id_fkey
+    FOREIGN KEY (user_id) REFERENCES public.users(id) ON DELETE RESTRICT,
+
+  -- Prevent duplicate enrollments per user per group
+  UNIQUE (pickup_group_id, user_id)
+);
+
+-- Index: Optimizes querying all groups hosted by a user.
+CREATE INDEX IF NOT EXISTS idx_pickup_groups_host_id
+  ON public.pickup_groups (host_id);
+
+-- Index: Optimizes time-based sorting and filtering of pickup groups.
+CREATE INDEX IF NOT EXISTS idx_pickup_groups_start_time
+  ON public.pickup_groups (start_time);
+
+-- Index: Optimizes fetching all orders for a pickup group (used in enrollment count).
+CREATE INDEX IF NOT EXISTS idx_pickup_orders_group_id
+  ON public.pickup_orders (pickup_group_id);
+
+-- Index: Optimizes finding a user's own pickup orders.
+CREATE INDEX IF NOT EXISTS idx_pickup_orders_user_id
+  ON public.pickup_orders (user_id);

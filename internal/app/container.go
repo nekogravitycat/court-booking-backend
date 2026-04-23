@@ -12,6 +12,7 @@ import (
 	"github.com/nekogravitycat/court-booking-backend/internal/file"
 	"github.com/nekogravitycat/court-booking-backend/internal/location"
 	"github.com/nekogravitycat/court-booking-backend/internal/organization"
+	"github.com/nekogravitycat/court-booking-backend/internal/pickup"
 	"github.com/nekogravitycat/court-booking-backend/internal/pkg/storage"
 	"github.com/nekogravitycat/court-booking-backend/internal/resource"
 	"github.com/nekogravitycat/court-booking-backend/internal/user"
@@ -69,6 +70,10 @@ func NewContainer(cfg Config) *Container {
 	annRepo := announcement.NewPgxRepository(cfg.DBPool)
 	annService := announcement.NewService(annRepo)
 
+	// Pickup Module
+	pickupRepo := pickup.NewPgxRepository(cfg.DBPool)
+	pickupService := pickup.NewService(pickupRepo, userService)
+
 	// API Router Config
 	routerParams := api.Config{
 		IsProduction:   cfg.IsProduction,
@@ -79,6 +84,7 @@ func NewContainer(cfg Config) *Container {
 		ResService:     resService,
 		BookingService: bookingService,
 		AnnService:     annService,
+		PickupService:  pickupService,
 		FileService:    fileService,
 		JWTManager:     jwtManager,
 	}

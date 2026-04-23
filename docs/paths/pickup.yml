@@ -1,0 +1,187 @@
+pickupGroups:
+  get:
+    tags:
+      - Pickup Groups
+    summary: "取得臨打團列表"
+    description: |
+      取得臨打團列表。清單回傳時包含 current_enrolled (目前有效報名人數)。
+      
+      **權限 Access Control**:
+      - **Login Required**: 任何已登入的使用者皆可存取。
+    security:
+      - bearerAuth: []
+    responses:
+      "200":
+        description: Success
+        content:
+          application/json:
+            schema:
+              $ref: "../components/schemas/pickup.yml#/PickupGroupPageResponse"
+  post:
+    tags:
+      - Pickup Groups
+    summary: "建立新的臨打團"
+    description: |
+      建立新的臨打團。host_id 直接由 JWT Token 解析得出。
+      
+      **權限 Access Control**:
+      - **Login Required**: 任何已登入的使用者皆可存取。
+    security:
+      - bearerAuth: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: "../components/schemas/pickup.yml#/CreatePickupGroupRequest"
+    responses:
+      "201":
+        description: Created
+        content:
+          application/json:
+            schema:
+              $ref: "../components/schemas/pickup.yml#/PickupGroupResponse"
+
+pickupGroupDetail:
+  get:
+    tags:
+      - Pickup Groups
+    summary: "取得單一臨打團詳細資訊"
+    description: |
+      包含 current_enrolled，並選擇性夾帶該團的所有訂單明細。
+      
+      **權限 Access Control**:
+      - **Login Required**: 任何已登入的使用者皆可存取。
+    security:
+      - bearerAuth: []
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    responses:
+      "200":
+        description: Success
+        content:
+          application/json:
+            schema:
+              $ref: "../components/schemas/pickup.yml#/PickupGroupDetailResponse"
+
+pickupGroupOrders:
+  get:
+    tags:
+      - Pickup Orders
+    summary: "取得該臨打團的所有訂單"
+    description: |
+      列出該 pickup-group 的所有訂單。
+      
+      **權限 Access Control**:
+      - **Login Required**: 僅該 pickup-group 擁有者能查看。
+    security:
+      - bearerAuth: []
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    responses:
+      "200":
+        description: Success
+        content:
+          application/json:
+            schema:
+              type: array
+              items:
+                $ref: "../components/schemas/pickup.yml#/PickupOrderResponse"
+  post:
+    tags:
+      - Pickup Orders
+    summary: "新增報名訂單（加入臨打團）"
+    description: |
+      加入臨打團。user_id 由 JWT Token 解析得出。
+      會檢查目前有效報名人數是否超過 capacity。
+      確保同一使用者不可重複報名同一臨打團。
+      
+      **權限 Access Control**:
+      - **Login Required**: 任何已登入的使用者皆可存取。
+    security:
+      - bearerAuth: []
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    responses:
+      "201":
+        description: Created
+        content:
+          application/json:
+            schema:
+              $ref: "../components/schemas/pickup.yml#/PickupOrderResponse"
+      "409":
+        description: group is fully booked or user already enrolled
+        content:
+          application/json:
+            schema:
+              $ref: "../components/schemas/common.yml#/ErrorResponse"
+
+pickupOrderDetail:
+  patch:
+    tags:
+      - Pickup Orders
+    summary: "更新訂單狀態"
+    description: |
+      當狀態更新為 Failed 或 Cancelled 時，該訂單不再計入 current_enrolled，達成自動釋放名額之效果。
+      
+      **權限 Access Control**:
+      - **Login Required**: 只有 order owner 或 group host 可以更新狀態。
+    security:
+      - bearerAuth: []
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: "../components/schemas/pickup.yml#/UpdatePickupOrderRequest"
+    responses:
+      "200":
+        description: Success
+        content:
+          application/json:
+            schema:
+              $ref: "../components/schemas/pickup.yml#/PickupOrderResponse"
+
+pickupOrders:
+  get:
+    tags:
+      - Pickup Orders
+    summary: "取得該使用者自己送出的所有訂單"
+    description: |
+      列出該使用者自己送出的所有訂單。
+      
+      **權限 Access Control**:
+      - **Login Required**: 任何已登入的使用者皆可存取。
+    security:
+      - bearerAuth: []
+    responses:
+      "200":
+        description: Success
+        content:
+          application/json:
+            schema:
+              type: array
+              items:
+                $ref: "../components/schemas/pickup.yml#/PickupOrderResponse"
