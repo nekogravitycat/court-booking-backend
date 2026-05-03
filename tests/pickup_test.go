@@ -10,6 +10,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	locHttp "github.com/nekogravitycat/court-booking-backend/internal/location/http"
+	orgHttp "github.com/nekogravitycat/court-booking-backend/internal/organization/http"
 	pickupHttp "github.com/nekogravitycat/court-booking-backend/internal/pickup/http"
 	"github.com/nekogravitycat/court-booking-backend/internal/pkg/response"
 )
@@ -24,6 +26,8 @@ func TestPickupGroupCRUD(t *testing.T) {
 	regularUserToken := generateToken(regularUser.ID)
 	noToken := ""
 
+	locationID := setupTestLocation(t, hostToken, host.ID)
+
 	var groupID string
 
 	t.Run("Create Group: Success", func(t *testing.T) {
@@ -33,7 +37,7 @@ func TestPickupGroupCRUD(t *testing.T) {
 			EndTime:    time.Now().Add(26 * time.Hour),
 			Fee:        200,
 			Capacity:   8,
-			Location:   "Court A",
+			LocationID: locationID,
 			SkillLevel: "B",
 		}
 
@@ -49,6 +53,8 @@ func TestPickupGroupCRUD(t *testing.T) {
 		assert.Equal(t, host.ID, resp.HostID)
 		assert.Equal(t, payload.Capacity, resp.Capacity)
 		assert.Equal(t, "active", resp.Status)
+		assert.Equal(t, locationID, resp.LocationID)
+		assert.True(t, resp.Enable)
 		assert.Equal(t, 0, resp.CurrentEnrolled)
 
 		groupID = resp.ID
@@ -61,7 +67,7 @@ func TestPickupGroupCRUD(t *testing.T) {
 			EndTime:    time.Now().Add(26 * time.Hour),
 			Fee:        100,
 			Capacity:   4,
-			Location:   "Court B",
+			LocationID: locationID,
 			SkillLevel: "C",
 		}
 		w := executeRequest("POST", "/v1/pickup-groups", payload, noToken)
@@ -76,7 +82,7 @@ func TestPickupGroupCRUD(t *testing.T) {
 			EndTime:    time.Now().Add(24 * time.Hour),
 			Fee:        100,
 			Capacity:   4,
-			Location:   "Court B",
+			LocationID: locationID,
 			SkillLevel: "A",
 		}
 		w := executeRequest("POST", "/v1/pickup-groups", payload, hostToken)
@@ -120,10 +126,12 @@ func TestPickupOrderAndCapacity(t *testing.T) {
 	user2 := createTestUser(t, "u2@pickup.com", "pass", false)
 	user3 := createTestUser(t, "u3@pickup.com", "pass", false) // for overbooking test
 
-	hostToken := generateToken(host.ID)
 	user1Token := generateToken(user1.ID)
 	user2Token := generateToken(user2.ID)
 	user3Token := generateToken(user3.ID)
+	hostToken := generateToken(host.ID)
+
+	locationID := setupTestLocation(t, hostToken, host.ID)
 
 	// Create a group with capacity 2
 	payload := pickupHttp.CreateGroupBody{
@@ -132,7 +140,7 @@ func TestPickupOrderAndCapacity(t *testing.T) {
 		EndTime:    time.Now().Add(26 * time.Hour),
 		Fee:        100,
 		Capacity:   2,
-		Location:   "Court C",
+		LocationID: locationID,
 		SkillLevel: "C",
 	}
 	w := executeRequest("POST", "/v1/pickup-groups", payload, hostToken)
@@ -234,9 +242,11 @@ func TestPickupOrdersList(t *testing.T) {
 	user1 := createTestUser(t, "user1_list@pickup.com", "pass", false)
 	user2 := createTestUser(t, "user2_list@pickup.com", "pass", false)
 
-	hostToken := generateToken(host.ID)
 	user1Token := generateToken(user1.ID)
 	user2Token := generateToken(user2.ID)
+	hostToken := generateToken(host.ID)
+
+	locationID := setupTestLocation(t, hostToken, host.ID)
 
 	// Create a group
 	payload := pickupHttp.CreateGroupBody{
@@ -245,7 +255,7 @@ func TestPickupOrdersList(t *testing.T) {
 		EndTime:    time.Now().Add(26 * time.Hour),
 		Fee:        150,
 		Capacity:   4,
-		Location:   "Court D",
+		LocationID: locationID,
 		SkillLevel: "A",
 	}
 	w := executeRequest("POST", "/v1/pickup-groups", payload, hostToken)
@@ -305,4 +315,33 @@ func TestPickupOrdersList(t *testing.T) {
 		require.NoError(t, err)
 		assert.Len(t, orders, 0)
 	})
+}
+
+func setupTestLocation(t *testing.T, hostToken string, ownerID string) string {
+	sysAdmin := createTestUser(t, fmt.Sprintf("sysadmin-%d@pickup.com", time.Now().UnixNano()), "pass", true)
+	sysAdminToken := generateToken(sysAdmin.ID)
+
+	// Create Org
+	orgPayload := orgHttp.CreateOrganizationRequest{Name: "Pickup Org", OwnerID: ownerID}
+	wOrg := executeRequest("POST", "/v1/organizations", orgPayload, sysAdminToken)
+	require.Equal(t, http.StatusCreated, wOrg.Code)
+	var orgResp orgHttp.OrganizationResponse
+	json.Unmarshal(wOrg.Body.Bytes(), &orgResp)
+
+	// Create Location
+	locPayload := locHttp.CreateLocationRequest{
+		OrganizationID:    orgResp.ID,
+		Name:              "Main Court",
+		Capacity:          10,
+		OpeningHoursStart: "08:00:00",
+		OpeningHoursEnd:   "22:00:00",
+		LocationInfo:      "Street 1",
+		Longitude:         121.0,
+		Latitude:          25.0,
+	}
+	wLoc := executeRequest("POST", "/v1/locations", locPayload, hostToken)
+	require.Equal(t, http.StatusCreated, wLoc.Code)
+	var locResp locHttp.LocationResponse
+	json.Unmarshal(wLoc.Body.Bytes(), &locResp)
+	return locResp.ID
 }

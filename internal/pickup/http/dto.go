@@ -23,12 +23,15 @@ type GetGroupQuery struct {
 
 type CreateGroupBody struct {
 	Title      string    `json:"title" binding:"required"`
+	HostName   string    `json:"host_name"`
+	HostPhone  string    `json:"host_phone"`
 	StartTime  time.Time `json:"start_time" binding:"required"`
 	EndTime    time.Time `json:"end_time" binding:"required"`
 	Fee        int       `json:"fee" binding:"min=0"`
 	Capacity   int       `json:"capacity" binding:"required,min=1"`
-	Location   string    `json:"location" binding:"required"`
+	LocationID string    `json:"location_id" binding:"required,uuid"`
 	SkillLevel string    `json:"skill_level" binding:"required,oneof=A B C D"`
+	Enable     *bool     `json:"enable"`
 }
 
 func (r *CreateGroupBody) Validate() error {
@@ -78,9 +81,10 @@ type PickupGroupResponse struct {
 	EndTime         time.Time             `json:"end_time"`
 	Fee             int                   `json:"fee"`
 	Capacity        int                   `json:"capacity"`
-	Location        string                `json:"location"`
+	LocationID      string                `json:"location_id"`
 	SkillLevel      string                `json:"skill_level"`
 	Status          string                `json:"status"`
+	Enable          bool                  `json:"enable"`
 	CurrentEnrolled int                   `json:"current_enrolled"`
 	CreatedAt       time.Time             `json:"created_at"`
 	UpdatedAt       time.Time             `json:"updated_at"`
@@ -100,9 +104,10 @@ func NewPickupGroupResponse(g *pickup.PickupGroup, orders []*pickup.PickupOrder)
 		EndTime:         g.EndTime.UTC(),
 		Fee:             g.Fee,
 		Capacity:        g.Capacity,
-		Location:        g.Location,
+		LocationID:      g.LocationID,
 		SkillLevel:      string(g.SkillLevel),
 		Status:          string(g.Status),
+		Enable:          g.Enable,
 		CurrentEnrolled: g.CurrentEnrolled,
 		CreatedAt:       g.CreatedAt.UTC(),
 		UpdatedAt:       g.UpdatedAt.UTC(),

@@ -38,9 +38,9 @@ func (r *pgxRepository) CreateGroup(ctx context.Context, g *PickupGroup) error {
 	psql := squirrel.StatementBuilder.PlaceholderFormat(squirrel.Dollar)
 	query, args, err := psql.Insert("public.pickup_groups").
 		Columns("host_id", "title", "host_name", "host_phone", "start_time", "end_time",
-			"fee", "capacity", "location", "skill_level", "status").
+			"fee", "capacity", "location_id", "skill_level", "status", "enable").
 		Values(g.HostID, g.Title, g.HostName, g.HostPhone, g.StartTime, g.EndTime,
-			g.Fee, g.Capacity, g.Location, g.SkillLevel, g.Status).
+			g.Fee, g.Capacity, g.LocationID, g.SkillLevel, g.Status, g.Enable).
 		Suffix("RETURNING id, created_at, updated_at").
 		ToSql()
 	if err != nil {
@@ -54,8 +54,8 @@ func (r *pgxRepository) GetGroupByID(ctx context.Context, id string) (*PickupGro
 	psql := squirrel.StatementBuilder.PlaceholderFormat(squirrel.Dollar)
 	query, args, err := psql.Select(
 		"pg.id", "pg.host_id", "pg.title", "pg.host_name", "pg.host_phone",
-		"pg.start_time", "pg.end_time", "pg.fee", "pg.capacity", "pg.location",
-		"pg.skill_level", "pg.status", "pg.created_at", "pg.updated_at",
+		"pg.start_time", "pg.end_time", "pg.fee", "pg.capacity", "pg.location_id",
+		"pg.skill_level", "pg.status", "pg.enable", "pg.created_at", "pg.updated_at",
 		"COALESCE(COUNT(po.id) FILTER (WHERE po.payment_status IN ('pending', 'paid')), 0) AS current_enrolled",
 	).
 		From("public.pickup_groups pg").
@@ -70,8 +70,8 @@ func (r *pgxRepository) GetGroupByID(ctx context.Context, id string) (*PickupGro
 	var g PickupGroup
 	if err := r.pool.QueryRow(ctx, query, args...).Scan(
 		&g.ID, &g.HostID, &g.Title, &g.HostName, &g.HostPhone,
-		&g.StartTime, &g.EndTime, &g.Fee, &g.Capacity, &g.Location,
-		&g.SkillLevel, &g.Status, &g.CreatedAt, &g.UpdatedAt,
+		&g.StartTime, &g.EndTime, &g.Fee, &g.Capacity, &g.LocationID,
+		&g.SkillLevel, &g.Status, &g.Enable, &g.CreatedAt, &g.UpdatedAt,
 		&g.CurrentEnrolled,
 	); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -86,8 +86,8 @@ func (r *pgxRepository) ListGroups(ctx context.Context, filter GroupFilter) ([]*
 	psql := squirrel.StatementBuilder.PlaceholderFormat(squirrel.Dollar)
 	query := psql.Select(
 		"pg.id", "pg.host_id", "pg.title", "pg.host_name", "pg.host_phone",
-		"pg.start_time", "pg.end_time", "pg.fee", "pg.capacity", "pg.location",
-		"pg.skill_level", "pg.status", "pg.created_at", "pg.updated_at",
+		"pg.start_time", "pg.end_time", "pg.fee", "pg.capacity", "pg.location_id",
+		"pg.skill_level", "pg.status", "pg.enable", "pg.created_at", "pg.updated_at",
 		"COALESCE(COUNT(po.id) FILTER (WHERE po.payment_status IN ('pending', 'paid')), 0) AS current_enrolled",
 		"COUNT(*) OVER() AS total_count",
 	).
@@ -142,8 +142,8 @@ func (r *pgxRepository) ListGroups(ctx context.Context, filter GroupFilter) ([]*
 		var g PickupGroup
 		if err := rows.Scan(
 			&g.ID, &g.HostID, &g.Title, &g.HostName, &g.HostPhone,
-			&g.StartTime, &g.EndTime, &g.Fee, &g.Capacity, &g.Location,
-			&g.SkillLevel, &g.Status, &g.CreatedAt, &g.UpdatedAt,
+			&g.StartTime, &g.EndTime, &g.Fee, &g.Capacity, &g.LocationID,
+			&g.SkillLevel, &g.Status, &g.Enable, &g.CreatedAt, &g.UpdatedAt,
 			&g.CurrentEnrolled, &total,
 		); err != nil {
 			return nil, 0, fmt.Errorf("scan pickup group failed: %w", err)

@@ -54,9 +54,10 @@ type PickupGroup struct {
 	EndTime         time.Time
 	Fee             int
 	Capacity        int
-	Location        string
+	LocationID      string
 	SkillLevel      SkillLevel
 	Status          GroupStatus
+	Enable          bool
 	CurrentEnrolled int
 	CreatedAt       time.Time
 	UpdatedAt       time.Time

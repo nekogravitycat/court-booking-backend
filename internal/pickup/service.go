@@ -16,8 +16,9 @@ type CreateGroupRequest struct {
 	EndTime    time.Time
 	Fee        int
 	Capacity   int
-	Location   string
+	LocationID string
 	SkillLevel string
+	Enable     bool
 }
 
 type CreateOrderRequest struct {
@@ -73,9 +74,10 @@ func (s *service) CreateGroup(ctx context.Context, req CreateGroupRequest) (*Pic
 		EndTime:    req.EndTime,
 		Fee:        req.Fee,
 		Capacity:   req.Capacity,
-		Location:   req.Location,
+		LocationID: req.LocationID,
 		SkillLevel: sl,
 		Status:     GroupStatusActive,
+		Enable:     req.Enable,
 	}
 
 	if err := s.repo.CreateGroup(ctx, group); err != nil {

@@ -425,9 +425,10 @@ CREATE TABLE IF NOT EXISTS public.pickup_groups (
   end_time    TIMESTAMPTZ NOT NULL,                           -- Event end time (UTC)
   fee         INTEGER NOT NULL DEFAULT 0,                     -- Registration fee per person
   capacity    INTEGER NOT NULL,                               -- Maximum number of participants
-  location    TEXT NOT NULL,                                  -- Free-text location description
+  location_id UUID NOT NULL,                                  -- FK to locations, identifies where the event takes place
   skill_level pickup_skill_level NOT NULL,                    -- Required skill level (A/B/C/D)
   status      pickup_status NOT NULL DEFAULT 'active',        -- Group lifecycle status
+  enable      BOOLEAN NOT NULL DEFAULT true,                  -- Enable/disable status
 
   -- Meta / Audit
   created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
@@ -435,6 +436,9 @@ CREATE TABLE IF NOT EXISTS public.pickup_groups (
 
   CONSTRAINT pickup_groups_host_id_fkey
     FOREIGN KEY (host_id) REFERENCES public.users(id) ON DELETE RESTRICT,
+
+  CONSTRAINT pickup_groups_location_id_fkey
+    FOREIGN KEY (location_id) REFERENCES public.locations(id) ON DELETE RESTRICT,
 
   CONSTRAINT pickup_groups_time_range_valid
     CHECK (end_time > start_time),

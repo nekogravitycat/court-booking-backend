@@ -42,19 +42,30 @@ func (h *Handler) CreateGroup(c *gin.Context) {
 		return
 	}
 
-	u, err := h.userService.GetByID(c.Request.Context(), userID)
-	if err != nil {
-		response.Error(c, err)
-		return
+	hostName := body.HostName
+	hostPhone := body.HostPhone
+
+	if hostName == "" || hostPhone == "" {
+		u, err := h.userService.GetByID(c.Request.Context(), userID)
+		if err != nil {
+			response.Error(c, err)
+			return
+		}
+		if hostName == "" {
+			if u.DisplayName != nil {
+				hostName = *u.DisplayName
+			} else {
+				hostName = u.Email
+			}
+		}
+		if hostPhone == "" && u.Phone != nil {
+			hostPhone = *u.Phone
+		}
 	}
 
-	hostName := u.Email
-	if u.DisplayName != nil {
-		hostName = *u.DisplayName
-	}
-	hostPhone := ""
-	if u.Phone != nil {
-		hostPhone = *u.Phone
+	enable := true
+	if body.Enable != nil {
+		enable = *body.Enable
 	}
 
 	req := pickup.CreateGroupRequest{
@@ -66,8 +77,9 @@ func (h *Handler) CreateGroup(c *gin.Context) {
 		EndTime:    body.EndTime,
 		Fee:        body.Fee,
 		Capacity:   body.Capacity,
-		Location:   body.Location,
+		LocationID: body.LocationID,
 		SkillLevel: body.SkillLevel,
+		Enable:     enable,
 	}
 
 	group, err := h.service.CreateGroup(c.Request.Context(), req)

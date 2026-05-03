@@ -24,14 +24,18 @@ PickupGroupResponse:
       type: number
     capacity:
       type: integer
-    location:
+    location_id:
       type: string
+      format: uuid
     skill_level:
       type: string
       enum: [A, B, C, D]
     status:
       type: string
       enum: [active, cancelled, completed]
+    enable:
+      type: boolean
+      description: "啟用狀態"
     current_enrolled:
       type: integer
     created_at:
@@ -49,9 +53,10 @@ PickupGroupResponse:
     - end_time
     - fee
     - capacity
-    - location
+    - location_id
     - skill_level
     - status
+    - enable
     - current_enrolled
     - created_at
     - updated_at
@@ -71,6 +76,12 @@ CreatePickupGroupRequest:
   properties:
     title:
       type: string
+    host_name:
+      type: string
+      description: "負責人姓名 (手動填寫，若不填則由系統帶入)"
+    host_phone:
+      type: string
+      description: "負責人電話 (手動填寫，若不填則由系統帶入)"
     start_time:
       type: string
       format: date-time
@@ -81,18 +92,24 @@ CreatePickupGroupRequest:
       type: number
     capacity:
       type: integer
-    location:
+    location_id:
       type: string
+      format: uuid
+      description: "場地 ID (關聯至 Location)"
     skill_level:
       type: string
       enum: [A, B, C, D]
+    enable:
+      type: boolean
+      default: true
+      description: "啟用狀態"
   required:
     - title
     - start_time
     - end_time
     - fee
     - capacity
-    - location
+    - location_id
     - skill_level
 
 PickupOrderResponse:
