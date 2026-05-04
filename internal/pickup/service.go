@@ -32,10 +32,27 @@ type UpdateOrderRequest struct {
 	PaymentStatus string
 }
 
+type UpdateGroupRequest struct {
+	Title      *string
+	HostName   *string
+	HostPhone  *string
+	StartTime  *time.Time
+	EndTime    *time.Time
+	Fee        *int
+	Capacity   *int
+	LocationID *string
+	SkillLevel *string
+	Status     *string
+	Enable     *bool
+}
+
 type Service interface {
 	CreateGroup(ctx context.Context, req CreateGroupRequest) (*PickupGroup, error)
 	GetGroupByID(ctx context.Context, id string) (*PickupGroup, error)
 	ListGroups(ctx context.Context, filter GroupFilter) ([]*PickupGroup, int, error)
+	UpdateGroup(ctx context.Context, id string, req UpdateGroupRequest) (*PickupGroup, error)
+	DeleteGroup(ctx context.Context, id string) error
+
 	GetOrdersByGroupID(ctx context.Context, groupID string) ([]*PickupOrder, error)
 	GetOrdersByUserID(ctx context.Context, userID string) ([]*PickupOrder, error)
 
@@ -93,6 +110,69 @@ func (s *service) GetGroupByID(ctx context.Context, id string) (*PickupGroup, er
 
 func (s *service) ListGroups(ctx context.Context, filter GroupFilter) ([]*PickupGroup, int, error) {
 	return s.repo.ListGroups(ctx, filter)
+}
+
+func (s *service) UpdateGroup(ctx context.Context, id string, req UpdateGroupRequest) (*PickupGroup, error) {
+	group, err := s.repo.GetGroupByID(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+
+	if req.Title != nil {
+		group.Title = *req.Title
+	}
+	if req.HostName != nil {
+		group.HostName = *req.HostName
+	}
+	if req.HostPhone != nil {
+		group.HostPhone = *req.HostPhone
+	}
+	if req.StartTime != nil {
+		group.StartTime = *req.StartTime
+	}
+	if req.EndTime != nil {
+		group.EndTime = *req.EndTime
+	}
+	if req.Fee != nil {
+		group.Fee = *req.Fee
+	}
+	if req.Capacity != nil {
+		group.Capacity = *req.Capacity
+	}
+	if req.LocationID != nil {
+		group.LocationID = *req.LocationID
+	}
+	if req.SkillLevel != nil {
+		sl := SkillLevel(*req.SkillLevel)
+		if sl != SkillLevelA && sl != SkillLevelB && sl != SkillLevelC && sl != SkillLevelD {
+			return nil, ErrInvalidStatus
+		}
+		group.SkillLevel = sl
+	}
+	if req.Status != nil {
+		gs := GroupStatus(*req.Status)
+		if gs != GroupStatusActive && gs != GroupStatusCancelled && gs != GroupStatusCompleted {
+			return nil, ErrInvalidStatus
+		}
+		group.Status = gs
+	}
+	if req.Enable != nil {
+		group.Enable = *req.Enable
+	}
+
+	if !group.EndTime.After(group.StartTime) {
+		return nil, ErrInvalidTimeRange
+	}
+
+	if err := s.repo.UpdateGroup(ctx, group); err != nil {
+		return nil, err
+	}
+
+	return s.repo.GetGroupByID(ctx, id)
+}
+
+func (s *service) DeleteGroup(ctx context.Context, id string) error {
+	return s.repo.DeleteGroup(ctx, id)
 }
 
 func (s *service) GetOrdersByGroupID(ctx context.Context, groupID string) ([]*PickupOrder, error) {

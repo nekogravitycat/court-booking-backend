@@ -68,6 +68,64 @@ pickupGroupDetail:
           application/json:
             schema:
               $ref: "../components/schemas/pickup.yml#/PickupGroupDetailResponse"
+  patch:
+    tags:
+      - Pickup Groups
+    summary: "更新臨打團資訊 (僅限系統管理員)"
+    description: |
+      更新臨打團資訊。
+      
+      **權限 Access Control**:
+      - **System Admin Required**: 僅系統管理員身分的使用者可存取。
+    security:
+      - bearerAuth: []
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: "../components/schemas/pickup.yml#/UpdatePickupGroupRequest"
+    responses:
+      "200":
+        description: Success
+        content:
+          application/json:
+            schema:
+              $ref: "../components/schemas/pickup.yml#/PickupGroupResponse"
+  delete:
+    tags:
+      - Pickup Groups
+    summary: "刪除臨打團 (僅限系統管理員)"
+    description: |
+      刪除臨打團。注意：若該臨打團尚有訂單存在，刪除操作將會因資料庫限制而失敗。
+      
+      **權限 Access Control**:
+      - **System Admin Required**: 僅系統管理員身分的使用者可存取。
+    security:
+      - bearerAuth: []
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    responses:
+      "204":
+        description: No Content
+      "404":
+        description: Not Found
+        content:
+          application/json:
+            schema:
+              $ref: "../components/schemas/common.yml#/ErrorResponse"
 
 pickupGroupOrders:
   get:

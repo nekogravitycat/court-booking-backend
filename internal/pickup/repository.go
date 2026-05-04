@@ -17,6 +17,8 @@ type Repository interface {
 	CreateGroup(ctx context.Context, group *PickupGroup) error
 	GetGroupByID(ctx context.Context, id string) (*PickupGroup, error)
 	ListGroups(ctx context.Context, filter GroupFilter) ([]*PickupGroup, int, error)
+	UpdateGroup(ctx context.Context, group *PickupGroup) error
+	DeleteGroup(ctx context.Context, id string) error
 
 	// CreateOrder uses a transaction with SELECT FOR UPDATE to prevent overbooking.
 	CreateOrder(ctx context.Context, order *PickupOrder) error
@@ -152,6 +154,57 @@ func (r *pgxRepository) ListGroups(ctx context.Context, filter GroupFilter) ([]*
 	}
 
 	return groups, total, nil
+}
+
+func (r *pgxRepository) UpdateGroup(ctx context.Context, g *PickupGroup) error {
+	psql := squirrel.StatementBuilder.PlaceholderFormat(squirrel.Dollar)
+	query, args, err := psql.Update("public.pickup_groups").
+		Set("title", g.Title).
+		Set("host_name", g.HostName).
+		Set("host_phone", g.HostPhone).
+		Set("start_time", g.StartTime).
+		Set("end_time", g.EndTime).
+		Set("fee", g.Fee).
+		Set("capacity", g.Capacity).
+		Set("location_id", g.LocationID).
+		Set("skill_level", g.SkillLevel).
+		Set("status", g.Status).
+		Set("enable", g.Enable).
+		Set("updated_at", squirrel.Expr("now()")).
+		Where(squirrel.Eq{"id": g.ID}).
+		Suffix("RETURNING updated_at").
+		ToSql()
+	if err != nil {
+		return fmt.Errorf("build update pickup group query failed: %w", err)
+	}
+
+	if err := r.pool.QueryRow(ctx, query, args...).Scan(&g.UpdatedAt); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return ErrGroupNotFound
+		}
+		return fmt.Errorf("update pickup group failed: %w", err)
+	}
+	return nil
+}
+
+func (r *pgxRepository) DeleteGroup(ctx context.Context, id string) error {
+	psql := squirrel.StatementBuilder.PlaceholderFormat(squirrel.Dollar)
+	query, args, err := psql.Delete("public.pickup_groups").
+		Where(squirrel.Eq{"id": id}).
+		ToSql()
+	if err != nil {
+		return fmt.Errorf("build delete pickup group query failed: %w", err)
+	}
+
+	result, err := r.pool.Exec(ctx, query, args...)
+	if err != nil {
+		return fmt.Errorf("delete pickup group failed: %w", err)
+	}
+
+	if result.RowsAffected() == 0 {
+		return ErrGroupNotFound
+	}
+	return nil
 }
 
 // CreateOrder enrolls a user in a pickup group.

@@ -155,6 +155,91 @@ func (h *Handler) GetGroup(c *gin.Context) {
 	c.JSON(http.StatusOK, NewPickupGroupResponse(group, orders))
 }
 
+func (h *Handler) UpdateGroup(c *gin.Context) {
+	var uri request.ByIDRequest
+	if err := c.ShouldBindUri(&uri); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request", "details": err.Error()})
+		return
+	}
+
+	userID := auth.GetUserID(c)
+	if userID == "" {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+		return
+	}
+
+	u, err := h.userService.GetByID(c.Request.Context(), userID)
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+
+	if !u.IsSystemAdmin {
+		c.JSON(http.StatusForbidden, gin.H{"error": "only system admin can update pickup groups"})
+		return
+	}
+
+	var body UpdateGroupBody
+	if err := c.ShouldBindJSON(&body); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request body", "details": err.Error()})
+		return
+	}
+
+	req := pickup.UpdateGroupRequest{
+		Title:      body.Title,
+		HostName:   body.HostName,
+		HostPhone:  body.HostPhone,
+		StartTime:  body.StartTime,
+		EndTime:    body.EndTime,
+		Fee:        body.Fee,
+		Capacity:   body.Capacity,
+		LocationID: body.LocationID,
+		SkillLevel: body.SkillLevel,
+		Status:     body.Status,
+		Enable:     body.Enable,
+	}
+
+	group, err := h.service.UpdateGroup(c.Request.Context(), uri.ID, req)
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+
+	c.JSON(http.StatusOK, NewPickupGroupResponse(group, nil))
+}
+
+func (h *Handler) DeleteGroup(c *gin.Context) {
+	var uri request.ByIDRequest
+	if err := c.ShouldBindUri(&uri); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request", "details": err.Error()})
+		return
+	}
+
+	userID := auth.GetUserID(c)
+	if userID == "" {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+		return
+	}
+
+	u, err := h.userService.GetByID(c.Request.Context(), userID)
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+
+	if !u.IsSystemAdmin {
+		c.JSON(http.StatusForbidden, gin.H{"error": "only system admin can delete pickup groups"})
+		return
+	}
+
+	if err := h.service.DeleteGroup(c.Request.Context(), uri.ID); err != nil {
+		response.Error(c, err)
+		return
+	}
+
+	c.JSON(http.StatusNoContent, nil)
+}
+
 func (h *Handler) CreateOrder(c *gin.Context) {
 	var uri request.ByIDRequest
 	if err := c.ShouldBindUri(&uri); err != nil {

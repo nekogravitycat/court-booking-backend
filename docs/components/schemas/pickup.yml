@@ -112,6 +112,37 @@ CreatePickupGroupRequest:
     - location_id
     - skill_level
 
+UpdatePickupGroupRequest:
+  type: object
+  properties:
+    title:
+      type: string
+    host_name:
+      type: string
+    host_phone:
+      type: string
+    start_time:
+      type: string
+      format: date-time
+    end_time:
+      type: string
+      format: date-time
+    fee:
+      type: number
+    capacity:
+      type: integer
+    location_id:
+      type: string
+      format: uuid
+    skill_level:
+      type: string
+      enum: [A, B, C, D]
+    status:
+      type: string
+      enum: [active, cancelled, completed]
+    enable:
+      type: boolean
+
 PickupOrderResponse:
   type: object
   properties:

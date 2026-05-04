@@ -12,6 +12,8 @@ func RegisterRoutes(g *gin.RouterGroup, h *Handler, authMiddleware gin.HandlerFu
 		groupsGroup.POST("", h.CreateGroup)
 		groupsGroup.GET("", h.ListGroups)
 		groupsGroup.GET("/:id", h.GetGroup)
+		groupsGroup.PATCH("/:id", h.UpdateGroup)
+		groupsGroup.DELETE("/:id", h.DeleteGroup)
 		groupsGroup.POST("/:id/orders", h.CreateOrder)
 		groupsGroup.GET("/:id/orders", h.ListGroupOrders)
 	}

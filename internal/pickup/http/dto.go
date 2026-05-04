@@ -45,6 +45,20 @@ type UpdateOrderBody struct {
 	PaymentStatus string `json:"payment_status" binding:"required,oneof=pending paid failed cancelled"`
 }
 
+type UpdateGroupBody struct {
+	Title      *string    `json:"title"`
+	HostName   *string    `json:"host_name"`
+	HostPhone  *string    `json:"host_phone"`
+	StartTime  *time.Time `json:"start_time"`
+	EndTime    *time.Time `json:"end_time"`
+	Fee        *int       `json:"fee" binding:"omitempty,min=0"`
+	Capacity   *int       `json:"capacity" binding:"omitempty,min=1"`
+	LocationID *string    `json:"location_id" binding:"omitempty,uuid"`
+	SkillLevel *string    `json:"skill_level" binding:"omitempty,oneof=A B C D"`
+	Status     *string    `json:"status" binding:"omitempty,oneof=active cancelled completed"`
+	Enable     *bool      `json:"enable"`
+}
+
 // --- Response types ---
 
 type PickupOrderResponse struct {

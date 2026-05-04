@@ -317,6 +317,94 @@ func TestPickupOrdersList(t *testing.T) {
 	})
 }
 
+func TestPickupGroupAdminActions(t *testing.T) {
+	clearTables()
+
+	admin := createTestUser(t, "admin@pickup.com", "pass", true)
+	host := createTestUser(t, "host_admin@pickup.com", "pass", false)
+	regularUser := createTestUser(t, "user_admin@pickup.com", "pass", false)
+
+	adminToken := generateToken(admin.ID)
+	hostToken := generateToken(host.ID)
+	regularUserToken := generateToken(regularUser.ID)
+
+	locationID := setupTestLocation(t, hostToken, host.ID)
+
+	// Create a group
+	payload := pickupHttp.CreateGroupBody{
+		Title:      "Original Title",
+		StartTime:  time.Now().Add(24 * time.Hour),
+		EndTime:    time.Now().Add(26 * time.Hour),
+		Fee:        100,
+		Capacity:   10,
+		LocationID: locationID,
+		SkillLevel: "B",
+	}
+	w := executeRequest("POST", "/v1/pickup-groups", payload, hostToken)
+	require.Equal(t, http.StatusCreated, w.Code)
+	var groupResp pickupHttp.PickupGroupResponse
+	json.Unmarshal(w.Body.Bytes(), &groupResp)
+	groupID := groupResp.ID
+
+	t.Run("PATCH: Success by Admin", func(t *testing.T) {
+		newTitle := "Updated Title"
+		patchPayload := pickupHttp.UpdateGroupBody{
+			Title: &newTitle,
+		}
+		path := fmt.Sprintf("/v1/pickup-groups/%s", groupID)
+		w := executeRequest("PATCH", path, patchPayload, adminToken)
+		assert.Equal(t, http.StatusOK, w.Code)
+
+		var resp pickupHttp.PickupGroupResponse
+		json.Unmarshal(w.Body.Bytes(), &resp)
+		assert.Equal(t, newTitle, resp.Title)
+	})
+
+	t.Run("PATCH: Forbidden by Host", func(t *testing.T) {
+		newTitle := "Host Trying to Update"
+		patchPayload := pickupHttp.UpdateGroupBody{
+			Title: &newTitle,
+		}
+		path := fmt.Sprintf("/v1/pickup-groups/%s", groupID)
+		w := executeRequest("PATCH", path, patchPayload, hostToken)
+		assert.Equal(t, http.StatusForbidden, w.Code)
+	})
+
+	t.Run("DELETE: Forbidden by Regular User", func(t *testing.T) {
+		path := fmt.Sprintf("/v1/pickup-groups/%s", groupID)
+		w := executeRequest("DELETE", path, nil, regularUserToken)
+		assert.Equal(t, http.StatusForbidden, w.Code)
+	})
+
+	t.Run("DELETE: Success by Admin", func(t *testing.T) {
+		path := fmt.Sprintf("/v1/pickup-groups/%s", groupID)
+		w := executeRequest("DELETE", path, nil, adminToken)
+		assert.Equal(t, http.StatusNoContent, w.Code)
+
+		// Verify it's gone
+		wGet := executeRequest("GET", path, nil, adminToken)
+		assert.Equal(t, http.StatusNotFound, wGet.Code)
+	})
+
+	t.Run("DELETE: Fail when orders exist", func(t *testing.T) {
+		// Re-create group
+		w := executeRequest("POST", "/v1/pickup-groups", payload, hostToken)
+		require.Equal(t, http.StatusCreated, w.Code)
+		json.Unmarshal(w.Body.Bytes(), &groupResp)
+		newGroupID := groupResp.ID
+
+		// Add an order
+		wOrder := executeRequest("POST", fmt.Sprintf("/v1/pickup-groups/%s/orders", newGroupID), nil, regularUserToken)
+		require.Equal(t, http.StatusCreated, wOrder.Code)
+
+		// Try to delete
+		path := fmt.Sprintf("/v1/pickup-groups/%s", newGroupID)
+		wDel := executeRequest("DELETE", path, nil, adminToken)
+		// Should fail due to RESTRICT constraint
+		assert.Equal(t, http.StatusInternalServerError, wDel.Code)
+	})
+}
+
 func setupTestLocation(t *testing.T, hostToken string, ownerID string) string {
 	sysAdmin := createTestUser(t, fmt.Sprintf("sysadmin-%d@pickup.com", time.Now().UnixNano()), "pass", true)
 	sysAdminToken := generateToken(sysAdmin.ID)

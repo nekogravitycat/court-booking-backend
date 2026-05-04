@@ -169,6 +169,9 @@ components:
     CreatePickupGroupRequest:
       $ref: "./components/schemas/pickup.yml#/CreatePickupGroupRequest"
 
+    UpdatePickupGroupRequest:
+      $ref: "./components/schemas/pickup.yml#/UpdatePickupGroupRequest"
+
     PickupOrderResponse:
       $ref: "./components/schemas/pickup.yml#/PickupOrderResponse"
 
