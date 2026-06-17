@@ -1,7 +1,7 @@
--- Run this script to initialize the database schema.
--- This script should be treated as the single source of truth for the database schema.
--- It should be run in a clean database.
--- If you need to migrate an existing database, write a separate migration script.
+-- Migration 000001: initial schema baseline.
+-- This is the first golang-migrate migration and consolidates the full schema
+-- as of adoption. Subsequent schema changes go in new numbered migrations
+-- (000002_*.up.sql / .down.sql), never by editing this file.
 
 
 -- Enable pgcrypto extension for UUID generation and other crypto helpers

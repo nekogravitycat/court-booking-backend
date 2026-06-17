@@ -18,6 +18,7 @@ import (
 
 	"github.com/nekogravitycat/court-booking-backend/internal/app"
 	"github.com/nekogravitycat/court-booking-backend/internal/auth"
+	"github.com/nekogravitycat/court-booking-backend/internal/db"
 	"github.com/nekogravitycat/court-booking-backend/internal/user"
 )
 
@@ -68,7 +69,7 @@ func TestMain(m *testing.M) {
 	gin.SetMode(gin.TestMode)
 
 	// Apply Schema (Migration for Tests)
-	applySchema()
+	applySchema(dsn)
 
 	// Run Tests
 	exitCode := m.Run()
@@ -78,8 +79,9 @@ func TestMain(m *testing.M) {
 	os.Exit(exitCode)
 }
 
-func applySchema() {
-	// Reset schema to ensure all changes in schema.sql are applied
+func applySchema(dsn string) {
+	// Reset to an empty schema, then apply migrations from scratch so the test
+	// database always matches the same migrations the app runs.
 	_, err := testPool.Exec(context.Background(), `
 		DROP SCHEMA public CASCADE;
 		CREATE SCHEMA public;
@@ -89,13 +91,8 @@ func applySchema() {
 		log.Fatalf("Failed to reset schema: %v", err)
 	}
 
-	schema, err := os.ReadFile("../db/schema.sql")
-	if err != nil {
-		log.Fatalf("Failed to read schema file: %v", err)
-	}
-	_, err = testPool.Exec(context.Background(), string(schema))
-	if err != nil {
-		log.Fatalf("Failed to apply schema: %v", err)
+	if err := db.Migrate(dsn); err != nil {
+		log.Fatalf("Failed to apply migrations: %v", err)
 	}
 }
 

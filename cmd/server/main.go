@@ -34,6 +34,11 @@ func main() {
 		log.Printf("starting server in development mode")
 	}
 
+	// Apply database migrations before serving any traffic.
+	if err := db.Migrate(cfg.DBDSN); err != nil {
+		log.Fatalf("failed to run migrations: %v", err)
+	}
+
 	// Connect DB
 	pool, err := db.NewPool(ctx, cfg.DBDSN)
 	if err != nil {

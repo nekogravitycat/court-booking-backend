@@ -114,7 +114,7 @@
     docker compose up -d
     ```
 
-    這會自動執行 `db/schema.sql` 初始化資料庫表格。
+    這會啟動 PostgreSQL（資料表結構由應用程式啟動時自動套用 migration 建立，見下）。
 
 4.  **運行應用程式**
 
@@ -122,12 +122,12 @@
     go run cmd/server/main.go
     ```
 
-    伺服器將啟動於 `http://localhost:8080`。
+    應用程式啟動時會先用 golang-migrate 套用 `db/migrations/` 下所有尚未執行的 migration（已內嵌於 binary），再開始服務。伺服器將啟動於 `http://localhost:8080`。
 
 ## 🗄 資料庫設計
 
-- **Schema 檔案**：`db/schema.sql`
-- **初始化**：當 Docker 容器首次啟動時，PostgreSQL 映像檔會自動執行 `/docker-entrypoint-initdb.d` 下的 SQL 檔案。
+- **Migration 檔案**：`db/migrations/`（`{version}_{name}.up.sql` / `.down.sql`，採 golang-migrate 慣例）。
+- **初始化與變更**：schema 由 migration 管理，內嵌於 binary。應用程式與測試啟動時自動套用尚未執行的 migration，毋需手動執行。版本記錄於 `schema_migrations` 表。
 - **核心表格**：
   - `users`：平台使用者。
   - `organizations`：頂層組織單位。
@@ -234,7 +234,7 @@
 
 - **Raw SQL**：本專案不使用 ORM，請撰寫乾淨的 SQL 語句。
 - **Soft Delete**：對於主要實體（Organization, User 等），優先採用 `is_active` 機制，避免實體資料刪除。
-- **Schema**：變更需同步更新 `db/schema.sql`。
+- **Schema**：變更需新增一個 migration（`db/migrations/{下一個版號}_{描述}.up.sql` 及對應 `.down.sql`），勿直接修改既有 migration。
 
 ### 5. API 回應格式
 
