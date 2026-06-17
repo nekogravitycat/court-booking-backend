@@ -6,6 +6,6 @@
     "compose.yml": "*compose.yml",
     ".env": ".env.*",
     "Dockerfile": ".dockerignore, Dockerfile*",
-    "repomix.config.json": "codebase-for-llm.*"
+    ".gitignore": ".gitattributes"
   }
 }
