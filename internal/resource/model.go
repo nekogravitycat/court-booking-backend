@@ -9,6 +9,7 @@ import (
 
 var (
 	ErrNotFound            = apperror.New(http.StatusNotFound, "resource not found")
+	ErrResourceInUse       = apperror.New(http.StatusConflict, "resource still has related bookings and cannot be deleted")
 	ErrEmptyName           = apperror.New(http.StatusBadRequest, "name cannot be empty")
 	ErrInvalidLocation     = apperror.New(http.StatusBadRequest, "invalid location_id")
 	ErrInvalidResourceType = apperror.New(http.StatusBadRequest, "invalid resource_type")

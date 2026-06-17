@@ -6,7 +6,9 @@ import (
 	"fmt"
 
 	"github.com/Masterminds/squirrel"
+	"github.com/jackc/pgerrcode"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -174,6 +176,12 @@ func (r *pgxRepository) Delete(ctx context.Context, id string) error {
 
 	ct, err := r.pool.Exec(ctx, query, args...)
 	if err != nil {
+		// A booking referencing this resource (ON DELETE RESTRICT) surfaces as a
+		// foreign-key violation; report it as a 409 conflict instead of a 500.
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && pgErr.Code == pgerrcode.ForeignKeyViolation {
+			return ErrResourceInUse
+		}
 		return fmt.Errorf("delete resource failed: %w", err)
 	}
 	if ct.RowsAffected() == 0 {

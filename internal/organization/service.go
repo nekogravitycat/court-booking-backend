@@ -186,14 +186,19 @@ func (s *service) UpdateCover(ctx context.Context, id string, fileID string) err
 		return err
 	}
 
-	// Clean up old cover if exists
-	if org.Cover != nil && *org.Cover != "" {
-		// Best effort delete, don't block update if fail
-		_ = s.fileService.Delete(ctx, *org.Cover)
+	oldCover := org.Cover
+
+	// Persist the new reference first; only delete the old file once the new
+	// reference is durably stored, to avoid orphaned files / dangling references.
+	org.Cover = &fileID
+	if err := s.repo.Update(ctx, org); err != nil {
+		return err
 	}
 
-	org.Cover = &fileID
-	return s.repo.Update(ctx, org)
+	if oldCover != nil && *oldCover != "" && *oldCover != fileID {
+		_ = s.fileService.Delete(ctx, *oldCover)
+	}
+	return nil
 }
 
 func (s *service) RemoveCover(ctx context.Context, id string) error {
@@ -202,17 +207,19 @@ func (s *service) RemoveCover(ctx context.Context, id string) error {
 		return err
 	}
 
-	// Delete the old cover file if exists
-	if org.Cover != nil && *org.Cover != "" {
-		if err := s.fileService.Delete(ctx, *org.Cover); err != nil {
-			// Log error but don't block the removal
-			_ = err
-		}
+	oldCover := org.Cover
+
+	// Clear the reference first, then delete the file, keeping the database
+	// consistent even if the storage delete fails (best effort).
+	org.Cover = nil
+	if err := s.repo.Update(ctx, org); err != nil {
+		return err
 	}
 
-	// Set cover to nil
-	org.Cover = nil
-	return s.repo.Update(ctx, org)
+	if oldCover != nil && *oldCover != "" {
+		_ = s.fileService.Delete(ctx, *oldCover)
+	}
+	return nil
 }
 
 // -----------------------------

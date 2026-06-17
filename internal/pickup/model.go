@@ -8,14 +8,15 @@ import (
 )
 
 var (
-	ErrGroupNotFound    = apperror.New(http.StatusNotFound, "pickup group not found")
-	ErrOrderNotFound    = apperror.New(http.StatusNotFound, "pickup order not found")
-	ErrGroupFullyBooked = apperror.New(http.StatusConflict, "group is fully booked")
-	ErrAlreadyEnrolled  = apperror.New(http.StatusConflict, "already enrolled in this group")
-	ErrInvalidStatus    = apperror.New(http.StatusBadRequest, "invalid status")
-	ErrInvalidTimeRange = apperror.New(http.StatusBadRequest, "start time must be before end time")
-	ErrPermissionDenied = apperror.New(http.StatusForbidden, "permission denied")
-	ErrGroupNotActive   = apperror.New(http.StatusBadRequest, "pickup group is not active")
+	ErrGroupNotFound         = apperror.New(http.StatusNotFound, "pickup group not found")
+	ErrOrderNotFound         = apperror.New(http.StatusNotFound, "pickup order not found")
+	ErrGroupFullyBooked      = apperror.New(http.StatusConflict, "group is fully booked")
+	ErrCapacityBelowEnrolled = apperror.New(http.StatusConflict, "capacity cannot be set below the current number of enrolled participants")
+	ErrAlreadyEnrolled       = apperror.New(http.StatusConflict, "already enrolled in this group")
+	ErrInvalidStatus         = apperror.New(http.StatusBadRequest, "invalid status")
+	ErrInvalidTimeRange      = apperror.New(http.StatusBadRequest, "start time must be before end time")
+	ErrPermissionDenied      = apperror.New(http.StatusForbidden, "permission denied")
+	ErrGroupNotActive        = apperror.New(http.StatusBadRequest, "pickup group is not active")
 )
 
 type SkillLevel string

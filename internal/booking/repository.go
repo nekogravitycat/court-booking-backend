@@ -7,7 +7,9 @@ import (
 	"time"
 
 	"github.com/Masterminds/squirrel"
+	"github.com/jackc/pgerrcode"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -42,8 +44,23 @@ func (r *pgxRepository) Create(ctx context.Context, b *Booking) error {
 		return fmt.Errorf("build create booking query failed: %w", err)
 	}
 
-	return r.pool.QueryRow(ctx, query, args...).
-		Scan(&b.ID, &b.CreatedAt, &b.UpdatedAt)
+	if err := r.pool.QueryRow(ctx, query, args...).
+		Scan(&b.ID, &b.CreatedAt, &b.UpdatedAt); err != nil {
+		return mapOverlapError(err)
+	}
+	return nil
+}
+
+// mapOverlapError translates the database-level overlap exclusion violation
+// (raised by the bookings_no_overlap constraint) into ErrTimeConflict. This is
+// the final guard against double-booking when concurrent requests both pass the
+// application-level HasOverlap pre-check. Other errors are returned unchanged.
+func mapOverlapError(err error) error {
+	var pgErr *pgconn.PgError
+	if errors.As(err, &pgErr) && pgErr.Code == pgerrcode.ExclusionViolation {
+		return ErrTimeConflict
+	}
+	return err
 }
 
 func (r *pgxRepository) GetByID(ctx context.Context, id string) (*Booking, error) {
@@ -183,7 +200,7 @@ func (r *pgxRepository) Update(ctx context.Context, b *Booking) error {
 
 	ct, err := r.pool.Exec(ctx, query, args...)
 	if err != nil {
-		return fmt.Errorf("update booking failed: %w", err)
+		return mapOverlapError(fmt.Errorf("update booking failed: %w", err))
 	}
 	if ct.RowsAffected() == 0 {
 		return ErrNotFound

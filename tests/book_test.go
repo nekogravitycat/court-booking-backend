@@ -48,6 +48,11 @@ func TestBookingCRUDAndPermissions(t *testing.T) {
 	var resourceID string
 	var bookingID string
 
+	// bookingBase is tomorrow at 08:00 UTC: a deterministic future time well
+	// inside the location's 06:00-23:00 opening hours, so the 1-hour bookings
+	// below never fall outside opening hours or cross midnight.
+	bookingBase := time.Now().UTC().Truncate(24 * time.Hour).Add(32 * time.Hour)
+
 	// ==== Setup Infrastructure (Org -> Loc -> RT -> Resource) ====
 	t.Run("Setup Infrastructure", func(t *testing.T) {
 		// 1. Create Org A
@@ -70,6 +75,8 @@ func TestBookingCRUDAndPermissions(t *testing.T) {
 			Name:              "Court Loc A",
 			Capacity:          10,
 			OpeningHoursStart: "06:00:00", OpeningHoursEnd: "23:00:00",
+			Opening:      true,
+			Timezone:     "UTC",
 			LocationInfo: "Test Info", Longitude: 120.0, Latitude: 23.0,
 		}
 		wLoc := executeRequest("POST", "/v1/locations", locPayload, orgOwnerAToken)
@@ -157,7 +164,7 @@ func TestBookingCRUDAndPermissions(t *testing.T) {
 
 	t.Run("Create Booking: Success", func(t *testing.T) {
 		// Book for Tomorrow
-		startTime := time.Now().UTC().Add(24 * time.Hour)
+		startTime := bookingBase
 		endTime := startTime.Add(1 * time.Hour)
 
 		payload := bookingHttp.CreateBookingRequest{
@@ -182,7 +189,7 @@ func TestBookingCRUDAndPermissions(t *testing.T) {
 
 	t.Run("Create Booking: Conflict (Overlap)", func(t *testing.T) {
 		// Attempt to book overlapping slot (Start same time)
-		startTime := time.Now().UTC().Add(24 * time.Hour)
+		startTime := bookingBase
 		endTime := startTime.Add(1 * time.Hour)
 
 		payload := bookingHttp.CreateBookingRequest{
@@ -268,7 +275,7 @@ func TestBookingCRUDAndPermissions(t *testing.T) {
 		path := fmt.Sprintf("/v1/bookings/%s", bookingID)
 
 		// Invalid Start > End
-		newStart := time.Now().UTC().Add(48 * time.Hour)
+		newStart := bookingBase.Add(24 * time.Hour)
 		newEnd := newStart.Add(-1 * time.Hour) // Invalid
 		payload := bookingHttp.UpdateBookingRequest{StartTime: &newStart, EndTime: &newEnd}
 
@@ -307,7 +314,7 @@ func TestBookingCRUDAndPermissions(t *testing.T) {
 		path := fmt.Sprintf("/v1/bookings/%s", bookingID)
 
 		// 1. Success: Reschedule to empty slot
-		newStart := time.Now().UTC().Add(50 * time.Hour)
+		newStart := bookingBase.Add(24 * time.Hour)
 		newEnd := newStart.Add(1 * time.Hour)
 		payload := bookingHttp.UpdateBookingRequest{StartTime: &newStart, EndTime: &newEnd}
 
@@ -316,7 +323,7 @@ func TestBookingCRUDAndPermissions(t *testing.T) {
 
 		// 2. Conflict: Reschedule to overlapped slot
 		// Create another booking first
-		conflictStart := time.Now().UTC().Add(60 * time.Hour)
+		conflictStart := bookingBase.Add(48 * time.Hour)
 		conflictEnd := conflictStart.Add(1 * time.Hour)
 		otherPayload := bookingHttp.CreateBookingRequest{
 			ResourceID: resourceID,
@@ -357,7 +364,7 @@ func TestBookingCRUDAndPermissions(t *testing.T) {
 
 	t.Run("Delete Booking: Success", func(t *testing.T) {
 		// Create a disposable booking
-		startTime := time.Now().UTC().Add(100 * time.Hour)
+		startTime := bookingBase.Add(72 * time.Hour)
 		createPayload := bookingHttp.CreateBookingRequest{
 			ResourceID: resourceID,
 			StartTime:  startTime,

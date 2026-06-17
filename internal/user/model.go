@@ -14,6 +14,7 @@ var (
 	ErrInactiveUser       = apperror.New(http.StatusUnauthorized, "user is inactive")
 	ErrEmailRequired      = apperror.New(http.StatusBadRequest, "email is required")
 	ErrPasswordTooShort   = apperror.New(http.StatusBadRequest, "password is too short")
+	ErrPasswordTooLong    = apperror.New(http.StatusBadRequest, "password is too long")
 	ErrAlreadyPickupHost  = apperror.New(http.StatusConflict, "user is already a pickup host")
 	ErrNotPickupHost      = apperror.New(http.StatusNotFound, "user is not a pickup host")
 )

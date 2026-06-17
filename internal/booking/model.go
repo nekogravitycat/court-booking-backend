@@ -16,7 +16,22 @@ var (
 	ErrPermissionDenied = apperror.New(http.StatusForbidden, "permission denied")
 	ErrStartTimePast    = apperror.New(http.StatusBadRequest, "cannot create booking in the past")
 	ErrInvalidInput     = apperror.New(http.StatusBadRequest, "invalid input parameters")
+
+	ErrLocationClosed      = apperror.New(http.StatusConflict, "location is not open for booking")
+	ErrOutsideOpeningHours = apperror.New(http.StatusBadRequest, "booking must fall within the location's opening hours")
+	ErrBookingTooLong      = apperror.New(http.StatusBadRequest, "booking duration exceeds the maximum allowed")
+	ErrInvalidTimezone     = apperror.New(http.StatusInternalServerError, "location has an invalid timezone")
 )
+
+// MaxBookingDuration is a defensive upper bound on the length of a single
+// booking. It prevents accidental or abusive multi-day/multi-month reservations
+// that the opening-hours window alone would not catch. Tune as the business
+// rules require.
+const MaxBookingDuration = 24 * time.Hour
+
+// availabilityPageSize is the batch size used when paging through a day's
+// bookings to compute availability, ensuring no bookings are silently dropped.
+const availabilityPageSize = 1000
 
 type Status string
 

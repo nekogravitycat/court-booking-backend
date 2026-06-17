@@ -21,3 +21,5 @@
 
 # MacOS files
 .DS_Store
+
+ref-only/

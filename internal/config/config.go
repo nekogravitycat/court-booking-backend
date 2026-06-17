@@ -12,6 +12,10 @@ import (
 
 const PROD_STRING = "prod"
 
+// minJWTSecretLength is the minimum acceptable length (in bytes) for JWT_SECRET.
+// 32 bytes matches the output size of HMAC-SHA256 and resists brute force.
+const minJWTSecretLength = 32
+
 // Config holds all application configuration loaded from environment.
 type Config struct {
 	IsProduction      bool
@@ -49,10 +53,14 @@ func Load() (*Config, error) {
 		return nil, fmt.Errorf("DB_DSN is required")
 	}
 
-	// JWT secret is required for signing tokens
+	// JWT secret is required for signing tokens. Enforce a minimum length so a
+	// weak/short secret cannot be brute-forced to forge tokens.
 	cfg.JWTSecret = os.Getenv("JWT_SECRET")
 	if cfg.JWTSecret == "" {
 		return nil, fmt.Errorf("JWT_SECRET is required")
+	}
+	if len(cfg.JWTSecret) < minJWTSecretLength {
+		return nil, fmt.Errorf("JWT_SECRET must be at least %d bytes", minJWTSecretLength)
 	}
 
 	// JWT access token TTL, parse as time.Duration (e.g. "15m", "1h").

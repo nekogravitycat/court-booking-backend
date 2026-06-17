@@ -3,11 +3,30 @@ package http
 import (
 	"io"
 	"net/http"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 	"github.com/nekogravitycat/court-booking-backend/internal/file"
 	"github.com/nekogravitycat/court-booking-backend/internal/pkg/response"
 )
+
+// sanitizeContentDispositionFilename strips characters that could break the
+// Content-Disposition header (quotes, backslashes, and control characters such
+// as CR/LF), preventing header injection via the user-supplied filename.
+func sanitizeContentDispositionFilename(name string) string {
+	var b strings.Builder
+	for _, r := range name {
+		if r < 0x20 || r == 0x7f || r == '"' || r == '\\' {
+			continue
+		}
+		b.WriteRune(r)
+	}
+	cleaned := b.String()
+	if cleaned == "" {
+		return "download"
+	}
+	return cleaned
+}
 
 type Handler struct {
 	fileService file.Service
@@ -35,9 +54,11 @@ func (h *Handler) ServeFile(c *gin.Context) {
 	}
 	defer stream.Close()
 
-	// Set headers
+	// Set headers. nosniff prevents browsers from MIME-sniffing the response
+	// into an executable type (defense-in-depth against stored XSS).
 	c.Header("Content-Type", fileInfo.ContentType)
-	c.Header("Content-Disposition", "inline; filename=\""+fileInfo.Filename+"\"")
+	c.Header("X-Content-Type-Options", "nosniff")
+	c.Header("Content-Disposition", "inline; filename=\""+sanitizeContentDispositionFilename(fileInfo.Filename)+"\"")
 
 	// Stream file to response
 	c.Status(http.StatusOK)
@@ -65,7 +86,8 @@ func (h *Handler) ServeThumbnail(c *gin.Context) {
 
 	// Set headers (thumbnails are always JPEG)
 	c.Header("Content-Type", "image/jpeg")
-	c.Header("Content-Disposition", "inline; filename=\""+fileInfo.Filename+"_thumb.jpg\"")
+	c.Header("X-Content-Type-Options", "nosniff")
+	c.Header("Content-Disposition", "inline; filename=\""+sanitizeContentDispositionFilename(fileInfo.Filename)+"_thumb.jpg\"")
 
 	// Stream thumbnail to response
 	c.Status(http.StatusOK)

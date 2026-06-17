@@ -16,9 +16,14 @@ func NewPool(ctx context.Context, dsn string) (*pgxpool.Pool, error) {
 		return nil, fmt.Errorf("failed to parse database config: %w", err)
 	}
 
-	// You can adjust pool settings here if needed.
-	// For example:
-	// cfg.MaxConns = 10
+	// Connection lifecycle tuning. These settings recycle idle/long-lived
+	// connections and periodically health-check the pool, which keeps the pool
+	// healthy under the row-level locking used by enrollment and booking flows.
+	// The pool size (MaxConns/MinConns) intentionally keeps pgx defaults and can
+	// still be overridden via the DSN (e.g. "pool_max_conns=20").
+	cfg.MaxConnLifetime = time.Hour
+	cfg.MaxConnIdleTime = 30 * time.Minute
+	cfg.HealthCheckPeriod = time.Minute
 
 	pool, err := pgxpool.NewWithConfig(ctx, cfg)
 	if err != nil {

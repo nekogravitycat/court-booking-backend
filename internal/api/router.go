@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"strings"
 
 	"github.com/gin-contrib/cors"
@@ -78,8 +79,15 @@ func NewRouter(cfg Config) *gin.Engine {
 	config.AllowHeaders = []string{"Origin", "Content-Type", "Authorization"}
 	r.Use(cors.New(config))
 
-	// Auth Middleware
-	authMiddleware := auth.AuthRequired(cfg.JWTManager)
+	// Auth Middleware. The active-status check runs on every authenticated
+	// request so suspended / soft-deleted accounts lose access immediately.
+	authMiddleware := auth.AuthRequired(cfg.JWTManager, func(ctx context.Context, userID string) (bool, error) {
+		u, err := cfg.UserService.GetByID(ctx, userID)
+		if err != nil {
+			return false, err
+		}
+		return u.IsActive, nil
+	})
 	sysAdminMiddleware := RequireSystemAdmin(cfg.UserService)
 
 	// Initialize Handlers (Injecting Services from cfg)

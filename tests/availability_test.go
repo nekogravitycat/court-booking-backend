@@ -155,7 +155,7 @@ func TestCalculateAvailability(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := booking.CalculateAvailability(tt.date, tt.openStr, tt.closeStr, tt.bookings)
+			got, err := booking.CalculateAvailability(tt.date, time.UTC, tt.openStr, tt.closeStr, tt.bookings)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("CalculateAvailability() error = %v, wantErr %v", err, tt.wantErr)
 				return

@@ -26,6 +26,11 @@ type Repository interface {
 	GetOrdersByGroupID(ctx context.Context, groupID string) ([]*PickupOrder, error)
 	GetOrdersByUserID(ctx context.Context, userID string) ([]*PickupOrder, error)
 	UpdateOrder(ctx context.Context, order *PickupOrder) error
+
+	// UpdateOrderWithCapacityCheck re-validates the group capacity inside a
+	// transaction (with SELECT FOR UPDATE) before applying the update. It is used
+	// when an order moves back into a seat-occupying state to prevent overbooking.
+	UpdateOrderWithCapacityCheck(ctx context.Context, order *PickupOrder) error
 }
 
 type pgxRepository struct {
@@ -391,4 +396,62 @@ func (r *pgxRepository) UpdateOrder(ctx context.Context, o *PickupOrder) error {
 		return fmt.Errorf("update pickup order failed: %w", err)
 	}
 	return nil
+}
+
+// UpdateOrderWithCapacityCheck applies an order update only if the group still
+// has room. It locks the group row and counts the other occupying orders within
+// the same transaction, mirroring CreateOrder, so concurrent reactivations and
+// enrollments cannot push the group over capacity.
+func (r *pgxRepository) UpdateOrderWithCapacityCheck(ctx context.Context, o *PickupOrder) error {
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("begin transaction failed: %w", err)
+	}
+	defer tx.Rollback(ctx) //nolint:errcheck
+
+	var capacity int
+	if err := tx.QueryRow(ctx,
+		"SELECT capacity FROM public.pickup_groups WHERE id = $1 FOR UPDATE",
+		o.PickupGroupID,
+	).Scan(&capacity); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return ErrGroupNotFound
+		}
+		return fmt.Errorf("lock pickup group failed: %w", err)
+	}
+
+	// Count occupying orders other than this one; this order is about to become
+	// occupying, so it must fit within the remaining capacity.
+	var currentEnrolled int
+	if err := tx.QueryRow(ctx,
+		"SELECT COUNT(*) FROM public.pickup_orders WHERE pickup_group_id = $1 AND id <> $2 AND status NOT IN ('cancelled', 'cancel_request')",
+		o.PickupGroupID, o.ID,
+	).Scan(&currentEnrolled); err != nil {
+		return fmt.Errorf("count enrollments failed: %w", err)
+	}
+
+	if currentEnrolled >= capacity {
+		return ErrGroupFullyBooked
+	}
+
+	psql := squirrel.StatementBuilder.PlaceholderFormat(squirrel.Dollar)
+	query, args, err := psql.Update("public.pickup_orders").
+		Set("status", o.Status).
+		Set("payment_status", o.PaymentStatus).
+		Set("updated_at", squirrel.Expr("now()")).
+		Where(squirrel.Eq{"id": o.ID}).
+		Suffix("RETURNING updated_at").
+		ToSql()
+	if err != nil {
+		return fmt.Errorf("build update pickup order query failed: %w", err)
+	}
+
+	if err := tx.QueryRow(ctx, query, args...).Scan(&o.UpdatedAt); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return ErrOrderNotFound
+		}
+		return fmt.Errorf("update pickup order failed: %w", err)
+	}
+
+	return tx.Commit(ctx)
 }

@@ -10,6 +10,7 @@ import (
 var (
 	ErrOrgNotFound         = apperror.New(http.StatusNotFound, "organization not found")
 	ErrLocNotFound         = apperror.New(http.StatusNotFound, "location not found")
+	ErrLocationInUse       = apperror.New(http.StatusConflict, "location still has resources with related bookings and cannot be deleted")
 	ErrOrgIDRequired       = apperror.New(http.StatusBadRequest, "organization_id is required")
 	ErrNameRequired        = apperror.New(http.StatusBadRequest, "name is required")
 	ErrInvalidGeo          = apperror.New(http.StatusBadRequest, "invalid latitude or longitude")
@@ -17,6 +18,7 @@ var (
 	ErrCapacityInvalid     = apperror.New(http.StatusBadRequest, "capacity must be greater than zero")
 	ErrInvalidTimeRange    = apperror.New(http.StatusBadRequest, "start time must be before end time")
 	ErrUserNotFound        = apperror.New(http.StatusNotFound, "user not found")
+	ErrInvalidTimezone     = apperror.New(http.StatusBadRequest, "invalid timezone; expected an IANA name such as Asia/Taipei")
 )
 
 // Location represents a physical venue under an organization.
@@ -29,6 +31,7 @@ type Location struct {
 	Capacity          int64
 	OpeningHoursStart string // Format: HH:MM:SS
 	OpeningHoursEnd   string // Format: HH:MM:SS
+	Timezone          string // IANA timezone name (e.g. "Asia/Taipei") for interpreting opening hours
 	LocationInfo      string // Address
 	Opening           bool   // Is currently open for business
 	Rule              string

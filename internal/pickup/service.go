@@ -138,6 +138,11 @@ func (s *service) UpdateGroup(ctx context.Context, id string, req UpdateGroupReq
 		group.Fee = *req.Fee
 	}
 	if req.Capacity != nil {
+		// Do not allow lowering capacity below the number of participants already
+		// occupying a seat; otherwise the group would be silently over capacity.
+		if *req.Capacity < group.CurrentEnrolled {
+			return nil, ErrCapacityBelowEnrolled
+		}
 		group.Capacity = *req.Capacity
 	}
 	if req.LocationID != nil {
@@ -229,6 +234,8 @@ func (s *service) UpdateOrder(ctx context.Context, id string, req UpdateOrderReq
 		return nil, ErrPermissionDenied
 	}
 
+	oldStatus := order.Status
+
 	// Payment status is reviewer-only.
 	if req.PaymentStatus != nil {
 		if !isReviewer {
@@ -255,9 +262,25 @@ func (s *service) UpdateOrder(ctx context.Context, id string, req UpdateOrderReq
 		order.Status = st
 	}
 
+	// If the order is moving from a non-occupying state (cancelled / cancel
+	// request) into a seat-occupying state, re-validate capacity inside a
+	// transaction so a reviewer cannot push the group over its limit.
+	if isOccupyingStatus(order.Status) && !isOccupyingStatus(oldStatus) {
+		if err := s.repo.UpdateOrderWithCapacityCheck(ctx, order); err != nil {
+			return nil, err
+		}
+		return order, nil
+	}
+
 	if err := s.repo.UpdateOrder(ctx, order); err != nil {
 		return nil, err
 	}
 
 	return order, nil
+}
+
+// isOccupyingStatus reports whether an order in the given status counts against
+// the group's capacity (i.e. occupies a seat).
+func isOccupyingStatus(s OrderStatus) bool {
+	return s == OrderStatusPending || s == OrderStatusConfirmed
 }

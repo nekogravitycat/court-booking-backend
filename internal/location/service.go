@@ -21,6 +21,7 @@ type CreateLocationRequest struct {
 	Capacity          int64
 	OpeningHoursStart string
 	OpeningHoursEnd   string
+	Timezone          string
 	LocationInfo      string
 	Opening           bool
 	Rule              string
@@ -36,6 +37,7 @@ type UpdateLocationRequest struct {
 	Capacity          *int64
 	OpeningHoursStart *string
 	OpeningHoursEnd   *string
+	Timezone          *string
 	LocationInfo      *string
 	Opening           *bool
 	Rule              *string
@@ -113,6 +115,15 @@ func validateLocation(loc *Location) error {
 		return ErrInvalidOpeningHours
 	}
 
+	// 4. Validate timezone. Default empty to UTC; otherwise it must be a valid
+	// IANA name resolvable against the Go time database.
+	if loc.Timezone == "" {
+		loc.Timezone = "UTC"
+	}
+	if _, err := time.LoadLocation(loc.Timezone); err != nil {
+		return ErrInvalidTimezone
+	}
+
 	return nil
 }
 
@@ -135,6 +146,7 @@ func (s *service) Create(ctx context.Context, req CreateLocationRequest) (*Locat
 		Capacity:          req.Capacity,
 		OpeningHoursStart: req.OpeningHoursStart,
 		OpeningHoursEnd:   req.OpeningHoursEnd,
+		Timezone:          req.Timezone,
 		LocationInfo:      req.LocationInfo,
 		Opening:           req.Opening,
 		Rule:              req.Rule,
@@ -182,6 +194,9 @@ func (s *service) Update(ctx context.Context, id string, req UpdateLocationReque
 	if req.OpeningHoursEnd != nil {
 		loc.OpeningHoursEnd = *req.OpeningHoursEnd
 	}
+	if req.Timezone != nil {
+		loc.Timezone = *req.Timezone
+	}
 	if req.LocationInfo != nil {
 		loc.LocationInfo = *req.LocationInfo
 	}
@@ -221,14 +236,19 @@ func (s *service) UpdateCover(ctx context.Context, id string, fileID string) err
 		return err
 	}
 
-	// Clean up old cover if exists
-	if loc.Cover != nil && *loc.Cover != "" {
-		// Best effort delete, don't block update if fail (or maybe should log?)
-		_ = s.fileService.Delete(ctx, *loc.Cover)
+	oldCover := loc.Cover
+
+	// Persist the new reference first; only delete the old file once the new
+	// reference is durably stored, to avoid orphaned files / dangling references.
+	loc.Cover = &fileID
+	if err := s.repo.Update(ctx, loc); err != nil {
+		return err
 	}
 
-	loc.Cover = &fileID
-	return s.repo.Update(ctx, loc)
+	if oldCover != nil && *oldCover != "" && *oldCover != fileID {
+		_ = s.fileService.Delete(ctx, *oldCover)
+	}
+	return nil
 }
 
 func (s *service) RemoveCover(ctx context.Context, id string) error {
@@ -237,17 +257,19 @@ func (s *service) RemoveCover(ctx context.Context, id string) error {
 		return err
 	}
 
-	// Delete the old cover file if exists
-	if loc.Cover != nil && *loc.Cover != "" {
-		if err := s.fileService.Delete(ctx, *loc.Cover); err != nil {
-			// Log error but don't block the removal
-			_ = err
-		}
+	oldCover := loc.Cover
+
+	// Clear the reference first, then delete the file, keeping the database
+	// consistent even if the storage delete fails (best effort).
+	loc.Cover = nil
+	if err := s.repo.Update(ctx, loc); err != nil {
+		return err
 	}
 
-	// Set cover to nil
-	loc.Cover = nil
-	return s.repo.Update(ctx, loc)
+	if oldCover != nil && *oldCover != "" {
+		_ = s.fileService.Delete(ctx, *oldCover)
+	}
+	return nil
 }
 
 func (s *service) Delete(ctx context.Context, id string) error {

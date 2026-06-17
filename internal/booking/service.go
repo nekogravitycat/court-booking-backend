@@ -83,13 +83,24 @@ func (s *service) Create(ctx context.Context, req CreateRequest) (*Booking, erro
 	}
 
 	// 2. Validate Resource Exists
-	if _, err := s.resService.GetByID(ctx, req.ResourceID); err != nil {
+	res, err := s.resService.GetByID(ctx, req.ResourceID)
+	if err != nil {
 		switch {
 		case errors.Is(err, resource.ErrNotFound):
 			return nil, ErrResourceNotFound
 		default:
 			return nil, err
 		}
+	}
+
+	// 2b. Validate the booking against the location's operating constraints
+	// (open flag, opening hours in the location timezone, max duration).
+	loc, err := s.locService.GetByID(ctx, res.LocationID)
+	if err != nil {
+		return nil, err
+	}
+	if err := validateBookingWindow(loc, req.StartTime, req.EndTime); err != nil {
+		return nil, err
 	}
 
 	// 3. Check for Overlaps
@@ -174,6 +185,20 @@ func (s *service) Update(ctx context.Context, id string, req UpdateRequest, upda
 		// Check past time for updates
 		if req.StartTime != nil && req.StartTime.Before(time.Now().UTC()) {
 			return nil, ErrStartTimePast
+		}
+
+		// Validate the new time range against the location's operating
+		// constraints (open flag, opening hours, max duration).
+		res, err := s.resService.GetByID(ctx, b.ResourceID)
+		if err != nil {
+			return nil, err
+		}
+		loc, err := s.locService.GetByID(ctx, res.LocationID)
+		if err != nil {
+			return nil, err
+		}
+		if err := validateBookingWindow(loc, newStart, newEnd); err != nil {
+			return nil, err
 		}
 
 		// Check Overlap excluding current booking
@@ -264,27 +289,111 @@ func (s *service) GetAvailability(ctx context.Context, resourceID string, date t
 		return nil, err
 	}
 
-	// List Bookings for the day
-	// We need bookings that overlap with the day:
-	// Start < EndOfDay AND End > StartOfDay
-	startOfDay := time.Date(date.Year(), date.Month(), date.Day(), 0, 0, 0, 0, time.UTC)
-	endOfDay := startOfDay.Add(24 * time.Hour)
-
-	bookings, _, err := s.repo.List(ctx, Filter{
-		ResourceID: resourceID,
-		StartTime:  &startOfDay, // Filter where EndTime >= StartOfDay (handled by repo logic: EndTime > filter.StartTime)
-		EndTime:    &endOfDay,   // Filter where StartTime <= EndOfDay (handled by repo logic: StartTime < filter.EndTime)
-		Page:       1,
-		PageSize:   1000, // Fetch all relevant bookings
-		SortBy:     "start_time",
-		SortOrder:  "ASC",
-	})
+	// Resolve the location timezone so the day window and opening hours are
+	// computed against local wall-clock time rather than UTC.
+	tz, err := loadLocationTZ(loc.Timezone)
 	if err != nil {
 		return nil, err
 	}
 
+	// List Bookings for the day
+	// We need bookings that overlap with the day:
+	// Start < EndOfDay AND End > StartOfDay
+	startOfDay := time.Date(date.Year(), date.Month(), date.Day(), 0, 0, 0, 0, tz)
+	endOfDay := startOfDay.Add(24 * time.Hour)
+
+	// Fetch every booking overlapping the day, paging through all results so a
+	// busy resource is never silently truncated.
+	var bookings []*Booking
+	for page := 1; ; page++ {
+		batch, total, err := s.repo.List(ctx, Filter{
+			ResourceID: resourceID,
+			StartTime:  &startOfDay, // Filter where EndTime >= StartOfDay (handled by repo logic: EndTime > filter.StartTime)
+			EndTime:    &endOfDay,   // Filter where StartTime <= EndOfDay (handled by repo logic: StartTime < filter.EndTime)
+			Page:       page,
+			PageSize:   availabilityPageSize,
+			SortBy:     "start_time",
+			SortOrder:  "ASC",
+		})
+		if err != nil {
+			return nil, err
+		}
+		bookings = append(bookings, batch...)
+		if len(batch) == 0 || len(bookings) >= total {
+			break
+		}
+	}
+
 	// Calculate Slots
-	return CalculateAvailability(date, loc.OpeningHoursStart, loc.OpeningHoursEnd, bookings)
+	return CalculateAvailability(date, tz, loc.OpeningHoursStart, loc.OpeningHoursEnd, bookings)
+}
+
+// loadLocationTZ resolves an IANA timezone name to a *time.Location. An empty
+// name falls back to UTC. Location timezones are validated at create/update
+// time, so a failure here indicates corrupt data and surfaces as an error.
+func loadLocationTZ(tz string) (*time.Location, error) {
+	if tz == "" {
+		return time.UTC, nil
+	}
+	loc, err := time.LoadLocation(tz)
+	if err != nil {
+		return nil, ErrInvalidTimezone
+	}
+	return loc, nil
+}
+
+// parseOpeningTime parses an "HH:MM:SS" or "HH:MM" wall-clock string.
+func parseOpeningTime(s string) (time.Time, error) {
+	layout := "15:04:05"
+	if len(s) == 5 {
+		layout = "15:04"
+	}
+	return time.Parse(layout, s)
+}
+
+// validateBookingWindow enforces the location's operating constraints on a
+// proposed booking time range:
+//   - the location must currently be open for business;
+//   - the duration must not exceed MaxBookingDuration;
+//   - the range must fall within the daily opening hours, interpreted in the
+//     location's timezone (so non-UTC venues are handled correctly).
+func validateBookingWindow(loc *location.Location, start, end time.Time) error {
+	if !loc.Opening {
+		return ErrLocationClosed
+	}
+	if end.Sub(start) > MaxBookingDuration {
+		return ErrBookingTooLong
+	}
+
+	tz, err := loadLocationTZ(loc.Timezone)
+	if err != nil {
+		return err
+	}
+
+	openT, err := parseOpeningTime(loc.OpeningHoursStart)
+	if err != nil {
+		return ErrInvalidTimeRange
+	}
+	closeT, err := parseOpeningTime(loc.OpeningHoursEnd)
+	if err != nil {
+		return ErrInvalidTimeRange
+	}
+
+	startLocal := start.In(tz)
+	endLocal := end.In(tz)
+
+	// Anchor the opening hours to the booking's local calendar day. A booking
+	// must start no earlier than opening and end no later than closing on the
+	// same local day; cross-midnight bookings are therefore rejected (matching
+	// the single-day opening-hours model enforced on the location).
+	y, m, d := startLocal.Date()
+	openAt := time.Date(y, m, d, openT.Hour(), openT.Minute(), openT.Second(), 0, tz)
+	closeAt := time.Date(y, m, d, closeT.Hour(), closeT.Minute(), closeT.Second(), 0, tz)
+
+	if startLocal.Before(openAt) || endLocal.After(closeAt) {
+		return ErrOutsideOpeningHours
+	}
+	return nil
 }
 
 // CalculateAvailability computes available time slots given the operating hours and existing bookings.
@@ -299,28 +408,28 @@ func (s *service) GetAvailability(ctx context.Context, resourceID string, date t
 //     - 'currentStart' is then advanced to the end of the current booking.
 //  4. Final Slot: After processing all bookings, if 'currentStart' is still before the closing time,
 //     the remaining time is added as the final available slot.
-func CalculateAvailability(date time.Time, openStr, closeStr string, bookings []*Booking) ([]TimeSlot, error) {
+//
+// The opening hours are interpreted in the supplied timezone (tz), so the
+// computed slots line up with the location's local wall-clock hours rather than
+// UTC. Pass time.UTC for UTC behaviour.
+func CalculateAvailability(date time.Time, tz *time.Location, openStr, closeStr string, bookings []*Booking) ([]TimeSlot, error) {
+	if tz == nil {
+		tz = time.UTC
+	}
+
 	// 1. Parse Opening and Closing Times
-	layout := "15:04:05"
-	if len(openStr) == 5 {
-		layout = "15:04"
-	}
-
-	openTime, err := time.Parse(layout, openStr)
+	openTime, err := parseOpeningTime(openStr)
 	if err != nil {
 		return nil, err
 	}
-	// Normalizing to the given date
-	startOfDay := time.Date(date.Year(), date.Month(), date.Day(), openTime.Hour(), openTime.Minute(), openTime.Second(), 0, time.UTC)
+	// Normalizing to the given date, in the location's timezone
+	startOfDay := time.Date(date.Year(), date.Month(), date.Day(), openTime.Hour(), openTime.Minute(), openTime.Second(), 0, tz)
 
-	if len(closeStr) == 5 {
-		layout = "15:04"
-	}
-	closeTime, err := time.Parse(layout, closeStr)
+	closeTime, err := parseOpeningTime(closeStr)
 	if err != nil {
 		return nil, err
 	}
-	endOfDay := time.Date(date.Year(), date.Month(), date.Day(), closeTime.Hour(), closeTime.Minute(), closeTime.Second(), 0, time.UTC)
+	endOfDay := time.Date(date.Year(), date.Month(), date.Day(), closeTime.Hour(), closeTime.Minute(), closeTime.Second(), 0, tz)
 
 	if endOfDay.Before(startOfDay) {
 		// Handle case where closing time is past midnight (next day) - simplistic for now, assume same day

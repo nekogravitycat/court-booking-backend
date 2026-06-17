@@ -6,7 +6,9 @@ import (
 	"fmt"
 
 	"github.com/Masterminds/squirrel"
+	"github.com/jackc/pgerrcode"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/nekogravitycat/court-booking-backend/internal/pkg/request"
 	"github.com/nekogravitycat/court-booking-backend/internal/user"
@@ -41,11 +43,11 @@ func (r *pgxRepository) Create(ctx context.Context, loc *Location) error {
 	psql := squirrel.StatementBuilder.PlaceholderFormat(squirrel.Dollar)
 	query, args, err := psql.Insert("public.locations").
 		Columns(
-			"organization_id", "name", "capacity", "opening_hours_start", "opening_hours_end",
+			"organization_id", "name", "capacity", "opening_hours_start", "opening_hours_end", "timezone",
 			"location_info", "opening", "rule", "facility", "description", "longitude", "latitude", "cover",
 		).
 		Values(
-			loc.OrganizationID, loc.Name, loc.Capacity, loc.OpeningHoursStart, loc.OpeningHoursEnd,
+			loc.OrganizationID, loc.Name, loc.Capacity, loc.OpeningHoursStart, loc.OpeningHoursEnd, loc.Timezone,
 			loc.LocationInfo, loc.Opening, loc.Rule, loc.Facility, loc.Description, loc.Longitude, loc.Latitude, loc.Cover,
 		).
 		Suffix("RETURNING id, created_at").
@@ -67,7 +69,7 @@ func (r *pgxRepository) GetByID(ctx context.Context, id string) (*Location, erro
 	psql := squirrel.StatementBuilder.PlaceholderFormat(squirrel.Dollar)
 	query, args, err := psql.Select(
 		"l.id", "l.organization_id", "o.name", "l.name", "l.created_at", "l.capacity",
-		"l.opening_hours_start::text", "l.opening_hours_end::text",
+		"l.opening_hours_start::text", "l.opening_hours_end::text", "l.timezone",
 		"l.location_info", "l.opening", "l.rule", "l.facility", "l.description", "l.longitude", "l.latitude", "l.cover",
 	).
 		From("public.locations l").
@@ -85,7 +87,7 @@ func (r *pgxRepository) GetByID(ctx context.Context, id string) (*Location, erro
 	var l Location
 	err = row.Scan(
 		&l.ID, &l.OrganizationID, &l.OrganizationName, &l.Name, &l.CreatedAt, &l.Capacity,
-		&l.OpeningHoursStart, &l.OpeningHoursEnd,
+		&l.OpeningHoursStart, &l.OpeningHoursEnd, &l.Timezone,
 		&l.LocationInfo, &l.Opening, &l.Rule, &l.Facility, &l.Description, &l.Longitude, &l.Latitude, &l.Cover,
 	)
 	if err != nil {
@@ -101,7 +103,7 @@ func (r *pgxRepository) List(ctx context.Context, filter LocationFilter) ([]*Loc
 	psql := squirrel.StatementBuilder.PlaceholderFormat(squirrel.Dollar)
 	query := psql.Select(
 		"l.id", "l.organization_id", "o.name", "l.name", "l.created_at", "l.capacity",
-		"l.opening_hours_start::text", "l.opening_hours_end::text",
+		"l.opening_hours_start::text", "l.opening_hours_end::text", "l.timezone",
 		"l.location_info", "l.opening", "l.rule", "l.facility", "l.description", "l.longitude", "l.latitude", "l.cover",
 		"count(*) OVER() as total_count",
 	).
@@ -185,7 +187,7 @@ func (r *pgxRepository) List(ctx context.Context, filter LocationFilter) ([]*Loc
 		var l Location
 		if err := rows.Scan(
 			&l.ID, &l.OrganizationID, &l.OrganizationName, &l.Name, &l.CreatedAt, &l.Capacity,
-			&l.OpeningHoursStart, &l.OpeningHoursEnd,
+			&l.OpeningHoursStart, &l.OpeningHoursEnd, &l.Timezone,
 			&l.LocationInfo, &l.Opening, &l.Rule, &l.Facility, &l.Description, &l.Longitude, &l.Latitude, &l.Cover,
 			&total,
 		); err != nil {
@@ -204,6 +206,7 @@ func (r *pgxRepository) Update(ctx context.Context, loc *Location) error {
 		Set("capacity", loc.Capacity).
 		Set("opening_hours_start", loc.OpeningHoursStart).
 		Set("opening_hours_end", loc.OpeningHoursEnd).
+		Set("timezone", loc.Timezone).
 		Set("location_info", loc.LocationInfo).
 		Set("opening", loc.Opening).
 		Set("rule", loc.Rule).
@@ -239,6 +242,13 @@ func (r *pgxRepository) Delete(ctx context.Context, id string) error {
 
 	ct, err := r.pool.Exec(ctx, query, args...)
 	if err != nil {
+		// Deleting a location cascades to its resources, but a booking still
+		// referencing one of those resources (ON DELETE RESTRICT) raises a
+		// foreign-key violation. Report it as a 409 conflict instead of a 500.
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && pgErr.Code == pgerrcode.ForeignKeyViolation {
+			return ErrLocationInUse
+		}
 		return fmt.Errorf("delete location failed: %w", err)
 	}
 	if ct.RowsAffected() == 0 {

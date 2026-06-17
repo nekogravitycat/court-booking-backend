@@ -18,6 +18,7 @@ type LocationResponse struct {
 	Capacity          int64                   `json:"capacity"`
 	OpeningHoursStart string                  `json:"opening_hours_start"`
 	OpeningHoursEnd   string                  `json:"opening_hours_end"`
+	Timezone          string                  `json:"timezone"`
 	LocationInfo      string                  `json:"location_info"`
 	Opening           bool                    `json:"opening"`
 	Rule              string                  `json:"rule"`
@@ -55,6 +56,7 @@ func NewLocationResponse(l *location.Location) LocationResponse {
 		Capacity:          l.Capacity,
 		OpeningHoursStart: l.OpeningHoursStart,
 		OpeningHoursEnd:   l.OpeningHoursEnd,
+		Timezone:          l.Timezone,
 		LocationInfo:      l.LocationInfo,
 		Opening:           l.Opening,
 		Rule:              l.Rule,
@@ -91,6 +93,7 @@ type CreateLocationRequest struct {
 	Capacity          int64   `json:"capacity" binding:"required"`
 	OpeningHoursStart string  `json:"opening_hours_start" binding:"required"`
 	OpeningHoursEnd   string  `json:"opening_hours_end" binding:"required"`
+	Timezone          string  `json:"timezone"`
 	LocationInfo      string  `json:"location_info" binding:"required"`
 	Opening           bool    `json:"opening"`
 	Rule              string  `json:"rule"`
@@ -105,6 +108,7 @@ type UpdateLocationRequest struct {
 	Capacity          *int64   `json:"capacity"`
 	OpeningHoursStart *string  `json:"opening_hours_start"`
 	OpeningHoursEnd   *string  `json:"opening_hours_end"`
+	Timezone          *string  `json:"timezone"`
 	LocationInfo      *string  `json:"location_info"`
 	Opening           *bool    `json:"opening"`
 	Rule              *string  `json:"rule"`

@@ -52,18 +52,32 @@ type service struct {
 	favoriteCleaner HostFavoriteCleaner
 
 	minPasswordLength int
+	maxPasswordLength int
+
+	// dummyPasswordHash is compared against on login attempts for non-existent
+	// users, so the response time matches the existing-user path and does not
+	// leak account existence via a timing side channel.
+	dummyPasswordHash string
 }
 
 // NewService creates a new user Service.
 // favoriteCleaner may be nil (e.g. in tests that don't exercise favorites);
 // account deletion simply skips favorite cleanup in that case.
 func NewService(repo Repository, hasher auth.PasswordHasher, fileService file.Service, favoriteCleaner HostFavoriteCleaner) Service {
+	// Precompute a dummy hash at the configured cost so login timing for
+	// unknown accounts matches the real bcrypt comparison cost.
+	dummyHash, _ := hasher.Hash("dummy-password-for-constant-time-login")
+
 	return &service{
 		repo:              repo,
 		hasher:            hasher,
 		fileService:       fileService,
 		favoriteCleaner:   favoriteCleaner,
 		minPasswordLength: 8,
+		// bcrypt only considers the first 72 bytes of a password and silently
+		// ignores the rest; reject longer inputs so users are not misled.
+		maxPasswordLength: 72,
+		dummyPasswordHash: dummyHash,
 	}
 }
 
@@ -75,6 +89,9 @@ func (s *service) Register(ctx context.Context, email, password, displayName str
 
 	if len(password) < s.minPasswordLength {
 		return nil, ErrPasswordTooShort
+	}
+	if len(password) > s.maxPasswordLength {
+		return nil, ErrPasswordTooLong
 	}
 
 	// Check if email is already used.
@@ -127,6 +144,11 @@ func (s *service) Login(ctx context.Context, email, password string) (*User, err
 	u, err := s.repo.GetByEmail(ctx, cleanEmail)
 	if err != nil {
 		if errors.Is(err, ErrNotFound) {
+			// Perform a dummy comparison so the response time matches the
+			// existing-user path, preventing account enumeration via timing.
+			if s.dummyPasswordHash != "" {
+				_ = s.hasher.Compare(s.dummyPasswordHash, password)
+			}
 			return nil, ErrInvalidCredentials
 		}
 		return nil, fmt.Errorf("failed to fetch user by email: %w", err)
@@ -254,14 +276,21 @@ func (s *service) UpdateAvatar(ctx context.Context, id string, fileID string) er
 		return err
 	}
 
-	// Clean up old avatar if exists
-	if u.Avatar != nil && *u.Avatar != "" {
-		// Best effort delete, don't block update if fail
-		_ = s.fileService.Delete(ctx, *u.Avatar)
+	oldAvatar := u.Avatar
+
+	// Persist the new reference first. Only after the new avatar is durably
+	// stored do we delete the old file. Deleting first would leave an orphaned
+	// file or a dangling reference if the update failed.
+	u.Avatar = &fileID
+	if err := s.repo.Update(ctx, u); err != nil {
+		return err
 	}
 
-	u.Avatar = &fileID
-	return s.repo.Update(ctx, u)
+	// Best-effort cleanup of the previous avatar file.
+	if oldAvatar != nil && *oldAvatar != "" && *oldAvatar != fileID {
+		_ = s.fileService.Delete(ctx, *oldAvatar)
+	}
+	return nil
 }
 
 func (s *service) RemoveAvatar(ctx context.Context, id string) error {
@@ -270,15 +299,17 @@ func (s *service) RemoveAvatar(ctx context.Context, id string) error {
 		return err
 	}
 
-	// Delete the old avatar file if exists
-	if u.Avatar != nil && *u.Avatar != "" {
-		if err := s.fileService.Delete(ctx, *u.Avatar); err != nil {
-			// Log error but don't block the removal
-			_ = err
-		}
+	oldAvatar := u.Avatar
+
+	// Clear the reference first, then delete the file. This keeps the database
+	// consistent even if the storage delete fails (best effort).
+	u.Avatar = nil
+	if err := s.repo.Update(ctx, u); err != nil {
+		return err
 	}
 
-	// Set avatar to nil
-	u.Avatar = nil
-	return s.repo.Update(ctx, u)
+	if oldAvatar != nil && *oldAvatar != "" {
+		_ = s.fileService.Delete(ctx, *oldAvatar)
+	}
+	return nil
 }
