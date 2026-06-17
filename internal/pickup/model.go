@@ -38,11 +38,37 @@ const (
 type PaymentStatus string
 
 const (
-	PaymentStatusPending   PaymentStatus = "pending"
-	PaymentStatusPaid      PaymentStatus = "paid"
-	PaymentStatusFailed    PaymentStatus = "failed"
-	PaymentStatusCancelled PaymentStatus = "cancelled"
+	PaymentStatusDone    PaymentStatus = "done"
+	PaymentStatusPending PaymentStatus = "pending"
+	PaymentStatusFailed  PaymentStatus = "failed"
 )
+
+// IsValid reports whether the payment status is a recognized value.
+func (p PaymentStatus) IsValid() bool {
+	switch p {
+	case PaymentStatusDone, PaymentStatusPending, PaymentStatusFailed:
+		return true
+	}
+	return false
+}
+
+type OrderStatus string
+
+const (
+	OrderStatusPending       OrderStatus = "pending"
+	OrderStatusConfirmed     OrderStatus = "confirmed"
+	OrderStatusCancelled     OrderStatus = "cancelled"
+	OrderStatusCancelRequest OrderStatus = "cancel_request"
+)
+
+// IsValid reports whether the order status is a recognized value.
+func (s OrderStatus) IsValid() bool {
+	switch s {
+	case OrderStatusPending, OrderStatusConfirmed, OrderStatusCancelled, OrderStatusCancelRequest:
+		return true
+	}
+	return false
+}
 
 type PickupGroup struct {
 	ID              string
@@ -69,6 +95,7 @@ type PickupOrder struct {
 	UserID        string
 	BookerName    string
 	BookerPhone   string
+	Status        OrderStatus
 	PaymentStatus PaymentStatus
 	CreatedAt     time.Time
 	UpdatedAt     time.Time
@@ -78,8 +105,11 @@ type GroupFilter struct {
 	Status     string
 	SkillLevel string
 	HostID     string
-	Page       int
-	PageSize   int
-	SortBy     string
-	SortOrder  string
+	// BookableOnly limits results to groups that can still be enrolled into:
+	// status=active, enable=true, not yet ended, and not fully booked.
+	BookableOnly bool
+	Page         int
+	PageSize     int
+	SortBy       string
+	SortOrder    string
 }

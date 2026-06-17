@@ -27,4 +27,13 @@ func RegisterRoutes(g *gin.RouterGroup, h *UserHandler, authMiddleware, adminMid
 		usersGroup.PUT("/:id/avatar", h.UploadAvatar)    // Upload avatar
 		usersGroup.DELETE("/:id/avatar", h.RemoveAvatar) // Remove avatar
 	}
+
+	// === Pickup Host Role Management (System Admin Only) ===
+	pickupHostsGroup := g.Group("/pickup-hosts")
+	pickupHostsGroup.Use(authMiddleware, adminMiddleware)
+	{
+		pickupHostsGroup.GET("", h.ListPickupHosts)         // List pickup hosts
+		pickupHostsGroup.POST("", h.AddPickupHost)          // Grant pickup host role
+		pickupHostsGroup.DELETE("/:id", h.RemovePickupHost) // Revoke pickup host role
+	}
 }

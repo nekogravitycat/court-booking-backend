@@ -20,7 +20,10 @@ BookingResponse:
       format: date-time
     status:
       type: string
-      enum: [pending, confirmed, cancelled]
+      enum: [pending, confirmed, cancelled, cancel_request]
+    payment_status:
+      type: string
+      enum: [done, pending, failed]
     created_at:
       type: string
       format: date-time
@@ -36,6 +39,7 @@ BookingResponse:
     - start_time
     - end_time
     - status
+    - payment_status
 
 CreateBookingRequest:
   type: object
@@ -65,4 +69,9 @@ UpdateBookingRequest:
       format: date-time
     status:
       type: string
-      enum: [pending, confirmed, cancelled]
+      enum: [pending, confirmed, cancelled, cancel_request]
+      description: "報名者本人僅能設為 cancelled 或 cancel_request"
+    payment_status:
+      type: string
+      enum: [done, pending, failed]
+      description: "僅管理員 (系統管理員 / 組織管理員) 可變更"

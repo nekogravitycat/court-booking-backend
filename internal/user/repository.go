@@ -24,6 +24,12 @@ type Repository interface {
 	List(ctx context.Context, filter UserFilter) ([]*User, int, error)
 	Update(ctx context.Context, u *User) error
 	Delete(ctx context.Context, id string) error
+
+	// Pickup host role management
+	IsPickupHost(ctx context.Context, userID string) (bool, error)
+	AddPickupHost(ctx context.Context, userID string) error
+	RemovePickupHost(ctx context.Context, userID string) error
+	ListPickupHosts(ctx context.Context, filter UserFilter) ([]*User, int, error)
 }
 
 type pgxUserRepository struct {
@@ -42,6 +48,7 @@ func (r *pgxUserRepository) GetByEmail(ctx context.Context, email string) (*User
 	query, args, err := psql.Select(
 		"u.id", "u.email", "u.password_hash", "u.display_name", "u.phone", "u.avatar", "u.created_at",
 		"u.last_login_at", "u.is_active", "u.is_system_admin",
+		"EXISTS(SELECT 1 FROM public.pickup_hosts ph WHERE ph.user_id = u.id) AS is_pickup_host",
 		`COALESCE(
 				(
 					SELECT json_agg(json_build_object(
@@ -82,6 +89,7 @@ func (r *pgxUserRepository) GetByEmail(ctx context.Context, email string) (*User
 		&u.LastLoginAt,
 		&u.IsActive,
 		&u.IsSystemAdmin,
+		&u.IsPickupHost,
 		&orgsJSON, // Scan JSON for organizations
 	); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -105,6 +113,7 @@ func (r *pgxUserRepository) GetByID(ctx context.Context, id string) (*User, erro
 	query, args, err := psql.Select(
 		"u.id", "u.email", "u.password_hash", "u.display_name", "u.phone", "u.avatar", "u.created_at",
 		"u.last_login_at", "u.is_active", "u.is_system_admin",
+		"EXISTS(SELECT 1 FROM public.pickup_hosts ph WHERE ph.user_id = u.id) AS is_pickup_host",
 		`COALESCE(
 				(
 					SELECT json_agg(json_build_object(
@@ -145,6 +154,7 @@ func (r *pgxUserRepository) GetByID(ctx context.Context, id string) (*User, erro
 		&u.LastLoginAt,
 		&u.IsActive,
 		&u.IsSystemAdmin,
+		&u.IsPickupHost,
 		&orgsJSON, // Scan JSON for organizations
 	); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -212,6 +222,7 @@ func (r *pgxUserRepository) List(ctx context.Context, filter UserFilter) ([]*Use
 	queryBuilder := psql.Select(
 		"u.id", "u.email", "u.password_hash", "u.display_name", "u.phone", "u.avatar", "u.created_at",
 		"u.last_login_at", "u.is_active", "u.is_system_admin",
+		"EXISTS(SELECT 1 FROM public.pickup_hosts ph WHERE ph.user_id = u.id) AS is_pickup_host",
 		"count(*) OVER() AS total_count",
 		`COALESCE(
 				(
@@ -243,6 +254,9 @@ func (r *pgxUserRepository) List(ctx context.Context, filter UserFilter) ([]*Use
 	}
 	if filter.IsActive != nil {
 		queryBuilder = queryBuilder.Where(squirrel.Eq{"is_active": *filter.IsActive})
+	}
+	if filter.PickupHostsOnly {
+		queryBuilder = queryBuilder.Where("EXISTS(SELECT 1 FROM public.pickup_hosts ph2 WHERE ph2.user_id = u.id)")
 	}
 
 	// Sorting
@@ -298,6 +312,7 @@ func (r *pgxUserRepository) List(ctx context.Context, filter UserFilter) ([]*Use
 			&u.LastLoginAt,
 			&u.IsActive,
 			&u.IsSystemAdmin,
+			&u.IsPickupHost,
 			&total,    // Scan the window function result
 			&orgsJSON, // Scan the JSON result for organizations
 		); err != nil {
@@ -344,6 +359,57 @@ func (r *pgxUserRepository) Update(ctx context.Context, u *User) error {
 	}
 
 	return nil
+}
+
+func (r *pgxUserRepository) IsPickupHost(ctx context.Context, userID string) (bool, error) {
+	var exists bool
+	err := r.pool.QueryRow(ctx,
+		"SELECT EXISTS(SELECT 1 FROM public.pickup_hosts WHERE user_id = $1)",
+		userID,
+	).Scan(&exists)
+	if err != nil {
+		return false, fmt.Errorf("check pickup host failed: %w", err)
+	}
+	return exists, nil
+}
+
+func (r *pgxUserRepository) AddPickupHost(ctx context.Context, userID string) error {
+	_, err := r.pool.Exec(ctx,
+		"INSERT INTO public.pickup_hosts (user_id) VALUES ($1)",
+		userID,
+	)
+	if err != nil {
+		var e *pgconn.PgError
+		if errors.As(err, &e) {
+			switch e.Code {
+			case pgerrcode.UniqueViolation:
+				return ErrAlreadyPickupHost
+			case pgerrcode.ForeignKeyViolation:
+				return ErrNotFound
+			}
+		}
+		return fmt.Errorf("add pickup host failed: %w", err)
+	}
+	return nil
+}
+
+func (r *pgxUserRepository) RemovePickupHost(ctx context.Context, userID string) error {
+	ct, err := r.pool.Exec(ctx,
+		"DELETE FROM public.pickup_hosts WHERE user_id = $1",
+		userID,
+	)
+	if err != nil {
+		return fmt.Errorf("remove pickup host failed: %w", err)
+	}
+	if ct.RowsAffected() == 0 {
+		return ErrNotPickupHost
+	}
+	return nil
+}
+
+func (r *pgxUserRepository) ListPickupHosts(ctx context.Context, filter UserFilter) ([]*User, int, error) {
+	filter.PickupHostsOnly = true
+	return r.List(ctx, filter)
 }
 
 func (r *pgxUserRepository) Delete(ctx context.Context, id string) error {

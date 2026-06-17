@@ -36,6 +36,7 @@ type UserResponse struct {
 	LastLoginAt     *time.Time                  `json:"last_login_at"`
 	IsActive        bool                        `json:"is_active"`
 	IsSystemAdmin   bool                        `json:"is_system_admin"`
+	IsPickupHost    bool                        `json:"is_pickup_host"`
 	Organizations   []orgHttp.OrganizationBrief `json:"organizations"`
 }
 
@@ -91,6 +92,7 @@ func NewUserResponse(u *user.User) UserResponse {
 		LastLoginAt:     lastLoginAt,
 		IsActive:        u.IsActive,
 		IsSystemAdmin:   u.IsSystemAdmin,
+		IsPickupHost:    u.IsPickupHost,
 		Organizations:   orgs,
 	}
 }
@@ -130,6 +132,11 @@ type UpdateUserRequest struct {
 // Validate performs custom validation for UpdateUserRequest.
 func (r *UpdateUserRequest) Validate() error {
 	return nil
+}
+
+// AddPickupHostRequest defines the payload for granting the pickup host role.
+type AddPickupHostRequest struct {
+	UserID string `json:"user_id" binding:"required,uuid"`
 }
 
 // LoginResponse returns the token and user info.

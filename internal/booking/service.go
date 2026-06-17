@@ -25,9 +25,10 @@ type CreateRequest struct {
 }
 
 type UpdateRequest struct {
-	StartTime *time.Time
-	EndTime   *time.Time
-	Status    *string
+	StartTime     *time.Time
+	EndTime       *time.Time
+	Status        *string
+	PaymentStatus *string
 }
 
 type Service interface {
@@ -189,18 +190,30 @@ func (s *service) Update(ctx context.Context, id string, req UpdateRequest, upda
 
 	if req.Status != nil {
 		st := Status(*req.Status)
-		if st != StatusPending && st != StatusConfirmed && st != StatusCancelled {
+		if !st.IsValid() {
 			return nil, ErrInvalidStatus
 		}
 
-		// Business Logic: Normal User (Booking Owner) can ONLY Cancel
-		// SysAdmin or OrgManager can do anything
+		// Business Logic: Normal User (Booking Owner) can only cancel or
+		// request cancellation. SysAdmin or OrgManager can do anything.
 		if isBookingOwner && !isSysAdmin && !isOrgMgr {
-			if st != StatusCancelled {
+			if st != StatusCancelled && st != StatusCancelRequest {
 				return nil, ErrPermissionDenied
 			}
 		}
 		b.Status = st
+	}
+
+	if req.PaymentStatus != nil {
+		// Payment status is manager-only (SysAdmin or OrgManager).
+		if !isSysAdmin && !isOrgMgr {
+			return nil, ErrPermissionDenied
+		}
+		ps := PaymentStatus(*req.PaymentStatus)
+		if !ps.IsValid() {
+			return nil, ErrInvalidStatus
+		}
+		b.PaymentStatus = ps
 	}
 
 	if err := s.repo.Update(ctx, b); err != nil {

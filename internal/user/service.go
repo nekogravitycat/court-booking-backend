@@ -30,22 +30,39 @@ type Service interface {
 	UpdateAvatar(ctx context.Context, id string, fileID string) error
 	RemoveAvatar(ctx context.Context, id string) error
 	Delete(ctx context.Context, id string) error
+
+	// Pickup host role management
+	IsPickupHost(ctx context.Context, userID string) (bool, error)
+	AddPickupHost(ctx context.Context, userID string) error
+	RemovePickupHost(ctx context.Context, userID string) error
+	ListPickupHosts(ctx context.Context, filter UserFilter) ([]*User, int, error)
+}
+
+// HostFavoriteCleaner removes favorite entries that point to a given host.
+// It is implemented by the favorite repository and injected to keep the user
+// module decoupled from the favorite module (avoids an import cycle).
+type HostFavoriteCleaner interface {
+	DeleteFavoritesByHostID(ctx context.Context, hostID string) error
 }
 
 type service struct {
-	repo        Repository
-	hasher      auth.PasswordHasher
-	fileService file.Service
+	repo            Repository
+	hasher          auth.PasswordHasher
+	fileService     file.Service
+	favoriteCleaner HostFavoriteCleaner
 
 	minPasswordLength int
 }
 
 // NewService creates a new user Service.
-func NewService(repo Repository, hasher auth.PasswordHasher, fileService file.Service) Service {
+// favoriteCleaner may be nil (e.g. in tests that don't exercise favorites);
+// account deletion simply skips favorite cleanup in that case.
+func NewService(repo Repository, hasher auth.PasswordHasher, fileService file.Service, favoriteCleaner HostFavoriteCleaner) Service {
 	return &service{
 		repo:              repo,
 		hasher:            hasher,
 		fileService:       fileService,
+		favoriteCleaner:   favoriteCleaner,
 		minPasswordLength: 8,
 	}
 }
@@ -192,7 +209,43 @@ func (s *service) Delete(ctx context.Context, id string) error {
 		_ = s.fileService.Delete(ctx, *u.Avatar)
 	}
 
+	// Remove this user from everyone else's favorites. Account deletion is a
+	// soft delete (is_active=false), so the favorite_hosts FK cascade does not
+	// fire; we clean up explicitly to satisfy the favorites requirement.
+	if s.favoriteCleaner != nil {
+		if err := s.favoriteCleaner.DeleteFavoritesByHostID(ctx, id); err != nil {
+			return err
+		}
+	}
+
 	return s.repo.Delete(ctx, id)
+}
+
+// ------------------------
+//   Pickup host role
+// ------------------------
+
+func (s *service) IsPickupHost(ctx context.Context, userID string) (bool, error) {
+	if userID == "" {
+		return false, nil
+	}
+	return s.repo.IsPickupHost(ctx, userID)
+}
+
+func (s *service) AddPickupHost(ctx context.Context, userID string) error {
+	// Verify the user exists first to return a clean 404.
+	if _, err := s.repo.GetByID(ctx, userID); err != nil {
+		return err
+	}
+	return s.repo.AddPickupHost(ctx, userID)
+}
+
+func (s *service) RemovePickupHost(ctx context.Context, userID string) error {
+	return s.repo.RemovePickupHost(ctx, userID)
+}
+
+func (s *service) ListPickupHosts(ctx context.Context, filter UserFilter) ([]*User, int, error) {
+	return s.repo.ListPickupHosts(ctx, filter)
 }
 
 func (s *service) UpdateAvatar(ctx context.Context, id string, fileID string) error {

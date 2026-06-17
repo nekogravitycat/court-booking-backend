@@ -20,6 +20,7 @@ func TestPickupGroupCRUD(t *testing.T) {
 	clearTables()
 
 	host := createTestUser(t, "host@pickup.com", "pass", false)
+	grantPickupHost(t, host.ID)
 	regularUser := createTestUser(t, "user@pickup.com", "pass", false)
 
 	hostToken := generateToken(host.ID)
@@ -122,6 +123,7 @@ func TestPickupOrderAndCapacity(t *testing.T) {
 	clearTables()
 
 	host := createTestUser(t, "host2@pickup.com", "pass", false)
+	grantPickupHost(t, host.ID)
 	user1 := createTestUser(t, "u1@pickup.com", "pass", false)
 	user2 := createTestUser(t, "u2@pickup.com", "pass", false)
 	user3 := createTestUser(t, "u3@pickup.com", "pass", false) // for overbooking test
@@ -188,21 +190,23 @@ func TestPickupOrderAndCapacity(t *testing.T) {
 
 	t.Run("Update Order: Success by Host", func(t *testing.T) {
 		path := fmt.Sprintf("/v1/pickup-orders/%s", order1ID)
+		paymentStatus := "done"
 		payload := pickupHttp.UpdateOrderBody{
-			PaymentStatus: "paid",
+			PaymentStatus: &paymentStatus,
 		}
 		w := executeRequest("PATCH", path, payload, hostToken)
 		assert.Equal(t, http.StatusOK, w.Code)
 
 		var resp pickupHttp.PickupOrderResponse
 		json.Unmarshal(w.Body.Bytes(), &resp)
-		assert.Equal(t, "paid", resp.PaymentStatus)
+		assert.Equal(t, "done", resp.PaymentStatus)
 	})
 
 	t.Run("Update Order: Permission Denied", func(t *testing.T) {
 		path := fmt.Sprintf("/v1/pickup-orders/%s", order1ID)
+		status := "cancelled"
 		payload := pickupHttp.UpdateOrderBody{
-			PaymentStatus: "cancelled",
+			Status: &status,
 		}
 		w := executeRequest("PATCH", path, payload, user3Token) // User3 is not host and not booker
 		assert.Equal(t, http.StatusForbidden, w.Code)
@@ -210,8 +214,9 @@ func TestPickupOrderAndCapacity(t *testing.T) {
 
 	t.Run("Update Order: Success by Booker & Capacity Freed", func(t *testing.T) {
 		path := fmt.Sprintf("/v1/pickup-orders/%s", order1ID)
+		status := "cancelled"
 		payload := pickupHttp.UpdateOrderBody{
-			PaymentStatus: "cancelled",
+			Status: &status,
 		}
 		w := executeRequest("PATCH", path, payload, user1Token) // User1 cancels their own order
 		assert.Equal(t, http.StatusOK, w.Code)
@@ -239,6 +244,7 @@ func TestPickupOrdersList(t *testing.T) {
 	clearTables()
 
 	host := createTestUser(t, "host_list@pickup.com", "pass", false)
+	grantPickupHost(t, host.ID)
 	user1 := createTestUser(t, "user1_list@pickup.com", "pass", false)
 	user2 := createTestUser(t, "user2_list@pickup.com", "pass", false)
 
@@ -322,6 +328,7 @@ func TestPickupGroupAdminActions(t *testing.T) {
 
 	admin := createTestUser(t, "admin@pickup.com", "pass", true)
 	host := createTestUser(t, "host_admin@pickup.com", "pass", false)
+	grantPickupHost(t, host.ID)
 	regularUser := createTestUser(t, "user_admin@pickup.com", "pass", false)
 
 	adminToken := generateToken(admin.ID)
@@ -360,13 +367,29 @@ func TestPickupGroupAdminActions(t *testing.T) {
 		assert.Equal(t, newTitle, resp.Title)
 	})
 
-	t.Run("PATCH: Forbidden by Host", func(t *testing.T) {
-		newTitle := "Host Trying to Update"
+	t.Run("PATCH: Success by Host (own group)", func(t *testing.T) {
+		newTitle := "Host Updated Own Group"
 		patchPayload := pickupHttp.UpdateGroupBody{
 			Title: &newTitle,
 		}
 		path := fmt.Sprintf("/v1/pickup-groups/%s", groupID)
 		w := executeRequest("PATCH", path, patchPayload, hostToken)
+		assert.Equal(t, http.StatusOK, w.Code)
+
+		var resp pickupHttp.PickupGroupResponse
+		json.Unmarshal(w.Body.Bytes(), &resp)
+		assert.Equal(t, newTitle, resp.Title)
+	})
+
+	t.Run("PATCH: Forbidden by Non-Host Pickup User", func(t *testing.T) {
+		// A pickup host who does not own the group cannot update it.
+		grantPickupHost(t, regularUser.ID)
+		newTitle := "Stranger Trying to Update"
+		patchPayload := pickupHttp.UpdateGroupBody{
+			Title: &newTitle,
+		}
+		path := fmt.Sprintf("/v1/pickup-groups/%s", groupID)
+		w := executeRequest("PATCH", path, patchPayload, regularUserToken)
 		assert.Equal(t, http.StatusForbidden, w.Code)
 	})
 

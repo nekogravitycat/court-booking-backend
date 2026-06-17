@@ -58,7 +58,7 @@ func (r *pgxRepository) GetGroupByID(ctx context.Context, id string) (*PickupGro
 		"pg.id", "pg.host_id", "pg.title", "pg.host_name", "pg.host_phone",
 		"pg.start_time", "pg.end_time", "pg.fee", "pg.capacity", "pg.location_id",
 		"pg.skill_level", "pg.status", "pg.enable", "pg.created_at", "pg.updated_at",
-		"COALESCE(COUNT(po.id) FILTER (WHERE po.payment_status IN ('pending', 'paid')), 0) AS current_enrolled",
+		"COALESCE(COUNT(po.id) FILTER (WHERE po.status NOT IN ('cancelled', 'cancel_request')), 0) AS current_enrolled",
 	).
 		From("public.pickup_groups pg").
 		LeftJoin("public.pickup_orders po ON pg.id = po.pickup_group_id").
@@ -90,7 +90,7 @@ func (r *pgxRepository) ListGroups(ctx context.Context, filter GroupFilter) ([]*
 		"pg.id", "pg.host_id", "pg.title", "pg.host_name", "pg.host_phone",
 		"pg.start_time", "pg.end_time", "pg.fee", "pg.capacity", "pg.location_id",
 		"pg.skill_level", "pg.status", "pg.enable", "pg.created_at", "pg.updated_at",
-		"COALESCE(COUNT(po.id) FILTER (WHERE po.payment_status IN ('pending', 'paid')), 0) AS current_enrolled",
+		"COALESCE(COUNT(po.id) FILTER (WHERE po.status NOT IN ('cancelled', 'cancel_request')), 0) AS current_enrolled",
 		"COUNT(*) OVER() AS total_count",
 	).
 		From("public.pickup_groups pg").
@@ -105,6 +105,15 @@ func (r *pgxRepository) ListGroups(ctx context.Context, filter GroupFilter) ([]*
 	}
 	if filter.HostID != "" {
 		query = query.Where(squirrel.Eq{"pg.host_id": filter.HostID})
+	}
+	if filter.BookableOnly {
+		// Only groups that can still be enrolled into: active, enabled, not yet
+		// ended, and not fully booked.
+		query = query.
+			Where(squirrel.Eq{"pg.status": string(GroupStatusActive)}).
+			Where(squirrel.Eq{"pg.enable": true}).
+			Where("pg.end_time > now()").
+			Having("COUNT(po.id) FILTER (WHERE po.status NOT IN ('cancelled', 'cancel_request')) < pg.capacity")
 	}
 
 	orderBy := "pg.start_time"
@@ -237,7 +246,7 @@ func (r *pgxRepository) CreateOrder(ctx context.Context, order *PickupOrder) err
 	// Count active enrollments within the same transaction (reads the locked snapshot).
 	var currentEnrolled int
 	if err := tx.QueryRow(ctx,
-		"SELECT COUNT(*) FROM public.pickup_orders WHERE pickup_group_id = $1 AND payment_status IN ('pending', 'paid')",
+		"SELECT COUNT(*) FROM public.pickup_orders WHERE pickup_group_id = $1 AND status NOT IN ('cancelled', 'cancel_request')",
 		order.PickupGroupID,
 	).Scan(&currentEnrolled); err != nil {
 		return fmt.Errorf("count enrollments failed: %w", err)
@@ -249,8 +258,8 @@ func (r *pgxRepository) CreateOrder(ctx context.Context, order *PickupOrder) err
 
 	psql := squirrel.StatementBuilder.PlaceholderFormat(squirrel.Dollar)
 	q, args, err := psql.Insert("public.pickup_orders").
-		Columns("pickup_group_id", "user_id", "booker_name", "booker_phone", "payment_status").
-		Values(order.PickupGroupID, order.UserID, order.BookerName, order.BookerPhone, order.PaymentStatus).
+		Columns("pickup_group_id", "user_id", "booker_name", "booker_phone", "status", "payment_status").
+		Values(order.PickupGroupID, order.UserID, order.BookerName, order.BookerPhone, order.Status, order.PaymentStatus).
 		Suffix("RETURNING id, created_at, updated_at").
 		ToSql()
 	if err != nil {
@@ -272,7 +281,7 @@ func (r *pgxRepository) GetOrderByID(ctx context.Context, id string) (*PickupOrd
 	psql := squirrel.StatementBuilder.PlaceholderFormat(squirrel.Dollar)
 	query, args, err := psql.Select(
 		"id", "pickup_group_id", "user_id", "booker_name", "booker_phone",
-		"payment_status", "created_at", "updated_at",
+		"status", "payment_status", "created_at", "updated_at",
 	).
 		From("public.pickup_orders").
 		Where(squirrel.Eq{"id": id}).
@@ -284,7 +293,7 @@ func (r *pgxRepository) GetOrderByID(ctx context.Context, id string) (*PickupOrd
 	var o PickupOrder
 	if err := r.pool.QueryRow(ctx, query, args...).Scan(
 		&o.ID, &o.PickupGroupID, &o.UserID, &o.BookerName, &o.BookerPhone,
-		&o.PaymentStatus, &o.CreatedAt, &o.UpdatedAt,
+		&o.Status, &o.PaymentStatus, &o.CreatedAt, &o.UpdatedAt,
 	); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, ErrOrderNotFound
@@ -298,7 +307,7 @@ func (r *pgxRepository) GetOrdersByGroupID(ctx context.Context, groupID string) 
 	psql := squirrel.StatementBuilder.PlaceholderFormat(squirrel.Dollar)
 	query, args, err := psql.Select(
 		"id", "pickup_group_id", "user_id", "booker_name", "booker_phone",
-		"payment_status", "created_at", "updated_at",
+		"status", "payment_status", "created_at", "updated_at",
 	).
 		From("public.pickup_orders").
 		Where(squirrel.Eq{"pickup_group_id": groupID}).
@@ -319,7 +328,7 @@ func (r *pgxRepository) GetOrdersByGroupID(ctx context.Context, groupID string) 
 		var o PickupOrder
 		if err := rows.Scan(
 			&o.ID, &o.PickupGroupID, &o.UserID, &o.BookerName, &o.BookerPhone,
-			&o.PaymentStatus, &o.CreatedAt, &o.UpdatedAt,
+			&o.Status, &o.PaymentStatus, &o.CreatedAt, &o.UpdatedAt,
 		); err != nil {
 			return nil, fmt.Errorf("scan pickup order failed: %w", err)
 		}
@@ -332,7 +341,7 @@ func (r *pgxRepository) GetOrdersByUserID(ctx context.Context, userID string) ([
 	psql := squirrel.StatementBuilder.PlaceholderFormat(squirrel.Dollar)
 	query, args, err := psql.Select(
 		"id", "pickup_group_id", "user_id", "booker_name", "booker_phone",
-		"payment_status", "created_at", "updated_at",
+		"status", "payment_status", "created_at", "updated_at",
 	).
 		From("public.pickup_orders").
 		Where(squirrel.Eq{"user_id": userID}).
@@ -353,7 +362,7 @@ func (r *pgxRepository) GetOrdersByUserID(ctx context.Context, userID string) ([
 		var o PickupOrder
 		if err := rows.Scan(
 			&o.ID, &o.PickupGroupID, &o.UserID, &o.BookerName, &o.BookerPhone,
-			&o.PaymentStatus, &o.CreatedAt, &o.UpdatedAt,
+			&o.Status, &o.PaymentStatus, &o.CreatedAt, &o.UpdatedAt,
 		); err != nil {
 			return nil, fmt.Errorf("scan pickup order failed: %w", err)
 		}
@@ -365,6 +374,7 @@ func (r *pgxRepository) GetOrdersByUserID(ctx context.Context, userID string) ([
 func (r *pgxRepository) UpdateOrder(ctx context.Context, o *PickupOrder) error {
 	psql := squirrel.StatementBuilder.PlaceholderFormat(squirrel.Dollar)
 	query, args, err := psql.Update("public.pickup_orders").
+		Set("status", o.Status).
 		Set("payment_status", o.PaymentStatus).
 		Set("updated_at", squirrel.Expr("now()")).
 		Where(squirrel.Eq{"id": o.ID}).

@@ -11,6 +11,8 @@ import (
 	"github.com/nekogravitycat/court-booking-backend/internal/auth"
 	"github.com/nekogravitycat/court-booking-backend/internal/booking"
 	bookingHttp "github.com/nekogravitycat/court-booking-backend/internal/booking/http"
+	"github.com/nekogravitycat/court-booking-backend/internal/favorite"
+	favoriteHttp "github.com/nekogravitycat/court-booking-backend/internal/favorite/http"
 	"github.com/nekogravitycat/court-booking-backend/internal/file"
 	fileHttp "github.com/nekogravitycat/court-booking-backend/internal/file/http"
 	"github.com/nekogravitycat/court-booking-backend/internal/location"
@@ -27,17 +29,18 @@ import (
 
 // Config holds all dependencies required to initialize the router.
 type Config struct {
-	IsProduction   bool
-	ProdOrigins    string
-	UserService    user.Service
-	OrgService     organization.Service
-	LocService     location.Service
-	ResService     resource.Service
-	BookingService booking.Service
-	AnnService     announcement.Service
-	PickupService  pickup.Service
-	FileService    file.Service
-	JWTManager     *auth.JWTManager
+	IsProduction    bool
+	ProdOrigins     string
+	UserService     user.Service
+	OrgService      organization.Service
+	LocService      location.Service
+	ResService      resource.Service
+	BookingService  booking.Service
+	AnnService      announcement.Service
+	PickupService   pickup.Service
+	FavoriteService favorite.Service
+	FileService     file.Service
+	JWTManager      *auth.JWTManager
 }
 
 // NewRouter initializes the HTTP router engine using the provided config.
@@ -88,6 +91,7 @@ func NewRouter(cfg Config) *gin.Engine {
 	bookingHandler := bookingHttp.NewHandler(cfg.BookingService, cfg.UserService, cfg.ResService, cfg.LocService, cfg.OrgService)
 	annHandler := annHttp.NewHandler(cfg.AnnService)
 	pickupHandler := pickupHttp.NewHandler(cfg.PickupService, cfg.UserService)
+	favoriteHandler := favoriteHttp.NewHandler(cfg.FavoriteService)
 
 	// Register Routes
 	v1 := r.Group("/v1")
@@ -100,6 +104,7 @@ func NewRouter(cfg Config) *gin.Engine {
 		bookingHttp.RegisterRoutes(v1, bookingHandler, authMiddleware)
 		annHttp.RegisterRoutes(v1, annHandler, authMiddleware, sysAdminMiddleware)
 		pickupHttp.RegisterRoutes(v1, pickupHandler, authMiddleware)
+		favoriteHttp.RegisterRoutes(v1, favoriteHandler, authMiddleware)
 	}
 
 	return r

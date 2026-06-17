@@ -2,30 +2,47 @@ pickupGroups:
   get:
     tags:
       - Pickup Groups
-    summary: "取得臨打團列表"
+    summary: "取得可預約的臨打團列表 (公開)"
     description: |
-      取得臨打團列表。清單回傳時包含 current_enrolled (目前有效報名人數)。
-      
+      取得目前可進行預約的臨打團清單（status=active、enable=true、尚未結束且未額滿）。
+      回傳精簡欄位：主辦人暱稱、位置、球團名稱與程度。
+
       **權限 Access Control**:
-      - **Login Required**: 任何已登入的使用者皆可存取。
-    security:
-      - bearerAuth: []
+      - **Public**: 無需登入即可存取。
+    security: []
+    parameters:
+      - name: skill_level
+        in: query
+        required: false
+        schema:
+          type: string
+          enum: [A, B, C, D]
+      - name: page
+        in: query
+        required: false
+        schema:
+          type: integer
+      - name: page_size
+        in: query
+        required: false
+        schema:
+          type: integer
     responses:
       "200":
         description: Success
         content:
           application/json:
             schema:
-              $ref: "../components/schemas/pickup.yml#/PickupGroupPageResponse"
+              $ref: "../components/schemas/pickup.yml#/PickupGroupBriefPageResponse"
   post:
     tags:
       - Pickup Groups
-    summary: "建立新的臨打團"
+    summary: "建立新的臨打團 (僅限球團主辦人)"
     description: |
       建立新的臨打團。host_id 直接由 JWT Token 解析得出。
-      
+
       **權限 Access Control**:
-      - **Login Required**: 任何已登入的使用者皆可存取。
+      - **Pickup Host Required**: 僅具有 pickup host 身分 (或系統管理員) 的使用者可建立。
     security:
       - bearerAuth: []
     requestBody:
@@ -71,12 +88,13 @@ pickupGroupDetail:
   patch:
     tags:
       - Pickup Groups
-    summary: "更新臨打團資訊 (僅限系統管理員)"
+    summary: "更新臨打團資訊 (主辦人本人或系統管理員)"
     description: |
-      更新臨打團資訊。
-      
+      更新臨打團資訊（含變更臨打團狀態）。
+
       **權限 Access Control**:
-      - **System Admin Required**: 僅系統管理員身分的使用者可存取。
+      - **Pickup Host (own group)**: 球團主辦人可更新自己主辦的臨打團。
+      - **System Admin**: 系統管理員可更新任意臨打團。
     security:
       - bearerAuth: []
     parameters:
@@ -133,10 +151,10 @@ pickupGroupOrders:
       - Pickup Orders
     summary: "取得該臨打團的所有訂單"
     description: |
-      列出該 pickup-group 的所有訂單。
-      
+      列出該 pickup-group 的所有訂單（審核報名成員用途）。
+
       **權限 Access Control**:
-      - **Login Required**: 僅該 pickup-group 擁有者能查看。
+      - **Login Required**: 僅該 pickup-group 主辦人或系統管理員能查看。
     security:
       - bearerAuth: []
     parameters:
@@ -195,10 +213,12 @@ pickupOrderDetail:
       - Pickup Orders
     summary: "更新訂單狀態"
     description: |
-      當狀態更新為 Failed 或 Cancelled 時，該訂單不再計入 current_enrolled，達成自動釋放名額之效果。
-      
+      拆分為 status (報名生命週期) 與 payment_status (付款狀態)。
+      當 status 為 cancelled 或 cancel_request 時，該訂單不再計入 current_enrolled，達成自動釋放名額之效果。
+
       **權限 Access Control**:
-      - **Login Required**: 只有 order owner 或 group host 可以更新狀態。
+      - **Booker (本人)**: 只能將自己的訂單 status 改為 cancelled 或 cancel_request，且不可變更 payment_status。
+      - **Group Host / System Admin**: 可設定任意 status 與 payment_status（審核用途）。
     security:
       - bearerAuth: []
     parameters:
@@ -221,6 +241,55 @@ pickupOrderDetail:
           application/json:
             schema:
               $ref: "../components/schemas/pickup.yml#/PickupOrderResponse"
+
+hostPickupGroups:
+  get:
+    tags:
+      - Pickup Groups
+    summary: "取得特定主辦人舉辦的臨打團 (公開)"
+    description: |
+      取得指定主辦人所舉辦的臨打團清單。回傳精簡欄位 (同 GET /pickup-groups)，
+      不含主辦人電話。
+
+      **權限 Access Control**:
+      - **Public**: 無需登入即可存取。
+    security: []
+    parameters:
+      - name: host_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: status
+        in: query
+        required: false
+        schema:
+          type: string
+          enum: [active, cancelled, completed]
+      - name: skill_level
+        in: query
+        required: false
+        schema:
+          type: string
+          enum: [A, B, C, D]
+      - name: page
+        in: query
+        required: false
+        schema:
+          type: integer
+      - name: page_size
+        in: query
+        required: false
+        schema:
+          type: integer
+    responses:
+      "200":
+        description: Success
+        content:
+          application/json:
+            schema:
+              $ref: "../components/schemas/pickup.yml#/PickupGroupBriefPageResponse"
 
 pickupOrders:
   get:

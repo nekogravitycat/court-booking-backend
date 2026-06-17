@@ -51,7 +51,7 @@ func (r *pgxRepository) GetByID(ctx context.Context, id string) (*Booking, error
 	query, args, err := psql.Select(
 		"b.id", "b.resource_id", "r.name", "b.user_id", "u.display_name",
 		"l.id", "l.name", "o.id", "o.name",
-		"b.start_time", "b.end_time", "b.status", "b.created_at", "b.updated_at",
+		"b.start_time", "b.end_time", "b.status", "b.payment_status", "b.created_at", "b.updated_at",
 	).
 		From("public.bookings b").
 		Join("public.resources r ON b.resource_id = r.id").
@@ -70,7 +70,7 @@ func (r *pgxRepository) GetByID(ctx context.Context, id string) (*Booking, error
 	if err := row.Scan(
 		&b.ID, &b.ResourceID, &b.ResourceName, &b.UserID, &b.UserName,
 		&b.LocationID, &b.LocationName, &b.OrganizationID, &b.OrganizationName,
-		&b.StartTime, &b.EndTime, &b.Status, &b.CreatedAt, &b.UpdatedAt,
+		&b.StartTime, &b.EndTime, &b.Status, &b.PaymentStatus, &b.CreatedAt, &b.UpdatedAt,
 	); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, ErrNotFound
@@ -85,7 +85,7 @@ func (r *pgxRepository) List(ctx context.Context, filter Filter) ([]*Booking, in
 	query := psql.Select(
 		"b.id", "b.resource_id", "r.name", "b.user_id", "u.display_name",
 		"l.id", "l.name", "o.id", "o.name",
-		"b.start_time", "b.end_time", "b.status", "b.created_at", "b.updated_at",
+		"b.start_time", "b.end_time", "b.status", "b.payment_status", "b.created_at", "b.updated_at",
 		"count(*) OVER() as total_count",
 	).
 		From("public.bookings b").
@@ -157,7 +157,7 @@ func (r *pgxRepository) List(ctx context.Context, filter Filter) ([]*Booking, in
 		if err := rows.Scan(
 			&b.ID, &b.ResourceID, &b.ResourceName, &b.UserID, &b.UserName,
 			&b.LocationID, &b.LocationName, &b.OrganizationID, &b.OrganizationName,
-			&b.StartTime, &b.EndTime, &b.Status, &b.CreatedAt, &b.UpdatedAt, &total,
+			&b.StartTime, &b.EndTime, &b.Status, &b.PaymentStatus, &b.CreatedAt, &b.UpdatedAt, &total,
 		); err != nil {
 			return nil, 0, fmt.Errorf("scan booking failed: %w", err)
 		}
@@ -173,6 +173,7 @@ func (r *pgxRepository) Update(ctx context.Context, b *Booking) error {
 		Set("start_time", b.StartTime).
 		Set("end_time", b.EndTime).
 		Set("status", b.Status).
+		Set("payment_status", b.PaymentStatus).
 		Set("updated_at", squirrel.Expr("now()")).
 		Where(squirrel.Eq{"id": b.ID}).
 		ToSql()

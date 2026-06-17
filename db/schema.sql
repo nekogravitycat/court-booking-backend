@@ -14,7 +14,19 @@ CREATE EXTENSION IF NOT EXISTS "pgcrypto";
 DO $$
 BEGIN
     IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'booking_status') THEN
-        CREATE TYPE booking_status AS ENUM ('pending', 'confirmed', 'cancelled');
+        CREATE TYPE booking_status AS ENUM ('pending', 'confirmed', 'cancelled', 'cancel_request');
+    END IF;
+END
+$$;
+
+-- =========================================================
+-- Enum: booking_payment_status
+-- Purpose: Payment status for a booking
+-- =========================================================
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'booking_payment_status') THEN
+        CREATE TYPE booking_payment_status AS ENUM ('done', 'pending', 'failed');
     END IF;
 END
 $$;
@@ -248,7 +260,8 @@ CREATE TABLE IF NOT EXISTS public.bookings (
   end_time    TIMESTAMPTZ NOT NULL,                            -- End of the reservation period (UTC recommended)
 
   -- Status
-  status      booking_status NOT NULL DEFAULT 'pending',       -- Current state (pending, confirmed, cancelled)
+  status         booking_status NOT NULL DEFAULT 'pending',         -- Lifecycle state (pending, confirmed, cancelled, cancel_request)
+  payment_status booking_payment_status NOT NULL DEFAULT 'pending', -- Payment state (done, pending, failed)
 
   -- Meta / Audit
   created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),              -- Timestamp when the booking was made
@@ -400,7 +413,19 @@ $$;
 DO $$
 BEGIN
     IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'pickup_payment_status') THEN
-        CREATE TYPE pickup_payment_status AS ENUM ('pending', 'paid', 'failed', 'cancelled');
+        CREATE TYPE pickup_payment_status AS ENUM ('done', 'pending', 'failed');
+    END IF;
+END
+$$;
+
+-- =========================================================
+-- Enum: pickup_order_status
+-- Purpose: Lifecycle status for a pickup order (enrollment)
+-- =========================================================
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'pickup_order_status') THEN
+        CREATE TYPE pickup_order_status AS ENUM ('pending', 'confirmed', 'cancelled', 'cancel_request');
     END IF;
 END
 $$;
@@ -468,7 +493,8 @@ CREATE TABLE IF NOT EXISTS public.pickup_orders (
   booker_phone    TEXT NOT NULL,                              -- Snapshot of booker phone at enrollment time
 
   -- Status
-  payment_status  pickup_payment_status NOT NULL DEFAULT 'pending',
+  status          pickup_order_status NOT NULL DEFAULT 'pending',    -- Enrollment lifecycle state
+  payment_status  pickup_payment_status NOT NULL DEFAULT 'pending',  -- Payment state (done, pending, failed)
 
   -- Meta / Audit
   created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
@@ -499,3 +525,53 @@ CREATE INDEX IF NOT EXISTS idx_pickup_orders_group_id
 -- Index: Optimizes finding a user's own pickup orders.
 CREATE INDEX IF NOT EXISTS idx_pickup_orders_user_id
   ON public.pickup_orders (user_id);
+
+-- =========================================================
+-- Table: pickup_hosts
+-- Purpose: Users granted the "pickup host" role. A pickup host can create
+--          pickup groups in the backend, update their own groups (including
+--          status changes) and review enrollments of their own groups.
+--          This is a global role (not scoped to an organization), managed by
+--          System Admins.
+-- =========================================================
+CREATE TABLE IF NOT EXISTS public.pickup_hosts (
+  -- Identity
+  user_id     UUID PRIMARY KEY,                               -- The user granted the pickup host role
+
+  -- Meta / Audit
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),             -- When the role was granted
+
+  -- Constraint: Cascade delete removes the role if the user is deleted.
+  CONSTRAINT pickup_hosts_user_id_fkey
+    FOREIGN KEY (user_id) REFERENCES public.users(id) ON DELETE CASCADE
+);
+
+-- =========================================================
+-- Table: favorite_hosts
+-- Purpose: A user's favorite pickup hosts. The host must be a pickup host.
+--          When a host's account is removed, the cascade keeps everyone's
+--          favorites consistent.
+-- =========================================================
+CREATE TABLE IF NOT EXISTS public.favorite_hosts (
+  -- Relationships (Composite Key)
+  user_id     UUID NOT NULL,                                  -- The user who favorited the host
+  host_id     UUID NOT NULL,                                  -- The favorited pickup host
+
+  -- Meta / Audit
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),             -- When the favorite was added
+
+  -- Composite Primary Key: prevents duplicate favorites for the same host.
+  PRIMARY KEY (user_id, host_id),
+
+  -- Constraint: Cascade delete removes the favorite if the owning user is deleted.
+  CONSTRAINT favorite_hosts_user_id_fkey
+    FOREIGN KEY (user_id) REFERENCES public.users(id) ON DELETE CASCADE,
+
+  -- Constraint: Cascade delete removes the favorite if the host account is deleted.
+  CONSTRAINT favorite_hosts_host_id_fkey
+    FOREIGN KEY (host_id) REFERENCES public.users(id) ON DELETE CASCADE
+);
+
+-- Index: Optimizes listing a host's followers / cleaning up by host.
+CREATE INDEX IF NOT EXISTS idx_favorite_hosts_host_id
+  ON public.favorite_hosts (host_id);

@@ -16,7 +16,7 @@ type ListBookingsRequest struct {
 	request.ListParams
 	ResourceID     string     `form:"resource_id" binding:"omitempty,uuid"`
 	OrganizationID string     `form:"organization_id" binding:"omitempty,uuid"`
-	Status         string     `form:"status" binding:"omitempty,oneof=pending confirmed cancelled"`
+	Status         string     `form:"status" binding:"omitempty,oneof=pending confirmed cancelled cancel_request"`
 	UserID         string     `form:"user_id" binding:"omitempty,uuid"`
 	StartTimeFrom  *time.Time `form:"start_time_from" time_format:"2006-01-02T15:04:05Z07:00"`
 	StartTimeTo    *time.Time `form:"start_time_to" time_format:"2006-01-02T15:04:05Z07:00"`
@@ -34,30 +34,32 @@ func (r *ListBookingsRequest) Validate() error {
 }
 
 type BookingResponse struct {
-	ID           string                  `json:"id"`
-	Resource     resHttp.ResourceTag     `json:"resource"`
-	User         userHttp.UserTag        `json:"user"`
-	Location     locHttp.LocationTag     `json:"location"`
-	Organization orgHttp.OrganizationTag `json:"organization"`
-	StartTime    time.Time               `json:"start_time"`
-	EndTime      time.Time               `json:"end_time"`
-	Status       string                  `json:"status"`
-	CreatedAt    time.Time               `json:"created_at"`
-	UpdatedAt    time.Time               `json:"updated_at"`
+	ID            string                  `json:"id"`
+	Resource      resHttp.ResourceTag     `json:"resource"`
+	User          userHttp.UserTag        `json:"user"`
+	Location      locHttp.LocationTag     `json:"location"`
+	Organization  orgHttp.OrganizationTag `json:"organization"`
+	StartTime     time.Time               `json:"start_time"`
+	EndTime       time.Time               `json:"end_time"`
+	Status        string                  `json:"status"`
+	PaymentStatus string                  `json:"payment_status"`
+	CreatedAt     time.Time               `json:"created_at"`
+	UpdatedAt     time.Time               `json:"updated_at"`
 }
 
 func NewBookingResponse(b *booking.Booking) BookingResponse {
 	return BookingResponse{
-		ID:           b.ID,
-		Resource:     resHttp.ResourceTag{ID: b.ResourceID, Name: b.ResourceName},
-		User:         userHttp.UserTag{ID: b.UserID, Name: b.UserName},
-		Location:     locHttp.LocationTag{ID: b.LocationID, Name: b.LocationName},
-		Organization: orgHttp.OrganizationTag{ID: b.OrganizationID, Name: b.OrganizationName},
-		StartTime:    b.StartTime.UTC(),
-		EndTime:      b.EndTime.UTC(),
-		Status:       string(b.Status),
-		CreatedAt:    b.CreatedAt.UTC(),
-		UpdatedAt:    b.UpdatedAt.UTC(),
+		ID:            b.ID,
+		Resource:      resHttp.ResourceTag{ID: b.ResourceID, Name: b.ResourceName},
+		User:          userHttp.UserTag{ID: b.UserID, Name: b.UserName},
+		Location:      locHttp.LocationTag{ID: b.LocationID, Name: b.LocationName},
+		Organization:  orgHttp.OrganizationTag{ID: b.OrganizationID, Name: b.OrganizationName},
+		StartTime:     b.StartTime.UTC(),
+		EndTime:       b.EndTime.UTC(),
+		Status:        string(b.Status),
+		PaymentStatus: string(b.PaymentStatus),
+		CreatedAt:     b.CreatedAt.UTC(),
+		UpdatedAt:     b.UpdatedAt.UTC(),
 	}
 }
 
@@ -79,9 +81,10 @@ func (r *CreateBookingRequest) Validate() error {
 }
 
 type UpdateBookingRequest struct {
-	StartTime *time.Time `json:"start_time"`
-	EndTime   *time.Time `json:"end_time"`
-	Status    *string    `json:"status" binding:"omitempty,oneof=pending confirmed cancelled"`
+	StartTime     *time.Time `json:"start_time"`
+	EndTime       *time.Time `json:"end_time"`
+	Status        *string    `json:"status" binding:"omitempty,oneof=pending confirmed cancelled cancel_request"`
+	PaymentStatus *string    `json:"payment_status" binding:"omitempty,oneof=done pending failed"`
 }
 
 // Validate performs custom validation for UpdateBookingRequest.

@@ -42,25 +42,29 @@ func (h *Handler) CreateGroup(c *gin.Context) {
 		return
 	}
 
+	// Only pickup hosts (or system admins) may create pickup groups.
+	u, err := h.userService.GetByID(c.Request.Context(), userID)
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+	if !u.IsSystemAdmin && !u.IsPickupHost {
+		c.JSON(http.StatusForbidden, gin.H{"error": "only pickup hosts can create pickup groups"})
+		return
+	}
+
 	hostName := body.HostName
 	hostPhone := body.HostPhone
 
-	if hostName == "" || hostPhone == "" {
-		u, err := h.userService.GetByID(c.Request.Context(), userID)
-		if err != nil {
-			response.Error(c, err)
-			return
+	if hostName == "" {
+		if u.DisplayName != nil {
+			hostName = *u.DisplayName
+		} else {
+			hostName = u.Email
 		}
-		if hostName == "" {
-			if u.DisplayName != nil {
-				hostName = *u.DisplayName
-			} else {
-				hostName = u.Email
-			}
-		}
-		if hostPhone == "" && u.Phone != nil {
-			hostPhone = *u.Phone
-		}
+	}
+	if hostPhone == "" && u.Phone != nil {
+		hostPhone = *u.Phone
 	}
 
 	enable := true
@@ -91,7 +95,50 @@ func (h *Handler) CreateGroup(c *gin.Context) {
 	c.JSON(http.StatusCreated, NewPickupGroupResponse(group, nil))
 }
 
+// ListGroups returns the public, bookable-only list of pickup groups.
+// No authentication is required and only a trimmed set of fields is exposed.
 func (h *Handler) ListGroups(c *gin.Context) {
+	var req ListGroupsRequest
+	if err := c.ShouldBindQuery(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid query parameters", "details": err.Error()})
+		return
+	}
+
+	sortOrder := strings.ToUpper(req.SortOrder)
+
+	filter := pickup.GroupFilter{
+		SkillLevel:   req.SkillLevel,
+		BookableOnly: true,
+		Page:         req.Page,
+		PageSize:     req.PageSize,
+		SortBy:       req.SortBy,
+		SortOrder:    sortOrder,
+	}
+
+	groups, total, err := h.service.ListGroups(c.Request.Context(), filter)
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+
+	items := make([]PickupGroupBrief, len(groups))
+	for i, g := range groups {
+		items[i] = NewPickupGroupBrief(g)
+	}
+
+	c.JSON(http.StatusOK, response.NewPageResponse(items, req.Page, req.PageSize, total))
+}
+
+// ListGroupsByHost returns the (trimmed) list of pickup groups hosted by a
+// specific host. Public, no authentication required. Host phone is never
+// included in the trimmed shape.
+func (h *Handler) ListGroupsByHost(c *gin.Context) {
+	var uri HostGroupsURI
+	if err := c.ShouldBindUri(&uri); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request", "details": err.Error()})
+		return
+	}
+
 	var req ListGroupsRequest
 	if err := c.ShouldBindQuery(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid query parameters", "details": err.Error()})
@@ -103,7 +150,7 @@ func (h *Handler) ListGroups(c *gin.Context) {
 	filter := pickup.GroupFilter{
 		Status:     req.Status,
 		SkillLevel: req.SkillLevel,
-		HostID:     req.HostID,
+		HostID:     uri.HostID,
 		Page:       req.Page,
 		PageSize:   req.PageSize,
 		SortBy:     req.SortBy,
@@ -116,9 +163,9 @@ func (h *Handler) ListGroups(c *gin.Context) {
 		return
 	}
 
-	items := make([]PickupGroupResponse, len(groups))
+	items := make([]PickupGroupBrief, len(groups))
 	for i, g := range groups {
-		items[i] = NewPickupGroupResponse(g, nil)
+		items[i] = NewPickupGroupBrief(g)
 	}
 
 	c.JSON(http.StatusOK, response.NewPageResponse(items, req.Page, req.PageSize, total))
@@ -174,9 +221,18 @@ func (h *Handler) UpdateGroup(c *gin.Context) {
 		return
 	}
 
+	// System admins may update any group; a pickup host may update only their
+	// own groups.
 	if !u.IsSystemAdmin {
-		c.JSON(http.StatusForbidden, gin.H{"error": "only system admin can update pickup groups"})
-		return
+		group, err := h.service.GetGroupByID(c.Request.Context(), uri.ID)
+		if err != nil {
+			response.Error(c, err)
+			return
+		}
+		if !u.IsPickupHost || group.HostID != userID {
+			c.JSON(http.StatusForbidden, gin.H{"error": "only the pickup host or a system admin can update this pickup group"})
+			return
+		}
 	}
 
 	var body UpdateGroupBody
@@ -303,11 +359,22 @@ func (h *Handler) UpdateOrder(c *gin.Context) {
 		return
 	}
 
+	if body.Status == nil && body.PaymentStatus == nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "status or payment_status is required"})
+		return
+	}
+
+	isSysAdmin := false
+	if u, err := h.userService.GetByID(c.Request.Context(), userID); err == nil {
+		isSysAdmin = u.IsSystemAdmin
+	}
+
 	req := pickup.UpdateOrderRequest{
+		Status:        body.Status,
 		PaymentStatus: body.PaymentStatus,
 	}
 
-	order, err := h.service.UpdateOrder(c.Request.Context(), uri.ID, req, userID)
+	order, err := h.service.UpdateOrder(c.Request.Context(), uri.ID, req, userID, isSysAdmin)
 	if err != nil {
 		response.Error(c, err)
 		return
@@ -336,8 +403,11 @@ func (h *Handler) ListGroupOrders(c *gin.Context) {
 	}
 
 	if group.HostID != userID {
-		c.JSON(http.StatusForbidden, gin.H{"error": "only group host can view orders"})
-		return
+		// System admins may also review enrollments.
+		if u, err := h.userService.GetByID(c.Request.Context(), userID); err != nil || !u.IsSystemAdmin {
+			c.JSON(http.StatusForbidden, gin.H{"error": "only group host or system admin can view orders"})
+			return
+		}
 	}
 
 	orders, err := h.service.GetOrdersByGroupID(c.Request.Context(), uri.ID)

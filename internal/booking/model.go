@@ -21,10 +21,37 @@ var (
 type Status string
 
 const (
-	StatusPending   Status = "pending"
-	StatusConfirmed Status = "confirmed"
-	StatusCancelled Status = "cancelled"
+	StatusPending       Status = "pending"
+	StatusConfirmed     Status = "confirmed"
+	StatusCancelled     Status = "cancelled"
+	StatusCancelRequest Status = "cancel_request"
 )
+
+// IsValid reports whether the booking status is a recognized value.
+func (s Status) IsValid() bool {
+	switch s {
+	case StatusPending, StatusConfirmed, StatusCancelled, StatusCancelRequest:
+		return true
+	}
+	return false
+}
+
+type PaymentStatus string
+
+const (
+	PaymentStatusDone    PaymentStatus = "done"
+	PaymentStatusPending PaymentStatus = "pending"
+	PaymentStatusFailed  PaymentStatus = "failed"
+)
+
+// IsValid reports whether the payment status is a recognized value.
+func (p PaymentStatus) IsValid() bool {
+	switch p {
+	case PaymentStatusDone, PaymentStatusPending, PaymentStatusFailed:
+		return true
+	}
+	return false
+}
 
 type Booking struct {
 	ID               string
@@ -39,6 +66,7 @@ type Booking struct {
 	StartTime        time.Time
 	EndTime          time.Time
 	Status           Status
+	PaymentStatus    PaymentStatus
 	CreatedAt        time.Time
 	UpdatedAt        time.Time
 }

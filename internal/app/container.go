@@ -9,6 +9,7 @@ import (
 	"github.com/nekogravitycat/court-booking-backend/internal/api"
 	"github.com/nekogravitycat/court-booking-backend/internal/auth"
 	"github.com/nekogravitycat/court-booking-backend/internal/booking"
+	"github.com/nekogravitycat/court-booking-backend/internal/favorite"
 	"github.com/nekogravitycat/court-booking-backend/internal/file"
 	"github.com/nekogravitycat/court-booking-backend/internal/location"
 	"github.com/nekogravitycat/court-booking-backend/internal/organization"
@@ -48,9 +49,16 @@ func NewContainer(cfg Config) *Container {
 	fileRepo := file.NewRepository(cfg.DBPool)
 	fileService := file.NewService(fileRepo, store)
 
+	// Favorite Module (repo created early so it can be injected into the user
+	// service for favorite cleanup on account deletion).
+	favoriteRepo := favorite.NewPgxRepository(cfg.DBPool)
+
 	// User Module
 	userRepo := user.NewPgxRepository(cfg.DBPool)
-	userService := user.NewService(userRepo, passwordHasher, fileService)
+	userService := user.NewService(userRepo, passwordHasher, fileService, favoriteRepo)
+
+	// Favorite Service (depends on user service to validate pickup hosts)
+	favoriteService := favorite.NewService(favoriteRepo, userService)
 
 	// Organization & Location Module
 	orgRepo := organization.NewPgxRepository(cfg.DBPool)
@@ -76,17 +84,18 @@ func NewContainer(cfg Config) *Container {
 
 	// API Router Config
 	routerParams := api.Config{
-		IsProduction:   cfg.IsProduction,
-		ProdOrigins:    cfg.ProdOrigins,
-		UserService:    userService,
-		OrgService:     orgService,
-		LocService:     locService,
-		ResService:     resService,
-		BookingService: bookingService,
-		AnnService:     annService,
-		PickupService:  pickupService,
-		FileService:    fileService,
-		JWTManager:     jwtManager,
+		IsProduction:    cfg.IsProduction,
+		ProdOrigins:     cfg.ProdOrigins,
+		UserService:     userService,
+		OrgService:      orgService,
+		LocService:      locService,
+		ResService:      resService,
+		BookingService:  bookingService,
+		AnnService:      annService,
+		PickupService:   pickupService,
+		FavoriteService: favoriteService,
+		FileService:     fileService,
+		JWTManager:      jwtManager,
 	}
 
 	// Router

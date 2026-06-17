@@ -21,6 +21,12 @@ type GetGroupQuery struct {
 	IncludeOrders bool `form:"include_orders"`
 }
 
+// HostGroupsURI binds the host_id path parameter for
+// GET /hosts/{host_id}/pickup-groups.
+type HostGroupsURI struct {
+	HostID string `uri:"host_id" binding:"required,uuid"`
+}
+
 type CreateGroupBody struct {
 	Title      string    `json:"title" binding:"required"`
 	HostName   string    `json:"host_name"`
@@ -42,7 +48,8 @@ func (r *CreateGroupBody) Validate() error {
 }
 
 type UpdateOrderBody struct {
-	PaymentStatus string `json:"payment_status" binding:"required,oneof=pending paid failed cancelled"`
+	Status        *string `json:"status" binding:"omitempty,oneof=pending confirmed cancelled cancel_request"`
+	PaymentStatus *string `json:"payment_status" binding:"omitempty,oneof=done pending failed"`
 }
 
 type UpdateGroupBody struct {
@@ -67,6 +74,7 @@ type PickupOrderResponse struct {
 	UserID        string    `json:"user_id"`
 	BookerName    string    `json:"booker_name"`
 	BookerPhone   string    `json:"booker_phone"`
+	Status        string    `json:"status"`
 	PaymentStatus string    `json:"payment_status"`
 	CreatedAt     time.Time `json:"created_at"`
 	UpdatedAt     time.Time `json:"updated_at"`
@@ -79,29 +87,52 @@ func NewPickupOrderResponse(o *pickup.PickupOrder) PickupOrderResponse {
 		UserID:        o.UserID,
 		BookerName:    o.BookerName,
 		BookerPhone:   o.BookerPhone,
+		Status:        string(o.Status),
 		PaymentStatus: string(o.PaymentStatus),
 		CreatedAt:     o.CreatedAt.UTC(),
 		UpdatedAt:     o.UpdatedAt.UTC(),
 	}
 }
 
+// PickupGroupBrief is the trimmed, public-facing shape used by the list
+// endpoints (GET /pickup-groups and GET /hosts/{host_id}/pickup-groups):
+// only the host nickname, location, group title and skill level are exposed.
+// host_phone is intentionally omitted.
+type PickupGroupBrief struct {
+	ID           string `json:"id"`
+	HostNickname string `json:"host_nickname"`
+	LocationID   string `json:"location_id"`
+	Title        string `json:"title"`
+	SkillLevel   string `json:"skill_level"`
+}
+
+func NewPickupGroupBrief(g *pickup.PickupGroup) PickupGroupBrief {
+	return PickupGroupBrief{
+		ID:           g.ID,
+		HostNickname: g.HostName,
+		LocationID:   g.LocationID,
+		Title:        g.Title,
+		SkillLevel:   string(g.SkillLevel),
+	}
+}
+
 type PickupGroupResponse struct {
-	ID              string                `json:"id"`
-	HostID          string                `json:"host_id"`
-	Title           string                `json:"title"`
-	HostName        string                `json:"host_name"`
-	HostPhone       string                `json:"host_phone"`
-	StartTime       time.Time             `json:"start_time"`
-	EndTime         time.Time             `json:"end_time"`
-	Fee             int                   `json:"fee"`
-	Capacity        int                   `json:"capacity"`
-	LocationID      string                `json:"location_id"`
-	SkillLevel      string                `json:"skill_level"`
-	Status          string                `json:"status"`
-	Enable          bool                  `json:"enable"`
-	CurrentEnrolled int                   `json:"current_enrolled"`
-	CreatedAt       time.Time             `json:"created_at"`
-	UpdatedAt       time.Time             `json:"updated_at"`
+	ID              string                 `json:"id"`
+	HostID          string                 `json:"host_id"`
+	Title           string                 `json:"title"`
+	HostName        string                 `json:"host_name"`
+	HostPhone       string                 `json:"host_phone"`
+	StartTime       time.Time              `json:"start_time"`
+	EndTime         time.Time              `json:"end_time"`
+	Fee             int                    `json:"fee"`
+	Capacity        int                    `json:"capacity"`
+	LocationID      string                 `json:"location_id"`
+	SkillLevel      string                 `json:"skill_level"`
+	Status          string                 `json:"status"`
+	Enable          bool                   `json:"enable"`
+	CurrentEnrolled int                    `json:"current_enrolled"`
+	CreatedAt       time.Time              `json:"created_at"`
+	UpdatedAt       time.Time              `json:"updated_at"`
 	Orders          *[]PickupOrderResponse `json:"orders,omitempty"`
 }
 

@@ -29,7 +29,8 @@ type CreateOrderRequest struct {
 }
 
 type UpdateOrderRequest struct {
-	PaymentStatus string
+	Status        *string
+	PaymentStatus *string
 }
 
 type UpdateGroupRequest struct {
@@ -57,7 +58,7 @@ type Service interface {
 	GetOrdersByUserID(ctx context.Context, userID string) ([]*PickupOrder, error)
 
 	CreateOrder(ctx context.Context, req CreateOrderRequest) (*PickupOrder, error)
-	UpdateOrder(ctx context.Context, id string, req UpdateOrderRequest, updaterUserID string) (*PickupOrder, error)
+	UpdateOrder(ctx context.Context, id string, req UpdateOrderRequest, updaterUserID string, isSysAdmin bool) (*PickupOrder, error)
 }
 
 type service struct {
@@ -192,6 +193,7 @@ func (s *service) CreateOrder(ctx context.Context, req CreateOrderRequest) (*Pic
 		UserID:        req.UserID,
 		BookerName:    req.BookerName,
 		BookerPhone:   req.BookerPhone,
+		Status:        OrderStatusPending,
 		PaymentStatus: PaymentStatusPending,
 	}
 
@@ -202,7 +204,14 @@ func (s *service) CreateOrder(ctx context.Context, req CreateOrderRequest) (*Pic
 	return order, nil
 }
 
-func (s *service) UpdateOrder(ctx context.Context, id string, req UpdateOrderRequest, updaterUserID string) (*PickupOrder, error) {
+// UpdateOrder updates an enrollment's lifecycle status and/or payment status.
+//
+// Permissions:
+//   - The pickup group host (or a system admin) may set any status and the
+//     payment status (this covers reviewing enrollments).
+//   - The enrolling user (booker) may only move their own order to 'cancelled'
+//     or 'cancel_request', and may not touch the payment status.
+func (s *service) UpdateOrder(ctx context.Context, id string, req UpdateOrderRequest, updaterUserID string, isSysAdmin bool) (*PickupOrder, error) {
 	order, err := s.repo.GetOrderByID(ctx, id)
 	if err != nil {
 		return nil, err
@@ -213,17 +222,39 @@ func (s *service) UpdateOrder(ctx context.Context, id string, req UpdateOrderReq
 		return nil, err
 	}
 
-	if order.UserID != updaterUserID && group.HostID != updaterUserID {
+	isOwner := order.UserID == updaterUserID
+	isReviewer := isSysAdmin || group.HostID == updaterUserID
+
+	if !isOwner && !isReviewer {
 		return nil, ErrPermissionDenied
 	}
 
-	ps := PaymentStatus(req.PaymentStatus)
-	if ps != PaymentStatusPending && ps != PaymentStatusPaid &&
-		ps != PaymentStatusFailed && ps != PaymentStatusCancelled {
-		return nil, ErrInvalidStatus
+	// Payment status is reviewer-only.
+	if req.PaymentStatus != nil {
+		if !isReviewer {
+			return nil, ErrPermissionDenied
+		}
+		ps := PaymentStatus(*req.PaymentStatus)
+		if !ps.IsValid() {
+			return nil, ErrInvalidStatus
+		}
+		order.PaymentStatus = ps
 	}
 
-	order.PaymentStatus = ps
+	if req.Status != nil {
+		st := OrderStatus(*req.Status)
+		if !st.IsValid() {
+			return nil, ErrInvalidStatus
+		}
+		// A plain booker may only cancel or request cancellation of their order.
+		if isOwner && !isReviewer {
+			if st != OrderStatusCancelled && st != OrderStatusCancelRequest {
+				return nil, ErrPermissionDenied
+			}
+		}
+		order.Status = st
+	}
+
 	if err := s.repo.UpdateOrder(ctx, order); err != nil {
 		return nil, err
 	}

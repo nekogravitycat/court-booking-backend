@@ -25,10 +25,16 @@ UserResponse:
       type: string
       format: date-time
       nullable: true
+    phone:
+      type: string
+      nullable: true
     is_active:
       type: boolean
     is_system_admin:
       type: boolean
+    is_pickup_host:
+      type: boolean
+      description: "是否具有球團主辦人 (pickup host) 身分"
     organizations:
       type: array
       description: The list of organizations the user belongs to
@@ -40,6 +46,7 @@ UserResponse:
     - created_at
     - is_active
     - is_system_admin
+    - is_pickup_host
     - organizations
 
 MeResponse:
@@ -111,3 +118,13 @@ UserTag:
   required:
     - id
     - name
+
+AddPickupHostRequest:
+  type: object
+  description: "授予使用者球團主辦人 (pickup host) 身分"
+  properties:
+    user_id:
+      type: string
+      format: uuid
+  required:
+    - user_id

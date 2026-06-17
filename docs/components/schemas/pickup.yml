@@ -71,6 +71,32 @@ PickupGroupDetailResponse:
           items:
             $ref: "#/PickupOrderResponse"
 
+# 精簡的公開列表項目，用於 GET /pickup-groups 與 GET /hosts/{host_id}/pickup-groups。
+# 不含主辦人電話等敏感資訊。
+PickupGroupBrief:
+  type: object
+  properties:
+    id:
+      type: string
+      format: uuid
+    host_nickname:
+      type: string
+      description: "主辦人暱稱 (host_name 快照)"
+    location_id:
+      type: string
+      format: uuid
+    title:
+      type: string
+    skill_level:
+      type: string
+      enum: [A, B, C, D]
+  required:
+    - id
+    - host_nickname
+    - location_id
+    - title
+    - skill_level
+
 CreatePickupGroupRequest:
   type: object
   properties:
@@ -160,9 +186,14 @@ PickupOrderResponse:
     booker_phone:
       type: string
       nullable: true
+    status:
+      type: string
+      enum: [pending, confirmed, cancelled, cancel_request]
+      description: "報名生命週期狀態"
     payment_status:
       type: string
-      enum: [pending, paid, failed, cancelled]
+      enum: [done, pending, failed]
+      description: "付款狀態"
     created_at:
       type: string
       format: date-time
@@ -174,6 +205,7 @@ PickupOrderResponse:
     - pickup_group_id
     - user_id
     - booker_name
+    - status
     - payment_status
     - created_at
     - updated_at
@@ -185,12 +217,29 @@ CreatePickupOrderRequest:
 
 UpdatePickupOrderRequest:
   type: object
+  description: |
+    status 與 payment_status 至少需提供一個。
+    - status：報名者本人僅能將自己的訂單改為 cancelled 或 cancel_request；
+      group host 或系統管理員可設定任意值（審核用途）。
+    - payment_status：僅 group host 或系統管理員可變更。
   properties:
+    status:
+      type: string
+      enum: [pending, confirmed, cancelled, cancel_request]
     payment_status:
       type: string
-      enum: [pending, paid, failed, cancelled]
-  required:
-    - payment_status
+      enum: [done, pending, failed]
+
+# GET /pickup-groups 與 GET /hosts/{host_id}/pickup-groups 的分頁回應 (精簡欄位)。
+PickupGroupBriefPageResponse:
+  allOf:
+    - $ref: "./common.yml#/PageResponse"
+    - type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/PickupGroupBrief"
 
 PickupGroupPageResponse:
   allOf:

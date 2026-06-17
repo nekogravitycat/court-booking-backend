@@ -5,12 +5,17 @@ import (
 )
 
 func RegisterRoutes(g *gin.RouterGroup, h *Handler, authMiddleware gin.HandlerFunc) {
-	// Pickup group routes
+	// Public pickup group list (no auth, trimmed + bookable-only).
+	g.GET("/pickup-groups", h.ListGroups)
+
+	// Public list of a specific host's pickup groups (no auth, trimmed).
+	g.GET("/hosts/:host_id/pickup-groups", h.ListGroupsByHost)
+
+	// Authenticated pickup group routes
 	groupsGroup := g.Group("/pickup-groups")
 	groupsGroup.Use(authMiddleware)
 	{
 		groupsGroup.POST("", h.CreateGroup)
-		groupsGroup.GET("", h.ListGroups)
 		groupsGroup.GET("/:id", h.GetGroup)
 		groupsGroup.PATCH("/:id", h.UpdateGroup)
 		groupsGroup.DELETE("/:id", h.DeleteGroup)

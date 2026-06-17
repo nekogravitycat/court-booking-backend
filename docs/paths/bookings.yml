@@ -39,7 +39,7 @@ listBookings:
         in: query
         schema:
           type: string
-          enum: [pending, confirmed, cancelled]
+          enum: [pending, confirmed, cancelled, cancel_request]
       - name: start_time_from
         in: query
         schema:

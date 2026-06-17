@@ -213,9 +213,10 @@ func (h *Handler) Update(c *gin.Context) {
 	isSysAdmin := h.checkIsSysAdmin(c, userID)
 
 	req := booking.UpdateRequest{
-		StartTime: body.StartTime,
-		EndTime:   body.EndTime,
-		Status:    body.Status,
+		StartTime:     body.StartTime,
+		EndTime:       body.EndTime,
+		Status:        body.Status,
+		PaymentStatus: body.PaymentStatus,
 	}
 
 	b, err := h.service.Update(c.Request.Context(), uri.ID, req, userID, isSysAdmin)

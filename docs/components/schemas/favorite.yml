@@ -1,0 +1,32 @@
+FavoriteHostResponse:
+  type: object
+  description: "我的最愛主辦人 (僅回傳暱稱與頭像)"
+  properties:
+    host_id:
+      type: string
+      format: uuid
+    nickname:
+      type: string
+      nullable: true
+      description: "主辦人暱稱 (display_name)"
+    avatar:
+      type: string
+      format: uri
+      nullable: true
+    avatar_thumbnail:
+      type: string
+      format: uri
+      nullable: true
+  required:
+    - host_id
+
+FavoriteHostRequest:
+  type: object
+  description: "POST 與 DELETE /favorites/host 共用的請求格式"
+  properties:
+    host_id:
+      type: string
+      format: uuid
+      description: "必須為存在且具有 pickup host 身分的使用者"
+  required:
+    - host_id

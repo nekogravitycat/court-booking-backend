@@ -278,6 +278,83 @@ func (h *UserHandler) Delete(c *gin.Context) {
 	c.Status(http.StatusNoContent)
 }
 
+// ListPickupHosts lists all users who hold the pickup host role.
+// Access Control: System Admin only.
+func (h *UserHandler) ListPickupHosts(c *gin.Context) {
+	var req ListUsersRequest
+	if err := c.ShouldBindQuery(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid query parameters", "details": err.Error()})
+		return
+	}
+
+	filter := user.UserFilter{
+		Page:        req.Page,
+		PageSize:    req.PageSize,
+		SortBy:      req.SortBy,
+		SortOrder:   req.SortOrder,
+		Email:       req.Email,
+		IDs:         req.IDs,
+		DisplayName: req.DisplayName,
+		IsActive:    req.IsActive,
+	}
+
+	if filter.SortBy == "" {
+		filter.SortBy = "created_at"
+	}
+	if filter.SortOrder == "" {
+		filter.SortOrder = "DESC"
+	} else {
+		filter.SortOrder = strings.ToUpper(filter.SortOrder)
+	}
+
+	users, total, err := h.userService.ListPickupHosts(c.Request.Context(), filter)
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+
+	items := make([]UserResponse, len(users))
+	for i, u := range users {
+		items[i] = NewUserResponse(u)
+	}
+
+	c.JSON(http.StatusOK, response.NewPageResponse(items, req.Page, req.PageSize, total))
+}
+
+// AddPickupHost grants the pickup host role to a user.
+// Access Control: System Admin only.
+func (h *UserHandler) AddPickupHost(c *gin.Context) {
+	var body AddPickupHostRequest
+	if err := c.ShouldBindJSON(&body); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request body", "details": err.Error()})
+		return
+	}
+
+	if err := h.userService.AddPickupHost(c.Request.Context(), body.UserID); err != nil {
+		response.Error(c, err)
+		return
+	}
+
+	c.Status(http.StatusCreated)
+}
+
+// RemovePickupHost revokes the pickup host role from a user.
+// Access Control: System Admin only.
+func (h *UserHandler) RemovePickupHost(c *gin.Context) {
+	var uri request.ByIDRequest
+	if err := c.ShouldBindUri(&uri); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request", "details": err.Error()})
+		return
+	}
+
+	if err := h.userService.RemovePickupHost(c.Request.Context(), uri.ID); err != nil {
+		response.Error(c, err)
+		return
+	}
+
+	c.Status(http.StatusNoContent)
+}
+
 // UploadAvatar uploads an avatar image for a user.
 func (h *UserHandler) UploadAvatar(c *gin.Context) {
 	var uri request.ByIDRequest

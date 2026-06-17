@@ -160,3 +160,12 @@ func generateToken(userID string) string {
 	token, _ := jwtManager.GenerateAccessToken(userID)
 	return token
 }
+
+// grantPickupHost grants the pickup host role to a user directly in the DB.
+func grantPickupHost(t *testing.T, userID string) {
+	_, err := testPool.Exec(context.Background(),
+		"INSERT INTO public.pickup_hosts (user_id) VALUES ($1) ON CONFLICT DO NOTHING",
+		userID,
+	)
+	require.NoError(t, err, "Failed to grant pickup host role")
+}

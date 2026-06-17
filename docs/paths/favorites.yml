@@ -1,0 +1,86 @@
+favoriteHosts:
+  get:
+    tags:
+      - Favorites
+    summary: "取得我的最愛主辦人清單"
+    description: |
+      取得目前使用者的我的最愛主辦人清單，僅回傳暱稱與頭像。
+
+      **權限 Access Control**:
+      - **Login Required**: 任何已登入的使用者皆可存取。
+    security:
+      - bearerAuth: []
+    responses:
+      "200":
+        description: Success
+        content:
+          application/json:
+            schema:
+              type: array
+              items:
+                $ref: "../components/schemas/favorite.yml#/FavoriteHostResponse"
+  post:
+    tags:
+      - Favorites
+    summary: "新增我的最愛主辦人"
+    description: |
+      將指定主辦人加入我的最愛。host_id 必須存在且具有 pickup host 身分。
+      不可重複加入，重複加入回傳 409。
+
+      **權限 Access Control**:
+      - **Login Required**: 任何已登入的使用者皆可存取。
+    security:
+      - bearerAuth: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: "../components/schemas/favorite.yml#/FavoriteHostRequest"
+    responses:
+      "201":
+        description: Created
+      "400":
+        description: host is not a pickup host
+        content:
+          application/json:
+            schema:
+              $ref: "../components/schemas/common.yml#/ErrorResponse"
+      "404":
+        description: host not found
+        content:
+          application/json:
+            schema:
+              $ref: "../components/schemas/common.yml#/ErrorResponse"
+      "409":
+        description: host already in favorites
+        content:
+          application/json:
+            schema:
+              $ref: "../components/schemas/common.yml#/ErrorResponse"
+  delete:
+    tags:
+      - Favorites
+    summary: "移除我的最愛主辦人"
+    description: |
+      將指定主辦人從我的最愛移除。
+
+      **權限 Access Control**:
+      - **Login Required**: 任何已登入的使用者皆可存取。
+    security:
+      - bearerAuth: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: "../components/schemas/favorite.yml#/FavoriteHostRequest"
+    responses:
+      "204":
+        description: No Content
+      "404":
+        description: favorite not found
+        content:
+          application/json:
+            schema:
+              $ref: "../components/schemas/common.yml#/ErrorResponse"

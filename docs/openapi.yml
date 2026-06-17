@@ -43,6 +43,10 @@ tags:
     description: 臨打團
   - name: Pickup Orders
     description: 臨打團訂單
+  - name: Pickup Hosts
+    description: 球團主辦人身分管理 (系統管理員)
+  - name: Favorites
+    description: 我的最愛
 
 components:
   securitySchemes:
@@ -163,6 +167,9 @@ components:
     PickupGroupResponse:
       $ref: "./components/schemas/pickup.yml#/PickupGroupResponse"
 
+    PickupGroupBrief:
+      $ref: "./components/schemas/pickup.yml#/PickupGroupBrief"
+
     PickupGroupDetailResponse:
       $ref: "./components/schemas/pickup.yml#/PickupGroupDetailResponse"
 
@@ -177,6 +184,21 @@ components:
 
     UpdatePickupOrderRequest:
       $ref: "./components/schemas/pickup.yml#/UpdatePickupOrderRequest"
+
+    # --------------------------
+    # Pickup Host Models
+    # --------------------------
+    AddPickupHostRequest:
+      $ref: "./components/schemas/user.yml#/AddPickupHostRequest"
+
+    # --------------------------
+    # Favorite Models
+    # --------------------------
+    FavoriteHostResponse:
+      $ref: "./components/schemas/favorite.yml#/FavoriteHostResponse"
+
+    FavoriteHostRequest:
+      $ref: "./components/schemas/favorite.yml#/FavoriteHostRequest"
 
 paths:
   # ============================
@@ -311,6 +333,9 @@ paths:
   /pickup-groups/{id}/orders:
     $ref: "./paths/pickup.yml#/pickupGroupOrders"
 
+  /hosts/{host_id}/pickup-groups:
+    $ref: "./paths/pickup.yml#/hostPickupGroups"
+
   # ============================
   # Pickup Orders
   # ============================
@@ -319,6 +344,21 @@ paths:
 
   /pickup-orders/{id}:
     $ref: "./paths/pickup.yml#/pickupOrderDetail"
+
+  # ============================
+  # Pickup Hosts (System Admin)
+  # ============================
+  /pickup-hosts:
+    $ref: "./paths/pickup_hosts.yml#/pickupHosts"
+
+  /pickup-hosts/{id}:
+    $ref: "./paths/pickup_hosts.yml#/pickupHostDetail"
+
+  # ============================
+  # Favorites
+  # ============================
+  /favorites/host:
+    $ref: "./paths/favorites.yml#/favoriteHosts"
 
   # ============================
   # Shared / Common Schemas for Reference

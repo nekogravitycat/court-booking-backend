@@ -14,6 +14,8 @@ var (
 	ErrInactiveUser       = apperror.New(http.StatusUnauthorized, "user is inactive")
 	ErrEmailRequired      = apperror.New(http.StatusBadRequest, "email is required")
 	ErrPasswordTooShort   = apperror.New(http.StatusBadRequest, "password is too short")
+	ErrAlreadyPickupHost  = apperror.New(http.StatusConflict, "user is already a pickup host")
+	ErrNotPickupHost      = apperror.New(http.StatusNotFound, "user is not a pickup host")
 )
 
 // User represents a user in the system.
@@ -28,6 +30,7 @@ type User struct {
 	LastLoginAt   *time.Time
 	IsActive      bool
 	IsSystemAdmin bool
+	IsPickupHost  bool
 	Organizations []UserOrganizationBrief
 }
 
@@ -37,6 +40,8 @@ type UserFilter struct {
 	IDs         []string
 	DisplayName string
 	IsActive    *bool // Use pointer to distinguish between false and nil (not set)
+
+	PickupHostsOnly bool // When true, only return users with the pickup host role
 
 	Page      int
 	PageSize  int
