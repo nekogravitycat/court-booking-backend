@@ -4,6 +4,7 @@
 # Include codebase directories
 !cmd/
 !internal/
+!db/
 
 # Include Go module files
 !go.mod
