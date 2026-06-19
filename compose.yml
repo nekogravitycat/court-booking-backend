@@ -25,8 +25,6 @@ services:
       dockerfile: Dockerfile
     container_name: court-booking-api
     restart: always
-    ports:
-      - "8080:8080"
     volumes:
       - ./storage:/app/storage
     environment:
@@ -47,12 +45,22 @@ services:
     image: docker.swagger.io/swaggerapi/swagger-ui
     container_name: court-booking-swagger
     restart: always
-    ports:
-      - "8081:8080"
     environment:
       - SWAGGER_JSON=/docs/openapi.yml
     volumes:
       - ./docs:/docs
+
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    container_name: court-booking-tunnel
+    restart: always
+    command: tunnel --no-autoupdate run
+    environment:
+      TUNNEL_TOKEN: ${CLOUDFLARE_TUNNEL_TOKEN}
+      TZ: Asia/Taipei
+    depends_on:
+      - backend
+      - swagger-ui
 
 volumes:
   db-data:

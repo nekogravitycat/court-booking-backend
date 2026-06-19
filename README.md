@@ -54,7 +54,7 @@
 │   ├── pkg/            # 共用工具 (如 Response wrapper)
 │   └── [modules]/      # 業務模組 (user, auth, booking, organization, file...)
 ├── tests/              # 整合測試 (Integration Tests)
-├── compose.yml         # Docker Compose (DB & Swagger)
+├── compose.yml         # Docker Compose (DB, Swagger & Cloudflare Tunnel)
 └── .env                # 環境變數 (需自行建立)
 ```
 
@@ -106,6 +106,8 @@
     JWT_SECRET=your-super-secret-key
     ```
 
+    若要透過 Cloudflare Tunnel 對外發佈服務，另需設定 `CLOUDFLARE_TUNNEL_TOKEN`（見下方「對外發佈」一節）。
+
 3.  **啟動資料庫與 Swagger**
 
     使用 Docker Compose 啟動 PostgreSQL 和 Swagger UI：
@@ -124,6 +126,35 @@
 
     應用程式啟動時會先用 golang-migrate 套用 `db/migrations/` 下所有尚未執行的 migration（已內嵌於 binary），再開始服務。伺服器將啟動於 `http://localhost:8080`。
 
+## 🌐 對外發佈 (Cloudflare Tunnel)
+
+`compose.yml` 內建 `cloudflared` 服務，透過 Cloudflare Tunnel 對外發佈。所有服務共用同一個 Docker 網路，`backend` 與 `swagger-ui` **不再對 host 暴露任何 port**，外部流量一律經由 Cloudflare 邊緣節點 → `cloudflared`（僅向外建立連線）→ 內部 Docker 網路抵達各服務，全部封裝在同一個 Compose 內。
+
+1.  **設定 Tunnel Token**
+
+    在 `.env` 中填入 Cloudflare Zero Trust 提供的 Tunnel Token（此檔已被 `.gitignore` 忽略，密鑰不會進版控）：
+
+    ```dotenv
+    CLOUDFLARE_TUNNEL_TOKEN=your_cloudflare_tunnel_token
+    ```
+
+2.  **設定 Public Hostname 路由**
+
+    於 Cloudflare Zero Trust Dashboard 對應的 Tunnel 設定中，將 Public Hostname 的 Service 指向**內部 Docker 服務名稱**（`cloudflared` 在同一網路內可直接解析）：
+
+    | Public Hostname        | Service                  |
+    | ---------------------- | ------------------------ |
+    | `api.yourdomain.com`   | `http://backend:8080`    |
+    | `swagger.yourdomain.com` | `http://swagger-ui:8080` |
+
+3.  **啟動**
+
+    ```bash
+    docker compose up -d
+    ```
+
+> 注意：由於 host port 已關閉，本機開發若需直接存取 `:8080` / `:8081`，可在 `compose.yml` 暫時加回對應的 `ports` 設定，或直接以 `go run cmd/server/main.go` 在本機執行。
+
 ## 🗄 資料庫設計
 
 - **Migration 檔案**：`db/migrations/`（`{version}_{name}.up.sql` / `.down.sql`，採 golang-migrate 慣例）。
@@ -137,6 +168,47 @@
   - `bookings`：預約紀錄。
   - `files`：檔案上傳紀錄 (Avatar, Cover)。
   - `announcements`：系統公告。
+
+### 從 host 直接操作資料庫
+
+`db` 服務基於安全考量**預設不對 host 暴露 port**，因此有兩種連線方式：
+
+#### 方法 A：透過容器執行（推薦，毋需開 port）
+
+直接在執行中的 DB 容器內開 `psql`，連線流量完全留在容器內：
+
+```bash
+# 進入互動式 psql
+docker compose exec db psql -U "$POSTGRES_USER" -d "$POSTGRES_DB"
+
+# 或直接執行單一查詢
+docker compose exec db psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c "SELECT * FROM users LIMIT 10;"
+```
+
+> `$POSTGRES_USER` / `$POSTGRES_DB` 為 `.env` 中設定的值；若 shell 未載入這些變數，請改填實際值。
+
+#### 方法 B：對 host 暴露 port（供 GUI 工具如 DBeaver、TablePlus 連線）
+
+若需用本機的 GUI 客戶端連線，可在 `compose.yml` 的 `db` 服務加上 port 對應：
+
+```yaml
+db:
+  # ...
+  ports:
+    - "5432:5432"
+```
+
+重新啟動容器後即可從 host 以 `localhost:5432` 連線：
+
+```text
+Host:     localhost
+Port:     5432
+Database: <POSTGRES_DB>
+User:     <POSTGRES_USER>
+Password: <POSTGRES_PASSWORD>
+```
+
+> 注意：暴露 `5432` 等同把資料庫開放給本機網路，請僅在開發環境使用，正式環境建議維持不開 port、改用方法 A。
 
 ## 📖 API 文件
 
