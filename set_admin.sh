@@ -8,15 +8,15 @@
 # (default: court-booking-db, override with the DB_CONTAINER env var).
 #
 # Usage:
-#   ./set_admin.sh --email user@example.com --value true
-#   ./set_admin.sh --id 123e4567-e89b-12d3-a456-426614174000 --value false
-#   ./set_admin.sh --id <uuid> --email user@example.com          # both must match (AND); --value defaults to true
+#   ./set_admin.sh -e user@example.com -v true
+#   ./set_admin.sh -i 123e4567-e89b-12d3-a456-426614174000 -v false
+#   ./set_admin.sh -i <uuid> -e user@example.com          # both must match (AND); value defaults to true
 #
 # Options:
-#   --id <uuid>       Match users.id
-#   --email <email>   Match users.email
-#   --value <bool>    true|false (default: true)
-#   -h, --help        Show this help
+#   -i, --id <uuid>       Match users.id
+#   -e, --email <email>   Match users.email
+#   -v, --value <bool>    true|false (default: true)
+#   -h, --help            Show this help
 
 set -euo pipefail
 
@@ -37,10 +37,10 @@ VALUE="true"
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --id)    ID="${2:-}"; shift 2 ;;
-    --email) EMAIL="${2:-}"; shift 2 ;;
-    --value) VALUE="${2:-}"; shift 2 ;;
-    -h|--help) usage 0 ;;
+    -i|--id)    ID="${2:-}"; shift 2 ;;
+    -e|--email) EMAIL="${2:-}"; shift 2 ;;
+    -v|--value) VALUE="${2:-}"; shift 2 ;;
+    -h|--help)  usage 0 ;;
     *) echo "Unknown argument: $1" >&2; usage 1 ;;
   esac
 done
@@ -82,12 +82,15 @@ fi
 # are passed as psql variables (:'uid' / :'email'), which psql quotes and
 # escapes safely - so this clause is assembled only from trusted literals.
 CONDITIONS=()
-[[ -n "$ID" ]]    && CONDITIONS+=("id = :'uid'")
-[[ -n "$EMAIL" ]] && CONDITIONS+=("email = :'email'")
+HUMAN=()
+[[ -n "$ID" ]]    && { CONDITIONS+=("id = :'uid'");       HUMAN+=("id = $ID"); }
+[[ -n "$EMAIL" ]] && { CONDITIONS+=("email = :'email'"); HUMAN+=("email = $EMAIL"); }
 WHERE=""
-for cond in "${CONDITIONS[@]}"; do
-  [[ -n "$WHERE" ]] && WHERE+=" AND "
-  WHERE+="$cond"
+WHERE_HUMAN=""
+for i in "${!CONDITIONS[@]}"; do
+  [[ -n "$WHERE" ]] && { WHERE+=" AND "; WHERE_HUMAN+=" AND "; }
+  WHERE+="${CONDITIONS[$i]}"
+  WHERE_HUMAN+="${HUMAN[$i]}"
 done
 
 SQL="UPDATE public.users
@@ -95,15 +98,16 @@ SET is_system_admin = :'val'::boolean
 WHERE ${WHERE}
 RETURNING id, email, display_name, is_system_admin;"
 
-echo "Setting is_system_admin = ${VALUE} where ${WHERE//:\'/}..." >&2
+echo "Setting is_system_admin = ${VALUE} where ${WHERE_HUMAN}..." >&2
 
-OUTPUT="$(docker exec -i \
+# Feed the SQL via stdin (not -c): psql only performs :'var' variable
+# interpolation when reading a script from stdin or a file, not with -c.
+OUTPUT="$(printf '%s\n' "$SQL" | docker exec -i \
   -e PGPASSWORD="$DB_PASSWORD" \
   "$DB_CONTAINER" \
   psql -U "$DB_USER" -d "$DB_NAME" \
   -v ON_ERROR_STOP=1 \
-  --set uid="$ID" --set email="$EMAIL" --set val="$VALUE" \
-  -c "$SQL")"
+  --set uid="$ID" --set email="$EMAIL" --set val="$VALUE")"
 
 echo "$OUTPUT"
 
