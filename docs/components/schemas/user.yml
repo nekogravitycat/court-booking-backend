@@ -7,6 +7,9 @@ UserResponse:
     email:
       type: string
       format: email
+    username:
+      type: string
+      description: "唯一帳號代稱 (小寫英文、數字、底線，4-15 字)。目前不可修改。"
     display_name:
       type: string
       nullable: true
@@ -43,6 +46,7 @@ UserResponse:
   required:
     - id
     - email
+    - username
     - created_at
     - is_active
     - is_system_admin
@@ -64,6 +68,10 @@ RegisterRequest:
     email:
       type: string
       format: email
+    username:
+      type: string
+      pattern: "^[a-z0-9_]{4,15}$"
+      description: "唯一帳號代稱 (小寫英文、數字、底線，4-15 字)。大寫會自動轉為小寫。"
     password:
       type: string
       minLength: 8
@@ -71,6 +79,7 @@ RegisterRequest:
       type: string
   required:
     - email
+    - username
     - password
     - display_name
 

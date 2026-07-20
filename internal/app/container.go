@@ -16,6 +16,8 @@ import (
 	"github.com/nekogravitycat/court-booking-backend/internal/pickup"
 	"github.com/nekogravitycat/court-booking-backend/internal/pkg/storage"
 	"github.com/nekogravitycat/court-booking-backend/internal/resource"
+	"github.com/nekogravitycat/court-booking-backend/internal/skilllevel"
+	"github.com/nekogravitycat/court-booking-backend/internal/sports"
 	"github.com/nekogravitycat/court-booking-backend/internal/user"
 )
 
@@ -78,24 +80,32 @@ func NewContainer(cfg Config) *Container {
 	annRepo := announcement.NewPgxRepository(cfg.DBPool)
 	annService := announcement.NewService(annRepo)
 
+	// Sports & Skill-Level lookup modules
+	sportsRepo := sports.NewPgxRepository(cfg.DBPool)
+	sportsService := sports.NewService(sportsRepo)
+	skillLevelRepo := skilllevel.NewPgxRepository(cfg.DBPool)
+	skillLevelService := skilllevel.NewService(skillLevelRepo)
+
 	// Pickup Module
 	pickupRepo := pickup.NewPgxRepository(cfg.DBPool)
-	pickupService := pickup.NewService(pickupRepo, userService)
+	pickupService := pickup.NewService(pickupRepo, userService, sportsService, skillLevelService)
 
 	// API Router Config
 	routerParams := api.Config{
-		IsProduction:    cfg.IsProduction,
-		ProdOrigins:     cfg.ProdOrigins,
-		UserService:     userService,
-		OrgService:      orgService,
-		LocService:      locService,
-		ResService:      resService,
-		BookingService:  bookingService,
-		AnnService:      annService,
-		PickupService:   pickupService,
-		FavoriteService: favoriteService,
-		FileService:     fileService,
-		JWTManager:      jwtManager,
+		IsProduction:      cfg.IsProduction,
+		ProdOrigins:       cfg.ProdOrigins,
+		UserService:       userService,
+		OrgService:        orgService,
+		LocService:        locService,
+		ResService:        resService,
+		BookingService:    bookingService,
+		AnnService:        annService,
+		SportsService:     sportsService,
+		SkillLevelService: skillLevelService,
+		PickupService:     pickupService,
+		FavoriteService:   favoriteService,
+		FileService:       fileService,
+		JWTManager:        jwtManager,
 	}
 
 	// Router

@@ -46,7 +46,7 @@ func NewPgxRepository(pool *pgxpool.Pool) Repository {
 func (r *pgxUserRepository) GetByEmail(ctx context.Context, email string) (*User, error) {
 	psql := squirrel.StatementBuilder.PlaceholderFormat(squirrel.Dollar)
 	query, args, err := psql.Select(
-		"u.id", "u.email", "u.password_hash", "u.display_name", "u.phone", "u.avatar", "u.created_at",
+		"u.id", "u.email", "u.username", "u.password_hash", "u.display_name", "u.phone", "u.avatar", "u.created_at",
 		"u.last_login_at", "u.is_active", "u.is_system_admin",
 		"EXISTS(SELECT 1 FROM public.pickup_hosts ph WHERE ph.user_id = u.id) AS is_pickup_host",
 		`COALESCE(
@@ -81,6 +81,7 @@ func (r *pgxUserRepository) GetByEmail(ctx context.Context, email string) (*User
 	if err := row.Scan(
 		&u.ID,
 		&u.Email,
+		&u.Username,
 		&u.PasswordHash,
 		&u.DisplayName,
 		&u.Phone,
@@ -111,7 +112,7 @@ func (r *pgxUserRepository) GetByEmail(ctx context.Context, email string) (*User
 func (r *pgxUserRepository) GetByID(ctx context.Context, id string) (*User, error) {
 	psql := squirrel.StatementBuilder.PlaceholderFormat(squirrel.Dollar)
 	query, args, err := psql.Select(
-		"u.id", "u.email", "u.password_hash", "u.display_name", "u.phone", "u.avatar", "u.created_at",
+		"u.id", "u.email", "u.username", "u.password_hash", "u.display_name", "u.phone", "u.avatar", "u.created_at",
 		"u.last_login_at", "u.is_active", "u.is_system_admin",
 		"EXISTS(SELECT 1 FROM public.pickup_hosts ph WHERE ph.user_id = u.id) AS is_pickup_host",
 		`COALESCE(
@@ -146,6 +147,7 @@ func (r *pgxUserRepository) GetByID(ctx context.Context, id string) (*User, erro
 	if err := row.Scan(
 		&u.ID,
 		&u.Email,
+		&u.Username,
 		&u.PasswordHash,
 		&u.DisplayName,
 		&u.Phone,
@@ -176,8 +178,8 @@ func (r *pgxUserRepository) GetByID(ctx context.Context, id string) (*User, erro
 func (r *pgxUserRepository) Create(ctx context.Context, u *User) error {
 	psql := squirrel.StatementBuilder.PlaceholderFormat(squirrel.Dollar)
 	query, args, err := psql.Insert("public.users").
-		Columns("email", "password_hash", "display_name", "is_active", "is_system_admin").
-		Values(u.Email, u.PasswordHash, u.DisplayName, u.IsActive, u.IsSystemAdmin).
+		Columns("email", "username", "password_hash", "display_name", "is_active", "is_system_admin").
+		Values(u.Email, u.Username, u.PasswordHash, u.DisplayName, u.IsActive, u.IsSystemAdmin).
 		Suffix("RETURNING id, created_at").
 		ToSql()
 	if err != nil {
@@ -187,6 +189,9 @@ func (r *pgxUserRepository) Create(ctx context.Context, u *User) error {
 	if err := r.pool.QueryRow(ctx, query, args...).Scan(&u.ID, &u.CreatedAt); err != nil {
 		var e *pgconn.PgError
 		if errors.As(err, &e) && e.Code == pgerrcode.UniqueViolation {
+			if e.ConstraintName == "users_username_key" {
+				return ErrUsernameAlreadyUsed
+			}
 			return ErrEmailAlreadyUsed
 		}
 		return fmt.Errorf("Create user failed: %w", err)
@@ -220,7 +225,7 @@ func (r *pgxUserRepository) UpdateLastLogin(ctx context.Context, id string, t ti
 func (r *pgxUserRepository) List(ctx context.Context, filter UserFilter) ([]*User, int, error) {
 	psql := squirrel.StatementBuilder.PlaceholderFormat(squirrel.Dollar)
 	queryBuilder := psql.Select(
-		"u.id", "u.email", "u.password_hash", "u.display_name", "u.phone", "u.avatar", "u.created_at",
+		"u.id", "u.email", "u.username", "u.password_hash", "u.display_name", "u.phone", "u.avatar", "u.created_at",
 		"u.last_login_at", "u.is_active", "u.is_system_admin",
 		"EXISTS(SELECT 1 FROM public.pickup_hosts ph WHERE ph.user_id = u.id) AS is_pickup_host",
 		"count(*) OVER() AS total_count",
@@ -304,6 +309,7 @@ func (r *pgxUserRepository) List(ctx context.Context, filter UserFilter) ([]*Use
 		if err := rows.Scan(
 			&u.ID,
 			&u.Email,
+			&u.Username,
 			&u.PasswordHash,
 			&u.DisplayName,
 			&u.Phone,

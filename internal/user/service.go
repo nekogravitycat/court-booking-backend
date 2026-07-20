@@ -4,12 +4,17 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"regexp"
 	"strings"
 	"time"
 
 	"github.com/nekogravitycat/court-booking-backend/internal/auth"
 	"github.com/nekogravitycat/court-booking-backend/internal/file"
 )
+
+// usernamePattern enforces a Twitter-style handle: 4-15 characters of lowercase
+// letters, digits, or underscore. Input is lowercased before matching.
+var usernamePattern = regexp.MustCompile(`^[a-z0-9_]{4,15}$`)
 
 type UpdateUserRequest struct {
 	DisplayName   *string
@@ -20,7 +25,7 @@ type UpdateUserRequest struct {
 
 // Service defines business logic related to users.
 type Service interface {
-	Register(ctx context.Context, email, password, displayName string) (*User, error)
+	Register(ctx context.Context, email, username, password, displayName string) (*User, error)
 	Login(ctx context.Context, email, password string) (*User, error)
 	GetByID(ctx context.Context, id string) (*User, error)
 	GetByEmail(ctx context.Context, email string) (*User, error)
@@ -81,10 +86,18 @@ func NewService(repo Repository, hasher auth.PasswordHasher, fileService file.Se
 	}
 }
 
-func (s *service) Register(ctx context.Context, email, password, displayName string) (*User, error) {
+func (s *service) Register(ctx context.Context, email, username, password, displayName string) (*User, error) {
 	cleanEmail := normalizeEmail(email)
 	if cleanEmail == "" {
 		return nil, ErrEmailRequired
+	}
+
+	cleanUsername := normalizeUsername(username)
+	if cleanUsername == "" {
+		return nil, ErrUsernameRequired
+	}
+	if !usernamePattern.MatchString(cleanUsername) {
+		return nil, ErrInvalidUsername
 	}
 
 	if len(password) < s.minPasswordLength {
@@ -119,15 +132,16 @@ func (s *service) Register(ctx context.Context, email, password, displayName str
 
 	u := &User{
 		Email:        cleanEmail,
+		Username:     cleanUsername,
 		PasswordHash: hash,
 		DisplayName:  displayNamePtr,
 		IsActive:     true,
 	}
 
 	if err := s.repo.Create(ctx, u); err != nil {
-		// Check for unique violation error from the repository.
-		if errors.Is(err, ErrEmailAlreadyUsed) {
-			return nil, ErrEmailAlreadyUsed
+		// Pass through unique-violation errors mapped by the repository.
+		if errors.Is(err, ErrEmailAlreadyUsed) || errors.Is(err, ErrUsernameAlreadyUsed) {
+			return nil, err
 		}
 		return nil, fmt.Errorf("failed to create user: %w", err)
 	}
@@ -184,6 +198,12 @@ func (s *service) GetByEmail(ctx context.Context, email string) (*User, error) {
 // normalizeEmail trims spaces and lowercases the email.
 func normalizeEmail(email string) string {
 	return strings.ToLower(strings.TrimSpace(email))
+}
+
+// normalizeUsername trims spaces and lowercases the username so that a handle
+// entered with uppercase letters resolves to its lowercase form.
+func normalizeUsername(username string) string {
+	return strings.ToLower(strings.TrimSpace(username))
 }
 
 func (s *service) List(ctx context.Context, filter UserFilter) ([]*User, int, error) {

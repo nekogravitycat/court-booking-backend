@@ -53,37 +53,22 @@ func (h *Handler) CreateGroup(c *gin.Context) {
 		return
 	}
 
-	hostName := body.HostName
-	hostPhone := body.HostPhone
-
-	if hostName == "" {
-		if u.DisplayName != nil {
-			hostName = *u.DisplayName
-		} else {
-			hostName = u.Email
-		}
-	}
-	if hostPhone == "" && u.Phone != nil {
-		hostPhone = *u.Phone
-	}
-
 	enable := true
 	if body.Enable != nil {
 		enable = *body.Enable
 	}
 
 	req := pickup.CreateGroupRequest{
-		HostID:     userID,
-		Title:      body.Title,
-		HostName:   hostName,
-		HostPhone:  hostPhone,
-		StartTime:  body.StartTime,
-		EndTime:    body.EndTime,
-		Fee:        body.Fee,
-		Capacity:   body.Capacity,
-		LocationID: body.LocationID,
-		SkillLevel: body.SkillLevel,
-		Enable:     enable,
+		HostID:       userID,
+		Title:        body.Title,
+		StartTime:    body.StartTime,
+		EndTime:      body.EndTime,
+		Fee:          body.Fee,
+		Capacity:     body.Capacity,
+		LocationID:   body.LocationID,
+		SportID:      body.SportID,
+		SkillLevelID: body.SkillLevelID,
+		Enable:       enable,
 	}
 
 	group, err := h.service.CreateGroup(c.Request.Context(), req)
@@ -107,8 +92,10 @@ func (h *Handler) ListGroups(c *gin.Context) {
 	sortOrder := strings.ToUpper(req.SortOrder)
 
 	filter := pickup.GroupFilter{
-		SkillLevel:   req.SkillLevel,
+		SportID:      req.SportID,
+		SkillLevelID: req.SkillLevelID,
 		BookableOnly: true,
+		ViewerUserID: auth.GetUserID(c),
 		Page:         req.Page,
 		PageSize:     req.PageSize,
 		SortBy:       req.SortBy,
@@ -148,13 +135,15 @@ func (h *Handler) ListGroupsByHost(c *gin.Context) {
 	sortOrder := strings.ToUpper(req.SortOrder)
 
 	filter := pickup.GroupFilter{
-		Status:     req.Status,
-		SkillLevel: req.SkillLevel,
-		HostID:     uri.HostID,
-		Page:       req.Page,
-		PageSize:   req.PageSize,
-		SortBy:     req.SortBy,
-		SortOrder:  sortOrder,
+		Status:       req.Status,
+		SportID:      req.SportID,
+		SkillLevelID: req.SkillLevelID,
+		HostID:       uri.HostID,
+		ViewerUserID: auth.GetUserID(c),
+		Page:         req.Page,
+		PageSize:     req.PageSize,
+		SortBy:       req.SortBy,
+		SortOrder:    sortOrder,
 	}
 
 	groups, total, err := h.service.ListGroups(c.Request.Context(), filter)
@@ -242,17 +231,16 @@ func (h *Handler) UpdateGroup(c *gin.Context) {
 	}
 
 	req := pickup.UpdateGroupRequest{
-		Title:      body.Title,
-		HostName:   body.HostName,
-		HostPhone:  body.HostPhone,
-		StartTime:  body.StartTime,
-		EndTime:    body.EndTime,
-		Fee:        body.Fee,
-		Capacity:   body.Capacity,
-		LocationID: body.LocationID,
-		SkillLevel: body.SkillLevel,
-		Status:     body.Status,
-		Enable:     body.Enable,
+		Title:        body.Title,
+		StartTime:    body.StartTime,
+		EndTime:      body.EndTime,
+		Fee:          body.Fee,
+		Capacity:     body.Capacity,
+		LocationID:   body.LocationID,
+		SportID:      body.SportID,
+		SkillLevelID: body.SkillLevelID,
+		Status:       body.Status,
+		Enable:       body.Enable,
 	}
 
 	group, err := h.service.UpdateGroup(c.Request.Context(), uri.ID, req)
@@ -381,6 +369,35 @@ func (h *Handler) UpdateOrder(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, NewPickupOrderResponse(order))
+}
+
+// DeleteOrder hard-deletes a pickup order. Only a system admin may perform this
+// operation; a host removes a participant by rejecting the order instead
+// (PATCH with status=rejected).
+func (h *Handler) DeleteOrder(c *gin.Context) {
+	var uri request.ByIDRequest
+	if err := c.ShouldBindUri(&uri); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request", "details": err.Error()})
+		return
+	}
+
+	userID := auth.GetUserID(c)
+	if userID == "" {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+		return
+	}
+
+	isSysAdmin := false
+	if u, err := h.userService.GetByID(c.Request.Context(), userID); err == nil {
+		isSysAdmin = u.IsSystemAdmin
+	}
+
+	if err := h.service.DeleteOrder(c.Request.Context(), uri.ID, userID, isSysAdmin); err != nil {
+		response.Error(c, err)
+		return
+	}
+
+	c.Status(http.StatusNoContent)
 }
 
 func (h *Handler) ListGroupOrders(c *gin.Context) {

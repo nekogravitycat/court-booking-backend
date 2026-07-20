@@ -1,0 +1,13 @@
+-- Migration 000005: add a 'rejected' pickup order status.
+--
+-- Rationale:
+--   * A host rejects an enrollment (instead of hard-deleting it) so the order
+--     row is retained. Rejected orders are excluded from the enrolled count,
+--     and the unique (pickup_group_id, user_id) constraint keeps a rejected
+--     user from re-enrolling in the same group.
+--   * Hard deletion remains available to system admins only.
+--
+-- ALTER TYPE ... ADD VALUE must stand alone in this migration: it cannot share a
+-- transaction with statements that use the new value, so no other statement is
+-- added here.
+ALTER TYPE pickup_order_status ADD VALUE IF NOT EXISTS 'rejected';

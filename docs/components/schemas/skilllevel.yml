@@ -1,0 +1,83 @@
+SkillLevelResponse:
+  type: object
+  properties:
+    id:
+      type: string
+      format: uuid
+    sport_id:
+      type: string
+      format: uuid
+      description: "所屬球類 ID"
+    name:
+      type: string
+      description: "分級名稱，例如 A / 初級"
+    sort_order:
+      type: integer
+      description: "同一球類內的排序"
+    is_active:
+      type: boolean
+      description: "是否啟用 (軟刪除旗標)"
+    created_at:
+      type: string
+      format: date-time
+    updated_at:
+      type: string
+      format: date-time
+  required:
+    - id
+    - sport_id
+    - name
+    - sort_order
+    - is_active
+    - created_at
+    - updated_at
+
+# 用於嵌入其他回應 (如臨打團) 的精簡分級物件。
+SkillLevelTag:
+  type: object
+  properties:
+    id:
+      type: string
+      format: uuid
+    name:
+      type: string
+  required:
+    - id
+    - name
+
+CreateSkillLevelRequest:
+  type: object
+  properties:
+    sport_id:
+      type: string
+      format: uuid
+      description: "所屬球類 ID。分級一旦建立即固定隸屬此球類，不可變更。"
+    name:
+      type: string
+    sort_order:
+      type: integer
+      default: 0
+  required:
+    - sport_id
+    - name
+
+UpdateSkillLevelRequest:
+  type: object
+  description: "所屬球類固定於建立時，不可透過更新變更。"
+  properties:
+    name:
+      type: string
+    sort_order:
+      type: integer
+    is_active:
+      type: boolean
+
+SkillLevelPageResponse:
+  allOf:
+    - $ref: "./common.yml#/PageResponse"
+    - type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/SkillLevelResponse"

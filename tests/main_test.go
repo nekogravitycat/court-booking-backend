@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"strings"
 	"testing"
 	"time"
 
@@ -135,8 +136,14 @@ func createTestUser(t *testing.T, email, password string, isAdmin bool) *user.Us
 	hash, err := hasher.Hash(password)
 	require.NoError(t, err, "Failed to hash password")
 
+	// Derive a unique, format-valid username from the (unique) email so the
+	// NOT NULL + UNIQUE username column is satisfied when inserting directly.
+	sanitizer := strings.NewReplacer("@", "_", ".", "_", "-", "_", "+", "_")
+	username := strings.ToLower(sanitizer.Replace(email))
+
 	u := &user.User{
 		Email:         email,
+		Username:      username,
 		PasswordHash:  hash,
 		DisplayName:   &email,
 		IsActive:      true,

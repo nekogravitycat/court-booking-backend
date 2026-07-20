@@ -1,0 +1,133 @@
+skillLevels:
+  get:
+    tags:
+      - Skill Levels
+    summary: "取得分級列表 (公開)"
+    description: |
+      分頁查詢程度分級清單，可依球類過濾。
+
+      **權限 Access Control**:
+      - **Public**: 無需登入即可存取。
+    security: []
+    parameters:
+      - name: sport_id
+        in: query
+        required: false
+        schema:
+          type: string
+          format: uuid
+        description: "僅回傳指定球類的分級"
+      - name: active_only
+        in: query
+        required: false
+        schema:
+          type: boolean
+      - $ref: "../components/parameters.yml#/page"
+      - $ref: "../components/parameters.yml#/page_size"
+      - name: sort_by
+        in: query
+        required: false
+        schema:
+          type: string
+          enum: [sort_order, name, created_at]
+      - $ref: "../components/parameters.yml#/sort_order"
+    responses:
+      "200":
+        description: Success
+        content:
+          application/json:
+            schema:
+              $ref: "../components/schemas/skilllevel.yml#/SkillLevelPageResponse"
+  post:
+    tags:
+      - Skill Levels
+    summary: "新增分級 (僅限系統管理員)"
+    description: |
+      在指定球類底下新增分級。
+
+      **權限 Access Control**:
+      - **System Admin Only**: 僅系統管理員可使用。
+    security:
+      - bearerAuth: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: "../components/schemas/skilllevel.yml#/CreateSkillLevelRequest"
+    responses:
+      "201":
+        description: Created
+        content:
+          application/json:
+            schema:
+              $ref: "../components/schemas/skilllevel.yml#/SkillLevelResponse"
+      "404":
+        description: sport not found
+        content:
+          application/json:
+            schema:
+              $ref: "../components/schemas/common.yml#/ErrorResponse"
+      "409":
+        description: skill level name already used for this sport
+        content:
+          application/json:
+            schema:
+              $ref: "../components/schemas/common.yml#/ErrorResponse"
+
+skillLevelDetail:
+  get:
+    tags:
+      - Skill Levels
+    summary: "取得單一分級 (公開)"
+    security: []
+    parameters: &idParams
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    responses:
+      "200":
+        description: Success
+        content:
+          application/json:
+            schema:
+              $ref: "../components/schemas/skilllevel.yml#/SkillLevelResponse"
+      "404":
+        description: Not found
+  patch:
+    tags:
+      - Skill Levels
+    summary: "更新分級 (僅限系統管理員)"
+    security:
+      - bearerAuth: []
+    parameters: *idParams
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: "../components/schemas/skilllevel.yml#/UpdateSkillLevelRequest"
+    responses:
+      "200":
+        description: Success
+        content:
+          application/json:
+            schema:
+              $ref: "../components/schemas/skilllevel.yml#/SkillLevelResponse"
+      "404":
+        description: Not found
+  delete:
+    tags:
+      - Skill Levels
+    summary: "刪除分級 (僅限系統管理員，軟刪除)"
+    security:
+      - bearerAuth: []
+    parameters: *idParams
+    responses:
+      "204":
+        description: No Content
+      "404":
+        description: Not found

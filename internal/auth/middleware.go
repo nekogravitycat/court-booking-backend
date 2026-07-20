@@ -66,3 +66,35 @@ func AuthRequired(jwtManager *JWTManager, isActive ActiveStatusFunc) gin.Handler
 		c.Next()
 	}
 }
+
+// AuthOptional is a Gin middleware for endpoints that are public but can tailor
+// their response to the caller when a valid token happens to be present.
+//
+// Unlike AuthRequired it never aborts: a missing, malformed, or invalid
+// Authorization header simply leaves the request unauthenticated. When a token
+// validly parses, the user id is stored in the context so handlers can read it
+// via GetUserID; otherwise GetUserID returns "".
+func AuthOptional(jwtManager *JWTManager) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		header := c.GetHeader("Authorization")
+		if header == "" {
+			c.Next()
+			return
+		}
+
+		parts := strings.SplitN(header, " ", 2)
+		if len(parts) != 2 || strings.ToLower(parts[0]) != "bearer" {
+			c.Next()
+			return
+		}
+
+		claims, err := jwtManager.ParseAndValidate(parts[1])
+		if err != nil {
+			c.Next()
+			return
+		}
+
+		c.Set("userID", claims.Subject)
+		c.Next()
+	}
+}

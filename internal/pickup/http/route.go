@@ -4,12 +4,13 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-func RegisterRoutes(g *gin.RouterGroup, h *Handler, authMiddleware gin.HandlerFunc) {
-	// Public pickup group list (no auth, trimmed + bookable-only).
-	g.GET("/pickup-groups", h.ListGroups)
+func RegisterRoutes(g *gin.RouterGroup, h *Handler, authMiddleware, optionalAuthMiddleware gin.HandlerFunc) {
+	// Public pickup group list (no auth required, trimmed + bookable-only).
+	// Optional auth personalizes enrolled_status when a valid token is present.
+	g.GET("/pickup-groups", optionalAuthMiddleware, h.ListGroups)
 
-	// Public list of a specific host's pickup groups (no auth, trimmed).
-	g.GET("/hosts/:host_id/pickup-groups", h.ListGroupsByHost)
+	// Public list of a specific host's pickup groups (optional auth, trimmed).
+	g.GET("/hosts/:host_id/pickup-groups", optionalAuthMiddleware, h.ListGroupsByHost)
 
 	// Authenticated pickup group routes
 	groupsGroup := g.Group("/pickup-groups")
@@ -29,5 +30,6 @@ func RegisterRoutes(g *gin.RouterGroup, h *Handler, authMiddleware gin.HandlerFu
 	{
 		ordersGroup.GET("", h.ListMyOrders)
 		ordersGroup.PATCH("/:id", h.UpdateOrder)
+		ordersGroup.DELETE("/:id", h.DeleteOrder)
 	}
 }

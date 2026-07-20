@@ -1,19 +1,32 @@
+PickupHostTag:
+  type: object
+  description: "主辦人資訊，即時取自 users (非快照)。"
+  properties:
+    id:
+      type: string
+      format: uuid
+    username:
+      type: string
+    display_name:
+      type: string
+      nullable: true
+    phone:
+      type: string
+      nullable: true
+  required:
+    - id
+    - username
+
 PickupGroupResponse:
   type: object
   properties:
     id:
       type: string
       format: uuid
-    host_id:
-      type: string
-      format: uuid
+    host:
+      $ref: "#/PickupHostTag"
     title:
       type: string
-    host_name:
-      type: string
-    host_phone:
-      type: string
-      nullable: true
     start_time:
       type: string
       format: date-time
@@ -27,9 +40,10 @@ PickupGroupResponse:
     location_id:
       type: string
       format: uuid
+    sport:
+      $ref: "./sport.yml#/SportTag"
     skill_level:
-      type: string
-      enum: [A, B, C, D]
+      $ref: "./skilllevel.yml#/SkillLevelTag"
     status:
       type: string
       enum: [active, cancelled, completed]
@@ -46,14 +60,14 @@ PickupGroupResponse:
       format: date-time
   required:
     - id
-    - host_id
+    - host
     - title
-    - host_name
     - start_time
     - end_time
     - fee
     - capacity
     - location_id
+    - sport
     - skill_level
     - status
     - enable
@@ -79,35 +93,51 @@ PickupGroupBrief:
     id:
       type: string
       format: uuid
-    host_nickname:
+    host_id:
       type: string
-      description: "主辦人暱稱 (host_name 快照)"
+      format: uuid
+    host_username:
+      type: string
+    host_display_name:
+      type: string
+      nullable: true
     location_id:
       type: string
       format: uuid
     title:
       type: string
+    sport:
+      $ref: "./sport.yml#/SportTag"
     skill_level:
+      $ref: "./skilllevel.yml#/SkillLevelTag"
+    start_time:
       type: string
-      enum: [A, B, C, D]
+      format: date-time
+    fee:
+      type: number
+    enrolled_status:
+      type: string
+      enum: [free, pending, confirmed, cancelled, cancel_request, rejected]
+      description: |
+        呼叫者對此臨打團的狀態。未登入或未報名時為 free；
+        已報名時反映該使用者訂單的實際狀態。rejected 表示已被主辦人拒絕，無法再次報名。
   required:
     - id
-    - host_nickname
+    - host_id
+    - host_username
     - location_id
     - title
+    - sport
     - skill_level
+    - start_time
+    - fee
+    - enrolled_status
 
 CreatePickupGroupRequest:
   type: object
   properties:
     title:
       type: string
-    host_name:
-      type: string
-      description: "負責人姓名 (手動填寫，若不填則由系統帶入)"
-    host_phone:
-      type: string
-      description: "負責人電話 (手動填寫，若不填則由系統帶入)"
     start_time:
       type: string
       format: date-time
@@ -122,9 +152,14 @@ CreatePickupGroupRequest:
       type: string
       format: uuid
       description: "場地 ID (關聯至 Location)"
-    skill_level:
+    sport_id:
       type: string
-      enum: [A, B, C, D]
+      format: uuid
+      description: "球類 ID (關聯至 Sport)"
+    skill_level_id:
+      type: string
+      format: uuid
+      description: "程度分級 ID (關聯至 SkillLevel，必須隸屬於所選 sport_id)"
     enable:
       type: boolean
       default: true
@@ -136,16 +171,13 @@ CreatePickupGroupRequest:
     - fee
     - capacity
     - location_id
-    - skill_level
+    - sport_id
+    - skill_level_id
 
 UpdatePickupGroupRequest:
   type: object
   properties:
     title:
-      type: string
-    host_name:
-      type: string
-    host_phone:
       type: string
     start_time:
       type: string
@@ -160,9 +192,13 @@ UpdatePickupGroupRequest:
     location_id:
       type: string
       format: uuid
-    skill_level:
+    sport_id:
       type: string
-      enum: [A, B, C, D]
+      format: uuid
+    skill_level_id:
+      type: string
+      format: uuid
+      description: "若變更 sport_id 或 skill_level_id，分級仍須隸屬於該球類。"
     status:
       type: string
       enum: [active, cancelled, completed]
@@ -188,8 +224,8 @@ PickupOrderResponse:
       nullable: true
     status:
       type: string
-      enum: [pending, confirmed, cancelled, cancel_request]
-      description: "報名生命週期狀態"
+      enum: [pending, confirmed, cancelled, cancel_request, rejected]
+      description: "報名生命週期狀態。rejected 由主辦人設定 (拒絕報名)，不計入 current_enrolled，且該使用者無法再次報名。"
     payment_status:
       type: string
       enum: [done, pending, failed]
@@ -220,12 +256,14 @@ UpdatePickupOrderRequest:
   description: |
     status 與 payment_status 至少需提供一個。
     - status：報名者本人僅能將自己的訂單改為 cancelled 或 cancel_request；
-      group host 或系統管理員可設定任意值（審核用途）。
+      group host 或系統管理員可設定任意值（審核用途），包含 rejected（拒絕報名）。
+    - rejected：僅 group host 或系統管理員可設定；被拒絕的使用者無法再次報名同一團，
+      且該訂單不計入 current_enrolled。
     - payment_status：僅 group host 或系統管理員可變更。
   properties:
     status:
       type: string
-      enum: [pending, confirmed, cancelled, cancel_request]
+      enum: [pending, confirmed, cancelled, cancel_request, rejected]
     payment_status:
       type: string
       enum: [done, pending, failed]

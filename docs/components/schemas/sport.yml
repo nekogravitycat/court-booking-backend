@@ -1,0 +1,76 @@
+SportResponse:
+  type: object
+  properties:
+    id:
+      type: string
+      format: uuid
+    code:
+      type: string
+      description: "穩定機器碼 (大寫)，例如 BADMINTON。建立/更新時會自動轉為大寫。"
+    name:
+      type: string
+      description: "顯示名稱"
+    is_active:
+      type: boolean
+      description: "是否啟用 (軟刪除旗標)"
+    created_at:
+      type: string
+      format: date-time
+    updated_at:
+      type: string
+      format: date-time
+  required:
+    - id
+    - code
+    - name
+    - is_active
+    - created_at
+    - updated_at
+
+# 用於嵌入其他回應 (如臨打團) 的精簡球類物件。
+SportTag:
+  type: object
+  properties:
+    id:
+      type: string
+      format: uuid
+    code:
+      type: string
+    name:
+      type: string
+  required:
+    - id
+    - code
+    - name
+
+CreateSportRequest:
+  type: object
+  properties:
+    code:
+      type: string
+      description: "穩定機器碼；小寫會自動轉大寫。"
+    name:
+      type: string
+  required:
+    - code
+    - name
+
+UpdateSportRequest:
+  type: object
+  properties:
+    code:
+      type: string
+    name:
+      type: string
+    is_active:
+      type: boolean
+
+SportPageResponse:
+  allOf:
+    - $ref: "./common.yml#/PageResponse"
+    - type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/SportResponse"

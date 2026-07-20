@@ -2,21 +2,33 @@ pickupGroups:
   get:
     tags:
       - Pickup Groups
-    summary: "取得可預約的臨打團列表 (公開)"
+    summary: "取得可預約的臨打團列表 (公開，選擇性登入)"
     description: |
       取得目前可進行預約的臨打團清單（status=active、enable=true、尚未結束且未額滿）。
-      回傳精簡欄位：主辦人暱稱、位置、球團名稱與程度。
+      回傳精簡欄位：主辦人 (id / username / display_name)、位置、球團名稱、球類、程度、
+      開始時間、費用，以及 enrolled_status。
+
+      **選擇性登入**：帶有有效 Bearer Token 時，enrolled_status 會反映該使用者對每個
+      臨打團的訂單狀態；未登入則一律為 free。
 
       **權限 Access Control**:
       - **Public**: 無需登入即可存取。
-    security: []
+    security:
+      - {}
+      - bearerAuth: []
     parameters:
-      - name: skill_level
+      - name: sport_id
         in: query
         required: false
         schema:
           type: string
-          enum: [A, B, C, D]
+          format: uuid
+      - name: skill_level_id
+        in: query
+        required: false
+        schema:
+          type: string
+          format: uuid
       - name: page
         in: query
         required: false
@@ -214,11 +226,12 @@ pickupOrderDetail:
     summary: "更新訂單狀態"
     description: |
       拆分為 status (報名生命週期) 與 payment_status (付款狀態)。
-      當 status 為 cancelled 或 cancel_request 時，該訂單不再計入 current_enrolled，達成自動釋放名額之效果。
+      只有當 status 為 cancelled 或 rejected 時，該訂單才不再計入 current_enrolled 而釋放名額；
+      cancel_request (申請取消中) 仍占用名額，須待真正 cancelled 後才釋放。
 
       **權限 Access Control**:
       - **Booker (本人)**: 只能將自己的訂單 status 改為 cancelled 或 cancel_request，且不可變更 payment_status。
-      - **Group Host / System Admin**: 可設定任意 status 與 payment_status（審核用途）。
+      - **Group Host / System Admin**: 可設定任意 status 與 payment_status（審核用途）。設定 status=rejected 即拒絕報名者：訂單保留、釋放名額，且該使用者無法再次報名。
     security:
       - bearerAuth: []
     parameters:
@@ -241,19 +254,58 @@ pickupOrderDetail:
           application/json:
             schema:
               $ref: "../components/schemas/pickup.yml#/PickupOrderResponse"
+  delete:
+    tags:
+      - Pickup Orders
+    summary: "硬刪除報名訂單 (僅限系統管理員)"
+    description: |
+      硬刪除一筆報名訂單。刪除後，原本占用名額的訂單會使該臨打團的
+      current_enrolled 自動 -1，且該使用者可再次報名該團。
+
+      主辦人請改用 PATCH status=rejected 拒絕報名者：拒絕會保留訂單、釋放名額，
+      並使該使用者無法再次報名。
+
+      **權限 Access Control**:
+      - **System Admin Only**: 僅系統管理員可硬刪除訂單；主辦人無此權限 (回 403)。
+    security:
+      - bearerAuth: []
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    responses:
+      "204":
+        description: No Content
+      "403":
+        description: Forbidden
+        content:
+          application/json:
+            schema:
+              $ref: "../components/schemas/common.yml#/ErrorResponse"
+      "404":
+        description: Not Found
+        content:
+          application/json:
+            schema:
+              $ref: "../components/schemas/common.yml#/ErrorResponse"
 
 hostPickupGroups:
   get:
     tags:
       - Pickup Groups
-    summary: "取得特定主辦人舉辦的臨打團 (公開)"
+    summary: "取得特定主辦人舉辦的臨打團 (公開，選擇性登入)"
     description: |
       取得指定主辦人所舉辦的臨打團清單。回傳精簡欄位 (同 GET /pickup-groups)，
-      不含主辦人電話。
+      不含主辦人電話。帶有有效 Token 時亦會填入 enrolled_status。
 
       **權限 Access Control**:
       - **Public**: 無需登入即可存取。
-    security: []
+    security:
+      - {}
+      - bearerAuth: []
     parameters:
       - name: host_id
         in: path
@@ -267,12 +319,18 @@ hostPickupGroups:
         schema:
           type: string
           enum: [active, cancelled, completed]
-      - name: skill_level
+      - name: sport_id
         in: query
         required: false
         schema:
           type: string
-          enum: [A, B, C, D]
+          format: uuid
+      - name: skill_level_id
+        in: query
+        required: false
+        schema:
+          type: string
+          format: uuid
       - name: page
         in: query
         required: false

@@ -28,6 +28,7 @@ func (r *ListUsersRequest) Validate() error {
 type UserResponse struct {
 	ID              string                      `json:"id"`
 	Email           string                      `json:"email"`
+	Username        string                      `json:"username"`
 	DisplayName     *string                     `json:"display_name"`
 	Phone           *string                     `json:"phone"`
 	Avatar          *string                     `json:"avatar"`           // URL to avatar image
@@ -84,6 +85,7 @@ func NewUserResponse(u *user.User) UserResponse {
 	return UserResponse{
 		ID:              u.ID,
 		Email:           u.Email,
+		Username:        u.Username,
 		DisplayName:     u.DisplayName,
 		Phone:           u.Phone,
 		Avatar:          avatarURL,
@@ -100,6 +102,7 @@ func NewUserResponse(u *user.User) UserResponse {
 // RegisterRequest defines the payload for user registration.
 type RegisterRequest struct {
 	Email       string `json:"email" binding:"required,email"`
+	Username    string `json:"username" binding:"required"`
 	Password    string `json:"password" binding:"required,min=8"`
 	DisplayName string `json:"display_name" binding:"required"`
 }

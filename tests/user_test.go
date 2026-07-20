@@ -22,6 +22,7 @@ func TestAuthFlow(t *testing.T) {
 	t.Run("Register User", func(t *testing.T) {
 		registerPayload := userHttp.RegisterRequest{
 			Email:       "test@example.com",
+			Username:    "tester1",
 			Password:    "password123",
 			DisplayName: "Tester",
 		}
@@ -32,6 +33,7 @@ func TestAuthFlow(t *testing.T) {
 	t.Run("Duplicate Register", func(t *testing.T) {
 		registerPayload := userHttp.RegisterRequest{
 			Email:       "test@example.com",
+			Username:    "tester2",
 			Password:    "password123",
 			DisplayName: "Tester",
 		}

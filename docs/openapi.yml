@@ -39,6 +39,10 @@ tags:
     description: 系統公告
   - name: Files
     description: 檔案存取
+  - name: Sports
+    description: 球類 (系統管理員維護，公開讀取)
+  - name: Skill Levels
+    description: 程度分級 (系統管理員維護，公開讀取)
   - name: Pickup Groups
     description: 臨打團
   - name: Pickup Orders
@@ -160,6 +164,27 @@ components:
 
     UpdateAnnouncementRequest:
       $ref: "./components/schemas/announcement.yml#/UpdateAnnouncementRequest"
+
+    # --------------------------
+    # Sport & Skill Level Models
+    # --------------------------
+    SportResponse:
+      $ref: "./components/schemas/sport.yml#/SportResponse"
+
+    CreateSportRequest:
+      $ref: "./components/schemas/sport.yml#/CreateSportRequest"
+
+    UpdateSportRequest:
+      $ref: "./components/schemas/sport.yml#/UpdateSportRequest"
+
+    SkillLevelResponse:
+      $ref: "./components/schemas/skilllevel.yml#/SkillLevelResponse"
+
+    CreateSkillLevelRequest:
+      $ref: "./components/schemas/skilllevel.yml#/CreateSkillLevelRequest"
+
+    UpdateSkillLevelRequest:
+      $ref: "./components/schemas/skilllevel.yml#/UpdateSkillLevelRequest"
 
     # --------------------------
     # Pickup Models
@@ -320,6 +345,24 @@ paths:
 
   /files/{id}/thumbnail:
     $ref: "./paths/files.yml#/serveThumbnail"
+
+  # ============================
+  # Sports (Public read, System Admin write)
+  # ============================
+  /sports:
+    $ref: "./paths/sports.yml#/sports"
+
+  /sports/{id}:
+    $ref: "./paths/sports.yml#/sportDetail"
+
+  # ============================
+  # Skill Levels (Public read, System Admin write)
+  # ============================
+  /skill-levels:
+    $ref: "./paths/skill_levels.yml#/skillLevels"
+
+  /skill-levels/{id}:
+    $ref: "./paths/skill_levels.yml#/skillLevelDetail"
 
   # ============================
   # Pickup Groups

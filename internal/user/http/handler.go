@@ -48,7 +48,7 @@ func (h *UserHandler) Register(c *gin.Context) {
 
 	ctx := c.Request.Context()
 
-	u, err := h.userService.Register(ctx, req.Email, req.Password, req.DisplayName)
+	u, err := h.userService.Register(ctx, req.Email, req.Username, req.Password, req.DisplayName)
 	if err != nil {
 		response.Error(c, err)
 		return

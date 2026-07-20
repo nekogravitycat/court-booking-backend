@@ -2,23 +2,25 @@ package pickup
 
 import (
 	"context"
+	"errors"
 	"time"
 
+	"github.com/nekogravitycat/court-booking-backend/internal/skilllevel"
+	"github.com/nekogravitycat/court-booking-backend/internal/sports"
 	"github.com/nekogravitycat/court-booking-backend/internal/user"
 )
 
 type CreateGroupRequest struct {
-	HostID     string
-	Title      string
-	HostName   string
-	HostPhone  string
-	StartTime  time.Time
-	EndTime    time.Time
-	Fee        int
-	Capacity   int
-	LocationID string
-	SkillLevel string
-	Enable     bool
+	HostID       string
+	Title        string
+	StartTime    time.Time
+	EndTime      time.Time
+	Fee          int
+	Capacity     int
+	LocationID   string
+	SportID      string
+	SkillLevelID string
+	Enable       bool
 }
 
 type CreateOrderRequest struct {
@@ -34,17 +36,16 @@ type UpdateOrderRequest struct {
 }
 
 type UpdateGroupRequest struct {
-	Title      *string
-	HostName   *string
-	HostPhone  *string
-	StartTime  *time.Time
-	EndTime    *time.Time
-	Fee        *int
-	Capacity   *int
-	LocationID *string
-	SkillLevel *string
-	Status     *string
-	Enable     *bool
+	Title        *string
+	StartTime    *time.Time
+	EndTime      *time.Time
+	Fee          *int
+	Capacity     *int
+	LocationID   *string
+	SportID      *string
+	SkillLevelID *string
+	Status       *string
+	Enable       *bool
 }
 
 type Service interface {
@@ -59,18 +60,53 @@ type Service interface {
 
 	CreateOrder(ctx context.Context, req CreateOrderRequest) (*PickupOrder, error)
 	UpdateOrder(ctx context.Context, id string, req UpdateOrderRequest, updaterUserID string, isSysAdmin bool) (*PickupOrder, error)
+	DeleteOrder(ctx context.Context, id, requesterUserID string, isSysAdmin bool) error
 }
 
 type service struct {
-	repo        Repository
-	userService user.Service
+	repo              Repository
+	userService       user.Service
+	sportsService     sports.Service
+	skillLevelService skilllevel.Service
 }
 
-func NewService(repo Repository, userService user.Service) Service {
+func NewService(repo Repository, userService user.Service, sportsService sports.Service, skillLevelService skilllevel.Service) Service {
 	return &service{
-		repo:        repo,
-		userService: userService,
+		repo:              repo,
+		userService:       userService,
+		sportsService:     sportsService,
+		skillLevelService: skillLevelService,
 	}
+}
+
+// validateSportAndSkill verifies the sport exists and is active, and that the
+// skill level exists, is active, and belongs to that sport.
+func (s *service) validateSportAndSkill(ctx context.Context, sportID, skillLevelID string) error {
+	sport, err := s.sportsService.GetByID(ctx, sportID)
+	if err != nil {
+		if errors.Is(err, sports.ErrNotFound) {
+			return ErrSportNotFound
+		}
+		return err
+	}
+	if !sport.IsActive {
+		return ErrSportInactive
+	}
+
+	sl, err := s.skillLevelService.GetByID(ctx, skillLevelID)
+	if err != nil {
+		if errors.Is(err, skilllevel.ErrNotFound) {
+			return ErrSkillLevelNotFound
+		}
+		return err
+	}
+	if sl.SportID != sportID {
+		return ErrSkillLevelMismatch
+	}
+	if !sl.IsActive {
+		return ErrSkillLevelInactive
+	}
+	return nil
 }
 
 func (s *service) CreateGroup(ctx context.Context, req CreateGroupRequest) (*PickupGroup, error) {
@@ -78,24 +114,22 @@ func (s *service) CreateGroup(ctx context.Context, req CreateGroupRequest) (*Pic
 		return nil, ErrInvalidTimeRange
 	}
 
-	sl := SkillLevel(req.SkillLevel)
-	if sl != SkillLevelA && sl != SkillLevelB && sl != SkillLevelC && sl != SkillLevelD {
-		return nil, ErrInvalidStatus
+	if err := s.validateSportAndSkill(ctx, req.SportID, req.SkillLevelID); err != nil {
+		return nil, err
 	}
 
 	group := &PickupGroup{
-		HostID:     req.HostID,
-		Title:      req.Title,
-		HostName:   req.HostName,
-		HostPhone:  req.HostPhone,
-		StartTime:  req.StartTime,
-		EndTime:    req.EndTime,
-		Fee:        req.Fee,
-		Capacity:   req.Capacity,
-		LocationID: req.LocationID,
-		SkillLevel: sl,
-		Status:     GroupStatusActive,
-		Enable:     req.Enable,
+		HostID:       req.HostID,
+		Title:        req.Title,
+		StartTime:    req.StartTime,
+		EndTime:      req.EndTime,
+		Fee:          req.Fee,
+		Capacity:     req.Capacity,
+		LocationID:   req.LocationID,
+		SportID:      req.SportID,
+		SkillLevelID: req.SkillLevelID,
+		Status:       GroupStatusActive,
+		Enable:       req.Enable,
 	}
 
 	if err := s.repo.CreateGroup(ctx, group); err != nil {
@@ -122,12 +156,6 @@ func (s *service) UpdateGroup(ctx context.Context, id string, req UpdateGroupReq
 	if req.Title != nil {
 		group.Title = *req.Title
 	}
-	if req.HostName != nil {
-		group.HostName = *req.HostName
-	}
-	if req.HostPhone != nil {
-		group.HostPhone = *req.HostPhone
-	}
 	if req.StartTime != nil {
 		group.StartTime = *req.StartTime
 	}
@@ -148,13 +176,24 @@ func (s *service) UpdateGroup(ctx context.Context, id string, req UpdateGroupReq
 	if req.LocationID != nil {
 		group.LocationID = *req.LocationID
 	}
-	if req.SkillLevel != nil {
-		sl := SkillLevel(*req.SkillLevel)
-		if sl != SkillLevelA && sl != SkillLevelB && sl != SkillLevelC && sl != SkillLevelD {
-			return nil, ErrInvalidStatus
-		}
-		group.SkillLevel = sl
+
+	// Re-validate the sport / skill-level pair whenever either changes, so the
+	// two stay consistent (the skill level must belong to the group's sport).
+	sportOrSkillChanged := false
+	if req.SportID != nil {
+		group.SportID = *req.SportID
+		sportOrSkillChanged = true
 	}
+	if req.SkillLevelID != nil {
+		group.SkillLevelID = *req.SkillLevelID
+		sportOrSkillChanged = true
+	}
+	if sportOrSkillChanged {
+		if err := s.validateSportAndSkill(ctx, group.SportID, group.SkillLevelID); err != nil {
+			return nil, err
+		}
+	}
+
 	if req.Status != nil {
 		gs := GroupStatus(*req.Status)
 		if gs != GroupStatusActive && gs != GroupStatusCancelled && gs != GroupStatusCompleted {
@@ -279,8 +318,22 @@ func (s *service) UpdateOrder(ctx context.Context, id string, req UpdateOrderReq
 	return order, nil
 }
 
+// DeleteOrder hard-deletes an enrollment. Only a system admin may do this; a
+// host removes a participant by rejecting the order (status=rejected) instead,
+// which keeps the row and blocks the user from re-enrolling. The group's
+// current_enrolled is derived from a live COUNT, so deleting the row decrements
+// it automatically.
+func (s *service) DeleteOrder(ctx context.Context, id, requesterUserID string, isSysAdmin bool) error {
+	_ = requesterUserID // deletion is admin-only; the requester identity is not consulted.
+	if !isSysAdmin {
+		return ErrPermissionDenied
+	}
+	return s.repo.DeleteOrder(ctx, id)
+}
+
 // isOccupyingStatus reports whether an order in the given status counts against
-// the group's capacity (i.e. occupies a seat).
+// the group's capacity (i.e. occupies a seat). A cancel_request still holds the
+// seat: it is only released once the order is actually cancelled (or rejected).
 func isOccupyingStatus(s OrderStatus) bool {
-	return s == OrderStatusPending || s == OrderStatusConfirmed
+	return s == OrderStatusPending || s == OrderStatusConfirmed || s == OrderStatusCancelRequest
 }

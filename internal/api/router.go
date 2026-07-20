@@ -24,24 +24,30 @@ import (
 	pickupHttp "github.com/nekogravitycat/court-booking-backend/internal/pickup/http"
 	"github.com/nekogravitycat/court-booking-backend/internal/resource"
 	resHttp "github.com/nekogravitycat/court-booking-backend/internal/resource/http"
+	"github.com/nekogravitycat/court-booking-backend/internal/skilllevel"
+	skillHttp "github.com/nekogravitycat/court-booking-backend/internal/skilllevel/http"
+	"github.com/nekogravitycat/court-booking-backend/internal/sports"
+	sportsHttp "github.com/nekogravitycat/court-booking-backend/internal/sports/http"
 	"github.com/nekogravitycat/court-booking-backend/internal/user"
 	userHttp "github.com/nekogravitycat/court-booking-backend/internal/user/http"
 )
 
 // Config holds all dependencies required to initialize the router.
 type Config struct {
-	IsProduction    bool
-	ProdOrigins     string
-	UserService     user.Service
-	OrgService      organization.Service
-	LocService      location.Service
-	ResService      resource.Service
-	BookingService  booking.Service
-	AnnService      announcement.Service
-	PickupService   pickup.Service
-	FavoriteService favorite.Service
-	FileService     file.Service
-	JWTManager      *auth.JWTManager
+	IsProduction      bool
+	ProdOrigins       string
+	UserService       user.Service
+	OrgService        organization.Service
+	LocService        location.Service
+	ResService        resource.Service
+	BookingService    booking.Service
+	AnnService        announcement.Service
+	SportsService     sports.Service
+	SkillLevelService skilllevel.Service
+	PickupService     pickup.Service
+	FavoriteService   favorite.Service
+	FileService       file.Service
+	JWTManager        *auth.JWTManager
 }
 
 // NewRouter initializes the HTTP router engine using the provided config.
@@ -89,6 +95,9 @@ func NewRouter(cfg Config) *gin.Engine {
 		return u.IsActive, nil
 	})
 	sysAdminMiddleware := RequireSystemAdmin(cfg.UserService)
+	// Optional auth for public endpoints that personalize their response when a
+	// valid token is present but never require one.
+	optionalAuthMiddleware := auth.AuthOptional(cfg.JWTManager)
 
 	// Initialize Handlers (Injecting Services from cfg)
 	fileHandler := fileHttp.NewHandler(cfg.FileService)
@@ -98,6 +107,8 @@ func NewRouter(cfg Config) *gin.Engine {
 	resHandler := resHttp.NewHandler(cfg.ResService, cfg.LocService, cfg.OrgService, cfg.BookingService, cfg.FileService, fileHandler)
 	bookingHandler := bookingHttp.NewHandler(cfg.BookingService, cfg.UserService, cfg.ResService, cfg.LocService, cfg.OrgService)
 	annHandler := annHttp.NewHandler(cfg.AnnService)
+	sportsHandler := sportsHttp.NewHandler(cfg.SportsService)
+	skillHandler := skillHttp.NewHandler(cfg.SkillLevelService)
 	pickupHandler := pickupHttp.NewHandler(cfg.PickupService, cfg.UserService)
 	favoriteHandler := favoriteHttp.NewHandler(cfg.FavoriteService)
 
@@ -111,7 +122,9 @@ func NewRouter(cfg Config) *gin.Engine {
 		resHttp.RegisterRoutes(v1, resHandler, authMiddleware)
 		bookingHttp.RegisterRoutes(v1, bookingHandler, authMiddleware)
 		annHttp.RegisterRoutes(v1, annHandler, authMiddleware, sysAdminMiddleware)
-		pickupHttp.RegisterRoutes(v1, pickupHandler, authMiddleware)
+		sportsHttp.RegisterRoutes(v1, sportsHandler, authMiddleware, sysAdminMiddleware)
+		skillHttp.RegisterRoutes(v1, skillHandler, authMiddleware, sysAdminMiddleware)
+		pickupHttp.RegisterRoutes(v1, pickupHandler, authMiddleware, optionalAuthMiddleware)
 		favoriteHttp.RegisterRoutes(v1, favoriteHandler, authMiddleware)
 	}
 
