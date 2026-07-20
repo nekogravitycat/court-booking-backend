@@ -175,6 +175,84 @@ func TestUserManagementPermissions(t *testing.T) {
 	})
 }
 
+func TestSystemAdminCannotRevokeOwnAdmin(t *testing.T) {
+	clearTables()
+
+	// Setup: Two system admins so we can also verify demoting *another* admin
+	// is still allowed.
+	adminUser := createTestUser(t, "admin@self.com", "adminpass", true)
+	otherAdmin := createTestUser(t, "other@self.com", "adminpass", true)
+
+	adminToken := generateToken(adminUser.ID)
+
+	t.Run("Admin Cannot Revoke Own Admin", func(t *testing.T) {
+		path := "/v1/users/" + adminUser.ID
+		isSystemAdmin := false
+		payload := userHttp.UpdateUserRequest{
+			IsSystemAdmin: &isSystemAdmin,
+		}
+		w := executeRequest("PATCH", path, payload, adminToken)
+		require.Equal(t, http.StatusForbidden, w.Code, "Admin should not be able to revoke their own admin privilege")
+
+		// Verify the privilege is untouched.
+		wGet := executeRequest("GET", path, nil, adminToken)
+		require.Equal(t, http.StatusOK, wGet.Code)
+
+		var resp userHttp.MeResponse
+		err := json.Unmarshal(wGet.Body.Bytes(), &resp)
+		require.NoError(t, err)
+		assert.True(t, resp.User.IsSystemAdmin, "Admin should remain a system admin")
+	})
+
+	t.Run("Admin Can Update Own Other Fields", func(t *testing.T) {
+		path := "/v1/users/" + adminUser.ID
+		newName := "Renamed Admin"
+		payload := userHttp.UpdateUserRequest{
+			DisplayName: &newName,
+		}
+		w := executeRequest("PATCH", path, payload, adminToken)
+		require.Equal(t, http.StatusOK, w.Code, "Admin should still be able to update their own non-admin fields")
+
+		var resp userHttp.MeResponse
+		err := json.Unmarshal(w.Body.Bytes(), &resp)
+		require.NoError(t, err)
+		require.NotNil(t, resp.User.DisplayName)
+		assert.Equal(t, newName, *resp.User.DisplayName)
+		assert.True(t, resp.User.IsSystemAdmin, "Admin flag should be unchanged")
+	})
+
+	t.Run("Admin Can Keep Own Admin Flag True", func(t *testing.T) {
+		// Sending is_system_admin=true for oneself is a no-op, not a revocation.
+		path := "/v1/users/" + adminUser.ID
+		isSystemAdmin := true
+		payload := userHttp.UpdateUserRequest{
+			IsSystemAdmin: &isSystemAdmin,
+		}
+		w := executeRequest("PATCH", path, payload, adminToken)
+		require.Equal(t, http.StatusOK, w.Code, "Re-affirming own admin flag should succeed")
+
+		var resp userHttp.MeResponse
+		err := json.Unmarshal(w.Body.Bytes(), &resp)
+		require.NoError(t, err)
+		assert.True(t, resp.User.IsSystemAdmin)
+	})
+
+	t.Run("Admin Can Revoke Another Admin", func(t *testing.T) {
+		path := "/v1/users/" + otherAdmin.ID
+		isSystemAdmin := false
+		payload := userHttp.UpdateUserRequest{
+			IsSystemAdmin: &isSystemAdmin,
+		}
+		w := executeRequest("PATCH", path, payload, adminToken)
+		require.Equal(t, http.StatusOK, w.Code, "Admin should be able to revoke another admin's privilege")
+
+		var resp userHttp.MeResponse
+		err := json.Unmarshal(w.Body.Bytes(), &resp)
+		require.NoError(t, err)
+		assert.False(t, resp.User.IsSystemAdmin, "Other admin should be demoted")
+	})
+}
+
 func TestUserNotFoundAndInvalidInput(t *testing.T) {
 	clearTables()
 	adminUser := createTestUser(t, "admin@sys.com", "pass", true)

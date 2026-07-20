@@ -31,7 +31,7 @@ type Service interface {
 	GetByEmail(ctx context.Context, email string) (*User, error)
 
 	List(ctx context.Context, filter UserFilter) ([]*User, int, error)
-	Update(ctx context.Context, id string, req UpdateUserRequest) (*User, error)
+	Update(ctx context.Context, id string, req UpdateUserRequest, actingUserID string) (*User, error)
 	UpdateAvatar(ctx context.Context, id string, fileID string) error
 	RemoveAvatar(ctx context.Context, id string) error
 	Delete(ctx context.Context, id string) error
@@ -210,11 +210,17 @@ func (s *service) List(ctx context.Context, filter UserFilter) ([]*User, int, er
 	return s.repo.List(ctx, filter)
 }
 
-func (s *service) Update(ctx context.Context, id string, req UpdateUserRequest) (*User, error) {
+func (s *service) Update(ctx context.Context, id string, req UpdateUserRequest, actingUserID string) (*User, error) {
 	// 1. Check if user exists
 	u, err := s.repo.GetByID(ctx, id)
 	if err != nil {
 		return nil, err
+	}
+
+	// A system admin must not revoke their own system admin privilege, so the
+	// system can never be left without an admin by accident.
+	if req.IsSystemAdmin != nil && !*req.IsSystemAdmin && id == actingUserID {
+		return nil, ErrCannotRevokeOwnAdmin
 	}
 
 	// 2. Apply updates if provided

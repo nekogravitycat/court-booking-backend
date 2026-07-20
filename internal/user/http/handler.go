@@ -236,7 +236,7 @@ func (h *UserHandler) Update(c *gin.Context) {
 		IsSystemAdmin: body.IsSystemAdmin,
 	}
 
-	updatedUser, err := h.userService.Update(c.Request.Context(), uri.ID, req)
+	updatedUser, err := h.userService.Update(c.Request.Context(), uri.ID, req, auth.GetUserID(c))
 	if err != nil {
 		response.Error(c, err)
 		return
