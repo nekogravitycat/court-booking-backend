@@ -14,7 +14,7 @@ type ListResourcesRequest struct {
 	request.ListParams
 	OrganizationID string `form:"organization_id" binding:"omitempty,uuid"`
 	LocationID     string `form:"location_id" binding:"omitempty,uuid"`
-	ResourceType   string `form:"resource_type" binding:"omitempty"`
+	ResourceType   string `form:"resource_type" binding:"omitempty,oneof=badminton tennis basketball table_tennis volleyball football classroom other"`
 	SortBy         string `form:"sort_by" binding:"omitempty,oneof=name created_at"`
 }
 
@@ -65,10 +65,10 @@ func NewResponse(r *resource.Resource) ResourceResponse {
 }
 
 type CreateRequest struct {
-	Name         string `json:"name" binding:"required"`
-	Price        int    `json:"price" binding:"min=0"`
+	Name         string `json:"name" binding:"required,min=1,max=100"`
+	Price        int    `json:"price" binding:"min=0,max=1000000"`
 	LocationID   string `json:"location_id" binding:"required,uuid"`
-	ResourceType string `json:"resource_type" binding:"required"`
+	ResourceType string `json:"resource_type" binding:"required,oneof=badminton tennis basketball table_tennis volleyball football classroom other"`
 }
 
 // Validate performs custom validation for CreateRequest.
@@ -78,7 +78,7 @@ func (r *CreateRequest) Validate() error {
 
 type UpdateRequest struct {
 	Name  *string `json:"name" binding:"omitempty,min=1,max=100"`
-	Price *int    `json:"price" binding:"omitempty,min=0"`
+	Price *int    `json:"price" binding:"omitempty,min=0,max=1000000"`
 }
 
 // Validate performs custom validation for UpdateRequest.

@@ -21,7 +21,7 @@ func (r *ListSkillLevelsRequest) Validate() error { return nil }
 type CreateSkillLevelBody struct {
 	SportID   string `json:"sport_id" binding:"required,uuid"`
 	Name      string `json:"name" binding:"required,min=1,max=100"`
-	SortOrder int    `json:"sort_order"`
+	SortOrder int    `json:"sort_order" binding:"min=0,max=1000"`
 }
 
 // Validate performs custom validation for CreateSkillLevelBody.
@@ -29,7 +29,7 @@ func (r *CreateSkillLevelBody) Validate() error { return nil }
 
 type UpdateSkillLevelBody struct {
 	Name      *string `json:"name" binding:"omitempty,min=1,max=100"`
-	SortOrder *int    `json:"sort_order"`
+	SortOrder *int    `json:"sort_order" binding:"omitempty,min=0,max=1000"`
 	IsActive  *bool   `json:"is_active"`
 }
 

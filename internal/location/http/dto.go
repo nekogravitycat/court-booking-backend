@@ -89,31 +89,31 @@ func NewManagerResponse(u *user.User) ManagerResponse {
 
 type CreateLocationRequest struct {
 	OrganizationID    string  `json:"organization_id" binding:"required,uuid"`
-	Name              string  `json:"name" binding:"required"`
-	Capacity          int64   `json:"capacity" binding:"required"`
-	OpeningHoursStart string  `json:"opening_hours_start" binding:"required"`
-	OpeningHoursEnd   string  `json:"opening_hours_end" binding:"required"`
-	Timezone          string  `json:"timezone"`
-	LocationInfo      string  `json:"location_info" binding:"required"`
+	Name              string  `json:"name" binding:"required,min=1,max=100"`
+	Capacity          int64   `json:"capacity" binding:"required,min=1,max=100000"`
+	OpeningHoursStart string  `json:"opening_hours_start" binding:"required,max=8"`
+	OpeningHoursEnd   string  `json:"opening_hours_end" binding:"required,max=8"`
+	Timezone          string  `json:"timezone" binding:"omitempty,max=64"`
+	LocationInfo      string  `json:"location_info" binding:"required,max=500"`
 	Opening           bool    `json:"opening"`
-	Rule              string  `json:"rule"`
-	Facility          string  `json:"facility"`
-	Description       string  `json:"description"`
+	Rule              string  `json:"rule" binding:"omitempty,max=2000"`
+	Facility          string  `json:"facility" binding:"omitempty,max=2000"`
+	Description       string  `json:"description" binding:"omitempty,max=2000"`
 	Longitude         float64 `json:"longitude" binding:"required,min=-180,max=180"`
 	Latitude          float64 `json:"latitude" binding:"required,min=-90,max=90"`
 }
 
 type UpdateLocationRequest struct {
-	Name              *string  `json:"name"`
-	Capacity          *int64   `json:"capacity"`
-	OpeningHoursStart *string  `json:"opening_hours_start"`
-	OpeningHoursEnd   *string  `json:"opening_hours_end"`
-	Timezone          *string  `json:"timezone"`
-	LocationInfo      *string  `json:"location_info"`
+	Name              *string  `json:"name" binding:"omitempty,min=1,max=100"`
+	Capacity          *int64   `json:"capacity" binding:"omitempty,min=1,max=100000"`
+	OpeningHoursStart *string  `json:"opening_hours_start" binding:"omitempty,max=8"`
+	OpeningHoursEnd   *string  `json:"opening_hours_end" binding:"omitempty,max=8"`
+	Timezone          *string  `json:"timezone" binding:"omitempty,max=64"`
+	LocationInfo      *string  `json:"location_info" binding:"omitempty,max=500"`
 	Opening           *bool    `json:"opening"`
-	Rule              *string  `json:"rule"`
-	Facility          *string  `json:"facility"`
-	Description       *string  `json:"description"`
+	Rule              *string  `json:"rule" binding:"omitempty,max=2000"`
+	Facility          *string  `json:"facility" binding:"omitempty,max=2000"`
+	Description       *string  `json:"description" binding:"omitempty,max=2000"`
 	Longitude         *float64 `json:"longitude" binding:"omitempty,min=-180,max=180"`
 	Latitude          *float64 `json:"latitude" binding:"omitempty,min=-90,max=90"`
 }
@@ -123,7 +123,7 @@ type ListLocationsRequest struct {
 	OrganizationID string `form:"organization_id" binding:"omitempty,uuid"`
 
 	// Filters
-	Name                 string `form:"name"`
+	Name                 string `form:"name" binding:"omitempty,max=100"`
 	Opening              *bool  `form:"opening"`
 	CapacityMin          *int64 `form:"capacity_min"`
 	CapacityMax          *int64 `form:"capacity_max"`

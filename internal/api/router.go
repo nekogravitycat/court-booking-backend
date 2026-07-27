@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"net/http"
 	"strings"
 
 	"github.com/gin-contrib/cors"
@@ -50,6 +51,11 @@ type Config struct {
 	JWTManager        *auth.JWTManager
 }
 
+// maxRequestBodyBytes caps the size of any incoming request body. It must
+// comfortably fit the largest legitimate payload (a 5MB image upload plus
+// multipart overhead) while still blocking multi-hundred-MB abuse.
+const maxRequestBodyBytes = 10 << 20 // 10 MiB
+
 // NewRouter initializes the HTTP router engine using the provided config.
 func NewRouter(cfg Config) *gin.Engine {
 	// Set Gin mode
@@ -57,10 +63,16 @@ func NewRouter(cfg Config) *gin.Engine {
 		gin.SetMode(gin.ReleaseMode)
 	}
 
+	registerCustomValidators()
+
 	r := gin.New()
 
 	// Global Middleware
 	r.Use(gin.Logger(), gin.Recovery())
+	r.Use(func(c *gin.Context) {
+		c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, maxRequestBodyBytes)
+		c.Next()
+	})
 
 	// CORS
 	config := cors.DefaultConfig()

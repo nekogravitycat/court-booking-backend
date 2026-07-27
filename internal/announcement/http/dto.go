@@ -10,7 +10,7 @@ import (
 // ListAnnouncementsRequest defines query parameters for listing announcements.
 type ListAnnouncementsRequest struct {
 	request.ListParams
-	Keyword string `form:"q"`
+	Keyword string `form:"q" binding:"omitempty,max=100"`
 	SortBy  string `form:"sort_by" binding:"omitempty,oneof=title created_at"`
 }
 
@@ -39,7 +39,7 @@ func NewResponse(a *announcement.Announcement) AnnouncementResponse {
 
 type CreateRequest struct {
 	Title   string `json:"title" binding:"required,min=1,max=200"`
-	Content string `json:"content" binding:"required"`
+	Content string `json:"content" binding:"required,max=20000"`
 }
 
 // Validate performs custom validation for CreateRequest.
@@ -49,7 +49,7 @@ func (r *CreateRequest) Validate() error {
 
 type UpdateRequest struct {
 	Title   *string `json:"title" binding:"omitempty,min=1,max=200"`
-	Content *string `json:"content"`
+	Content *string `json:"content" binding:"omitempty,max=20000"`
 }
 
 // Validate performs custom validation for UpdateRequest.

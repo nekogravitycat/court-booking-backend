@@ -78,6 +78,12 @@ func inferExtensionFromContentType(contentType string) string {
 func (s *service) Upload(ctx context.Context, input UploadInput) (*File, error) {
 	header := input.FileHeader
 
+	// Reject based on the client-declared size before opening/reading the file,
+	// so an oversized upload never gets fully buffered into memory.
+	if input.MaxSizeBytes > 0 && header.Size > input.MaxSizeBytes {
+		return nil, ErrSizeExceeded
+	}
+
 	// Open file
 	src, err := header.Open()
 	if err != nil {
@@ -85,9 +91,13 @@ func (s *service) Upload(ctx context.Context, input UploadInput) (*File, error) 
 	}
 	defer src.Close()
 
-	// Read content to buffer
-	// TODO: For very large files, this might be an issue
-	fileBytes, err := io.ReadAll(src)
+	// Read content to buffer, capped at MaxSizeBytes+1 so a header.Size that
+	// understates the true content can't force unbounded reads into memory.
+	var srcReader io.Reader = src
+	if input.MaxSizeBytes > 0 {
+		srcReader = io.LimitReader(src, input.MaxSizeBytes+1)
+	}
+	fileBytes, err := io.ReadAll(srcReader)
 	if err != nil {
 		return nil, ErrFileReadFailed
 	}
@@ -97,14 +107,14 @@ func (s *service) Upload(ctx context.Context, input UploadInput) (*File, error) 
 	// Get actual file size
 	actualSize := int64(len(fileBytes))
 
-	// Verify claimed size matches actual size
-	if header.Size != actualSize {
-		return nil, ErrSizeMismatch
-	}
-
 	// Validate file size based on actual file content
 	if input.MaxSizeBytes > 0 && actualSize > input.MaxSizeBytes {
 		return nil, ErrSizeExceeded
+	}
+
+	// Verify claimed size matches actual size
+	if header.Size != actualSize {
+		return nil, ErrSizeMismatch
 	}
 
 	// === Validate file content type ===

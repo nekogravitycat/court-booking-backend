@@ -134,7 +134,7 @@ func (r *AddOrganizationManagerRequest) Validate() error {
 
 // AddOrganizationMemberRequest defines payload for adding a member.
 type AddOrganizationMemberRequest struct {
-	Email string `json:"email" binding:"required,email"`
+	Email string `json:"email" binding:"required,email,max=254"`
 }
 
 // Validate performs custom validation for AddOrganizationMemberRequest.

@@ -12,9 +12,9 @@ import (
 // ListUsersRequest defines query parameters for listing users.
 type ListUsersRequest struct {
 	request.ListParams
-	Email       string   `form:"email"`
-	IDs         []string `form:"ids"`
-	DisplayName string   `form:"display_name"`
+	Email       string   `form:"email" binding:"omitempty,max=254"`
+	IDs         []string `form:"ids" binding:"omitempty,max=100,dive,uuid"`
+	DisplayName string   `form:"display_name" binding:"omitempty,max=100"`
 	IsActive    *bool    `form:"is_active"`
 	SortBy      string   `form:"sort_by" binding:"omitempty,oneof=name email created_at"`
 }
@@ -101,10 +101,10 @@ func NewUserResponse(u *user.User) UserResponse {
 
 // RegisterRequest defines the payload for user registration.
 type RegisterRequest struct {
-	Email       string `json:"email" binding:"required,email"`
-	Username    string `json:"username" binding:"required"`
-	Password    string `json:"password" binding:"required,min=8"`
-	DisplayName string `json:"display_name" binding:"required"`
+	Email       string `json:"email" binding:"required,email,max=254"`
+	Username    string `json:"username" binding:"required,min=4,max=15"`
+	Password    string `json:"password" binding:"required,min=8,max=72"`
+	DisplayName string `json:"display_name" binding:"required,max=50"`
 }
 
 // Validate performs custom validation for RegisterRequest.
@@ -114,8 +114,8 @@ func (r *RegisterRequest) Validate() error {
 
 // LoginRequest defines the payload for user login.
 type LoginRequest struct {
-	Email    string `json:"email" binding:"required,email"`
-	Password string `json:"password" binding:"required"`
+	Email    string `json:"email" binding:"required,email,max=254"`
+	Password string `json:"password" binding:"required,max=72"`
 }
 
 // Validate performs custom validation for LoginRequest.
@@ -126,8 +126,8 @@ func (r *LoginRequest) Validate() error {
 // UpdateUserRequest defines fields allowed to be updated via PATCH /users/:id.
 // Use pointers to distinguish between "field not sent" and "field sent as false/empty".
 type UpdateUserRequest struct {
-	DisplayName   *string `json:"display_name"`
-	Phone         *string `json:"phone"`
+	DisplayName   *string `json:"display_name" binding:"omitempty,max=50"`
+	Phone         *string `json:"phone" binding:"omitempty,tw_phone"`
 	IsActive      *bool   `json:"is_active"`
 	IsSystemAdmin *bool   `json:"is_system_admin"`
 }

@@ -31,11 +31,11 @@ type HostGroupsURI struct {
 }
 
 type CreateGroupBody struct {
-	Title        string    `json:"title" binding:"required"`
+	Title        string    `json:"title" binding:"required,min=1,max=100"`
 	StartTime    time.Time `json:"start_time" binding:"required"`
 	EndTime      time.Time `json:"end_time" binding:"required"`
-	Fee          int       `json:"fee" binding:"min=0"`
-	Capacity     int       `json:"capacity" binding:"required,min=1"`
+	Fee          int       `json:"fee" binding:"min=0,max=100000"`
+	Capacity     int       `json:"capacity" binding:"required,min=1,max=200"`
 	LocationID   string    `json:"location_id" binding:"required,uuid"`
 	SportID      string    `json:"sport_id" binding:"required,uuid"`
 	SkillLevelID string    `json:"skill_level_id" binding:"required,uuid"`
@@ -55,11 +55,11 @@ type UpdateOrderBody struct {
 }
 
 type UpdateGroupBody struct {
-	Title        *string    `json:"title"`
+	Title        *string    `json:"title" binding:"omitempty,min=1,max=100"`
 	StartTime    *time.Time `json:"start_time"`
 	EndTime      *time.Time `json:"end_time"`
-	Fee          *int       `json:"fee" binding:"omitempty,min=0"`
-	Capacity     *int       `json:"capacity" binding:"omitempty,min=1"`
+	Fee          *int       `json:"fee" binding:"omitempty,min=0,max=100000"`
+	Capacity     *int       `json:"capacity" binding:"omitempty,min=1,max=200"`
 	LocationID   *string    `json:"location_id" binding:"omitempty,uuid"`
 	SportID      *string    `json:"sport_id" binding:"omitempty,uuid"`
 	SkillLevelID *string    `json:"skill_level_id" binding:"omitempty,uuid"`
