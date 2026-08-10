@@ -16,16 +16,22 @@ func RegisterRoutes(g *gin.RouterGroup, h *UserHandler, authMiddleware, adminMid
 	// === Authenticated Routes ===
 	g.GET("/me", authMiddleware, h.Me) // Get current user profile
 
+	// === Avatar Routes (Self or System Admin; enforced in the handler) ===
+	avatarGroup := g.Group("/users")
+	avatarGroup.Use(authMiddleware)
+	{
+		avatarGroup.PUT("/:id/avatar", h.UploadAvatar)    // Upload avatar
+		avatarGroup.DELETE("/:id/avatar", h.RemoveAvatar) // Remove avatar
+	}
+
 	// === Administration Routes (System Admin Only) ===
 	usersGroup := g.Group("/users")
 	usersGroup.Use(authMiddleware, adminMiddleware)
 	{
-		usersGroup.GET("", h.List)                       // List users
-		usersGroup.GET("/:id", h.Get)                    // Get user details
-		usersGroup.PATCH("/:id", h.Update)               // Update user info
-		usersGroup.DELETE("/:id", h.Delete)              // Delete user
-		usersGroup.PUT("/:id/avatar", h.UploadAvatar)    // Upload avatar
-		usersGroup.DELETE("/:id/avatar", h.RemoveAvatar) // Remove avatar
+		usersGroup.GET("", h.List)          // List users
+		usersGroup.GET("/:id", h.Get)       // Get user details
+		usersGroup.PATCH("/:id", h.Update)  // Update user info
+		usersGroup.DELETE("/:id", h.Delete) // Delete user
 	}
 
 	// === Pickup Host Role Management (System Admin Only) ===

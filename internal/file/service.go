@@ -46,6 +46,22 @@ func NewService(repo Repository, store storage.Storage) Service {
 	}
 }
 
+// contentTypeAliases maps non-standard MIME type strings that some clients
+// send to their canonical form, so the claimed-vs-detected content type
+// check does not reject them as a mismatch.
+var contentTypeAliases = map[string]string{
+	"image/jpg": "image/jpeg",
+}
+
+// normalizeContentType returns the canonical MIME type for known aliases,
+// or the input unchanged if it has no known alias.
+func normalizeContentType(contentType string) string {
+	if canonical, ok := contentTypeAliases[contentType]; ok {
+		return canonical
+	}
+	return contentType
+}
+
 // inferExtensionFromContentType maps common MIME types to file extensions
 func inferExtensionFromContentType(contentType string) string {
 	// Map of common MIME types to extensions
@@ -128,7 +144,8 @@ func (s *service) Upload(ctx context.Context, input UploadInput) (*File, error) 
 	}
 
 	// Ensure claimed type matches actual type
-	if header.Header.Get("Content-Type") != actualContentType {
+	claimedContentType := normalizeContentType(header.Header.Get("Content-Type"))
+	if claimedContentType != actualContentType {
 		return nil, ErrContentTypeMismatch
 	}
 
