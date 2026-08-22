@@ -61,6 +61,7 @@ func (h *Handler) CreateGroup(c *gin.Context) {
 	req := pickup.CreateGroupRequest{
 		HostID:       userID,
 		Title:        body.Title,
+		Description:  body.Description,
 		StartTime:    body.StartTime,
 		EndTime:      body.EndTime,
 		Fee:          body.Fee,
@@ -92,14 +93,14 @@ func (h *Handler) ListGroups(c *gin.Context) {
 	sortOrder := strings.ToUpper(req.SortOrder)
 
 	filter := pickup.GroupFilter{
-		SportID:      req.SportID,
-		SkillLevelID: req.SkillLevelID,
-		BookableOnly: true,
-		ViewerUserID: auth.GetUserID(c),
-		Page:         req.Page,
-		PageSize:     req.PageSize,
-		SortBy:       req.SortBy,
-		SortOrder:    sortOrder,
+		SportID:             req.SportID,
+		SkillLevelID:        req.SkillLevelID,
+		PubliclyVisibleOnly: true,
+		ViewerUserID:        auth.GetUserID(c),
+		Page:                req.Page,
+		PageSize:            req.PageSize,
+		SortBy:              req.SortBy,
+		SortOrder:           sortOrder,
 	}
 
 	groups, total, err := h.service.ListGroups(c.Request.Context(), filter)
@@ -232,6 +233,7 @@ func (h *Handler) UpdateGroup(c *gin.Context) {
 
 	req := pickup.UpdateGroupRequest{
 		Title:        body.Title,
+		Description:  body.Description,
 		StartTime:    body.StartTime,
 		EndTime:      body.EndTime,
 		Fee:          body.Fee,

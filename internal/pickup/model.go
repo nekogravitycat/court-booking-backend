@@ -23,6 +23,7 @@ var (
 	ErrSkillLevelNotFound    = apperror.New(http.StatusNotFound, "skill level not found")
 	ErrSkillLevelMismatch    = apperror.New(http.StatusBadRequest, "skill level does not belong to the selected sport")
 	ErrSkillLevelInactive    = apperror.New(http.StatusBadRequest, "skill level is not active")
+	ErrTimeConflict          = apperror.New(http.StatusConflict, "time_conflict")
 )
 
 type GroupStatus string
@@ -80,6 +81,7 @@ type PickupGroup struct {
 	ID              string
 	HostID          string
 	Title           string
+	Description     *string
 	StartTime       time.Time
 	EndTime         time.Time
 	Fee             int
@@ -124,9 +126,10 @@ type GroupFilter struct {
 	SportID      string
 	SkillLevelID string
 	HostID       string
-	// BookableOnly limits results to groups that can still be enrolled into:
-	// status=active, enable=true, not yet ended, and not fully booked.
-	BookableOnly bool
+	// PubliclyVisibleOnly limits results to groups eligible for the public
+	// listing: status=active, enable=true, and not yet ended. Fully booked
+	// groups are still included so users can see (though not join) them.
+	PubliclyVisibleOnly bool
 	// ViewerUserID, when set, resolves each group's enrolled_status for that user.
 	ViewerUserID string
 	Page         int

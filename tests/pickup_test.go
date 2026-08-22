@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -449,6 +451,212 @@ func TestPickupGroupAdminActions(t *testing.T) {
 		wDel := executeRequest("DELETE", path, nil, adminToken)
 		// Should fail due to RESTRICT constraint
 		assert.Equal(t, http.StatusInternalServerError, wDel.Code)
+	})
+}
+
+func TestPickupGroupFullyBookedStillListed(t *testing.T) {
+	clearTables()
+
+	host := createTestUser(t, "fbhost@pickup.com", "pass", false)
+	grantPickupHost(t, host.ID)
+	user1 := createTestUser(t, "fbuser1@pickup.com", "pass", false)
+
+	hostToken := generateToken(host.ID)
+	user1Token := generateToken(user1.ID)
+
+	locationID := setupTestLocation(t, hostToken, host.ID)
+	sportID, skillLevelID := getSportSkill(t, "BADMINTON", "A")
+
+	payload := pickupHttp.CreateGroupBody{
+		Title:        "Full Group",
+		StartTime:    time.Now().Add(24 * time.Hour),
+		EndTime:      time.Now().Add(26 * time.Hour),
+		Fee:          100,
+		Capacity:     1,
+		LocationID:   locationID,
+		SportID:      sportID,
+		SkillLevelID: skillLevelID,
+	}
+	w := executeRequest("POST", "/v1/pickup-groups", payload, hostToken)
+	require.Equal(t, http.StatusCreated, w.Code)
+	var groupResp pickupHttp.PickupGroupResponse
+	json.Unmarshal(w.Body.Bytes(), &groupResp)
+	groupID := groupResp.ID
+
+	// Fill the single seat.
+	w = executeRequest("POST", fmt.Sprintf("/v1/pickup-groups/%s/orders", groupID), nil, user1Token)
+	require.Equal(t, http.StatusCreated, w.Code)
+
+	containsGroup := func(w *httptest.ResponseRecorder) bool {
+		var listResp response.PageResponse[pickupHttp.PickupGroupBrief]
+		json.Unmarshal(w.Body.Bytes(), &listResp)
+		for _, it := range listResp.Items {
+			if it.ID == groupID {
+				return true
+			}
+		}
+		return false
+	}
+
+	wl := executeRequest("GET", "/v1/pickup-groups", nil, "")
+	assert.Equal(t, http.StatusOK, wl.Code)
+	assert.True(t, containsGroup(wl), "fully booked group should still appear in the public list")
+}
+
+func TestPickupGroupTimeConflict(t *testing.T) {
+	clearTables()
+
+	host := createTestUser(t, "tchost@pickup.com", "pass", false)
+	grantPickupHost(t, host.ID)
+	user1 := createTestUser(t, "tcuser1@pickup.com", "pass", false)
+
+	hostToken := generateToken(host.ID)
+	user1Token := generateToken(user1.ID)
+
+	locationID := setupTestLocation(t, hostToken, host.ID)
+	sportID, skillLevelID := getSportSkill(t, "BADMINTON", "A")
+
+	start := time.Now().Add(24 * time.Hour)
+	end := start.Add(2 * time.Hour)
+
+	createGroup := func(title string, s, e time.Time) string {
+		payload := pickupHttp.CreateGroupBody{
+			Title:        title,
+			StartTime:    s,
+			EndTime:      e,
+			Fee:          0,
+			Capacity:     5,
+			LocationID:   locationID,
+			SportID:      sportID,
+			SkillLevelID: skillLevelID,
+		}
+		w := executeRequest("POST", "/v1/pickup-groups", payload, hostToken)
+		require.Equal(t, http.StatusCreated, w.Code)
+		var resp pickupHttp.PickupGroupResponse
+		json.Unmarshal(w.Body.Bytes(), &resp)
+		return resp.ID
+	}
+
+	groupA := createGroup("Group A", start, end)
+
+	w := executeRequest("POST", fmt.Sprintf("/v1/pickup-groups/%s/orders", groupA), nil, user1Token)
+	require.Equal(t, http.StatusCreated, w.Code)
+
+	t.Run("overlapping time range is rejected", func(t *testing.T) {
+		groupB := createGroup("Group B (overlaps)", start.Add(1*time.Hour), end.Add(1*time.Hour))
+		w := executeRequest("POST", fmt.Sprintf("/v1/pickup-groups/%s/orders", groupB), nil, user1Token)
+		require.Equal(t, http.StatusConflict, w.Code)
+
+		var errResp response.ErrorResponse
+		json.Unmarshal(w.Body.Bytes(), &errResp)
+		assert.Equal(t, "time_conflict", errResp.Error)
+	})
+
+	t.Run("back-to-back (non-overlapping) time range is allowed", func(t *testing.T) {
+		groupC := createGroup("Group C (back to back)", end, end.Add(2*time.Hour))
+		w := executeRequest("POST", fmt.Sprintf("/v1/pickup-groups/%s/orders", groupC), nil, user1Token)
+		assert.Equal(t, http.StatusCreated, w.Code)
+	})
+
+	t.Run("a different user is unaffected", func(t *testing.T) {
+		user2 := createTestUser(t, "tcuser2@pickup.com", "pass", false)
+		user2Token := generateToken(user2.ID)
+		groupD := createGroup("Group D (overlaps, different user)", start, end)
+		w := executeRequest("POST", fmt.Sprintf("/v1/pickup-groups/%s/orders", groupD), nil, user2Token)
+		assert.Equal(t, http.StatusCreated, w.Code)
+	})
+}
+
+func TestPickupGroupDescription(t *testing.T) {
+	clearTables()
+
+	host := createTestUser(t, "deschost@pickup.com", "pass", false)
+	grantPickupHost(t, host.ID)
+
+	hostToken := generateToken(host.ID)
+	locationID := setupTestLocation(t, hostToken, host.ID)
+	sportID, skillLevelID := getSportSkill(t, "BADMINTON", "A")
+
+	t.Run("description is set on create and returned by get", func(t *testing.T) {
+		desc := "Bring your own racket. 2 courts booked."
+		payload := pickupHttp.CreateGroupBody{
+			Title:        "Described Group",
+			Description:  &desc,
+			StartTime:    time.Now().Add(24 * time.Hour),
+			EndTime:      time.Now().Add(26 * time.Hour),
+			Fee:          0,
+			Capacity:     5,
+			LocationID:   locationID,
+			SportID:      sportID,
+			SkillLevelID: skillLevelID,
+		}
+		w := executeRequest("POST", "/v1/pickup-groups", payload, hostToken)
+		require.Equal(t, http.StatusCreated, w.Code)
+		var createResp pickupHttp.PickupGroupResponse
+		json.Unmarshal(w.Body.Bytes(), &createResp)
+		require.NotNil(t, createResp.Description)
+		assert.Equal(t, desc, *createResp.Description)
+
+		wg := executeRequest("GET", "/v1/pickup-groups/"+createResp.ID, nil, hostToken)
+		require.Equal(t, http.StatusOK, wg.Code)
+		var getResp pickupHttp.PickupGroupResponse
+		json.Unmarshal(wg.Body.Bytes(), &getResp)
+		require.NotNil(t, getResp.Description)
+		assert.Equal(t, desc, *getResp.Description)
+
+		newDesc := "Updated: badminton, 3 courts."
+		patchPayload := pickupHttp.UpdateGroupBody{Description: &newDesc}
+		wp := executeRequest("PATCH", "/v1/pickup-groups/"+createResp.ID, patchPayload, hostToken)
+		require.Equal(t, http.StatusOK, wp.Code)
+		var patchResp pickupHttp.PickupGroupResponse
+		json.Unmarshal(wp.Body.Bytes(), &patchResp)
+		require.NotNil(t, patchResp.Description)
+		assert.Equal(t, newDesc, *patchResp.Description)
+	})
+
+	t.Run("description over 100 characters is rejected", func(t *testing.T) {
+		longDesc := strings.Repeat("a", 101)
+		payload := pickupHttp.CreateGroupBody{
+			Title:        "Too Long",
+			Description:  &longDesc,
+			StartTime:    time.Now().Add(24 * time.Hour),
+			EndTime:      time.Now().Add(26 * time.Hour),
+			Fee:          0,
+			Capacity:     5,
+			LocationID:   locationID,
+			SportID:      sportID,
+			SkillLevelID: skillLevelID,
+		}
+		w := executeRequest("POST", "/v1/pickup-groups", payload, hostToken)
+		assert.Equal(t, http.StatusBadRequest, w.Code)
+	})
+
+	t.Run("description is omitted from the public list shape", func(t *testing.T) {
+		desc := "Should not leak into the list"
+		payload := pickupHttp.CreateGroupBody{
+			Title:        "List Shape Group",
+			Description:  &desc,
+			StartTime:    time.Now().Add(24 * time.Hour),
+			EndTime:      time.Now().Add(26 * time.Hour),
+			Fee:          0,
+			Capacity:     5,
+			LocationID:   locationID,
+			SportID:      sportID,
+			SkillLevelID: skillLevelID,
+		}
+		w := executeRequest("POST", "/v1/pickup-groups", payload, hostToken)
+		require.Equal(t, http.StatusCreated, w.Code)
+
+		wl := executeRequest("GET", "/v1/pickup-groups", nil, "")
+		require.Equal(t, http.StatusOK, wl.Code)
+		var raw map[string]json.RawMessage
+		require.NoError(t, json.Unmarshal(wl.Body.Bytes(), &raw))
+		var items []map[string]json.RawMessage
+		require.NoError(t, json.Unmarshal(raw["items"], &items))
+		for _, it := range items {
+			_, hasDescription := it["description"]
+			assert.False(t, hasDescription, "public list item should not include a description field")
+		}
 	})
 }
 

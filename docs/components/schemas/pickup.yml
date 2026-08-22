@@ -27,6 +27,10 @@ PickupGroupResponse:
       $ref: "#/PickupHostTag"
     title:
       type: string
+    description:
+      type: string
+      nullable: true
+      description: "簡介，最多 100 字。僅 GET /pickup-groups/{id} 會回傳此欄位。"
     start_time:
       type: string
       format: date-time
@@ -138,6 +142,11 @@ CreatePickupGroupRequest:
   properties:
     title:
       type: string
+    description:
+      type: string
+      nullable: true
+      maxLength: 100
+      description: "簡介 (球種、場地面數等細項)，最多 100 字。"
     start_time:
       type: string
       format: date-time
@@ -179,6 +188,11 @@ UpdatePickupGroupRequest:
   properties:
     title:
       type: string
+    description:
+      type: string
+      nullable: true
+      maxLength: 100
+      description: "簡介 (球種、場地面數等細項)，最多 100 字。"
     start_time:
       type: string
       format: date-time

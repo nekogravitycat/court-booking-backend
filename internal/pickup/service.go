@@ -13,6 +13,7 @@ import (
 type CreateGroupRequest struct {
 	HostID       string
 	Title        string
+	Description  *string
 	StartTime    time.Time
 	EndTime      time.Time
 	Fee          int
@@ -37,6 +38,7 @@ type UpdateOrderRequest struct {
 
 type UpdateGroupRequest struct {
 	Title        *string
+	Description  *string
 	StartTime    *time.Time
 	EndTime      *time.Time
 	Fee          *int
@@ -121,6 +123,7 @@ func (s *service) CreateGroup(ctx context.Context, req CreateGroupRequest) (*Pic
 	group := &PickupGroup{
 		HostID:       req.HostID,
 		Title:        req.Title,
+		Description:  req.Description,
 		StartTime:    req.StartTime,
 		EndTime:      req.EndTime,
 		Fee:          req.Fee,
@@ -155,6 +158,9 @@ func (s *service) UpdateGroup(ctx context.Context, id string, req UpdateGroupReq
 
 	if req.Title != nil {
 		group.Title = *req.Title
+	}
+	if req.Description != nil {
+		group.Description = req.Description
 	}
 	if req.StartTime != nil {
 		group.StartTime = *req.StartTime

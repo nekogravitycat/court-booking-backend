@@ -2,9 +2,10 @@ pickupGroups:
   get:
     tags:
       - Pickup Groups
-    summary: "取得可預約的臨打團列表 (公開，選擇性登入)"
+    summary: "取得公開的臨打團列表 (公開，選擇性登入)"
     description: |
-      取得目前可進行預約的臨打團清單（status=active、enable=true、尚未結束且未額滿）。
+      取得目前公開的臨打團清單（status=active、enable=true 且尚未結束）。
+      已額滿的臨打團仍會列出（僅無法再報名），方便使用者瀏覽。
       回傳精簡欄位：主辦人 (id / username / display_name)、位置、球團名稱、球類、程度、
       開始時間、費用，以及 enrolled_status。
 
@@ -193,7 +194,9 @@ pickupGroupOrders:
       加入臨打團。user_id 由 JWT Token 解析得出。
       會檢查目前有效報名人數是否超過 capacity。
       確保同一使用者不可重複報名同一臨打團。
-      
+      同時會檢查該使用者是否已報名其他時段重疊的臨打團，若有衝突則回傳 409
+      並帶有 "error": "time_conflict"。
+
       **權限 Access Control**:
       - **Login Required**: 任何已登入的使用者皆可存取。
     security:
@@ -213,7 +216,10 @@ pickupGroupOrders:
             schema:
               $ref: "../components/schemas/pickup.yml#/PickupOrderResponse"
       "409":
-        description: group is fully booked or user already enrolled
+        description: |
+          group is fully booked, user already enrolled, or the user already has
+          an occupying order for another pickup group whose time range
+          overlaps this one (error: "time_conflict").
         content:
           application/json:
             schema:

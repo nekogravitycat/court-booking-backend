@@ -32,6 +32,7 @@ type HostGroupsURI struct {
 
 type CreateGroupBody struct {
 	Title        string    `json:"title" binding:"required,min=1,max=100"`
+	Description  *string   `json:"description" binding:"omitempty,max=100"`
 	StartTime    time.Time `json:"start_time" binding:"required"`
 	EndTime      time.Time `json:"end_time" binding:"required"`
 	Fee          int       `json:"fee" binding:"min=0,max=100000"`
@@ -56,6 +57,7 @@ type UpdateOrderBody struct {
 
 type UpdateGroupBody struct {
 	Title        *string    `json:"title" binding:"omitempty,min=1,max=100"`
+	Description  *string    `json:"description" binding:"omitempty,max=100"`
 	StartTime    *time.Time `json:"start_time"`
 	EndTime      *time.Time `json:"end_time"`
 	Fee          *int       `json:"fee" binding:"omitempty,min=0,max=100000"`
@@ -147,6 +149,7 @@ type PickupGroupResponse struct {
 	ID              string                  `json:"id"`
 	Host            PickupHostTag           `json:"host"`
 	Title           string                  `json:"title"`
+	Description     *string                 `json:"description"`
 	StartTime       time.Time               `json:"start_time"`
 	EndTime         time.Time               `json:"end_time"`
 	Fee             int                     `json:"fee"`
@@ -169,6 +172,7 @@ func NewPickupGroupResponse(g *pickup.PickupGroup, orders []*pickup.PickupOrder)
 		ID:              g.ID,
 		Host:            PickupHostTag{ID: g.HostID, Username: g.HostUsername, DisplayName: g.HostDisplayName, Phone: g.HostPhone},
 		Title:           g.Title,
+		Description:     g.Description,
 		StartTime:       g.StartTime.UTC(),
 		EndTime:         g.EndTime.UTC(),
 		Fee:             g.Fee,
