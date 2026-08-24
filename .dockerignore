@@ -12,3 +12,7 @@
 
 # Include Dockerfile
 !Dockerfile
+
+# Include .git so `go build` can auto-stamp the binary with vcs.revision /
+# vcs.time (exposed via GET /v1/version), see internal/api/version.go
+!.git/

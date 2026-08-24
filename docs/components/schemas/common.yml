@@ -23,3 +23,20 @@ PageResponse:
       type: integer
     total:
       type: integer
+
+VersionResponse:
+  type: object
+  properties:
+    git_commit:
+      type: string
+      description: 部署版本對應的 git commit hash（由 Go 工具鏈於建置時自動嵌入）
+    build_time:
+      type: string
+      description: 該 commit 的時間戳記 (RFC3339)
+    dirty:
+      type: boolean
+      description: 建置當下的工作目錄是否含有未提交的變更
+  example:
+    git_commit: "000e9e51a92e1babb44fba0b9614c06a57aea9a4"
+    build_time: "2026-08-22T03:51:33Z"
+    dirty: false

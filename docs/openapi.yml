@@ -51,6 +51,8 @@ tags:
     description: 球團主辦人身分管理 (系統管理員)
   - name: Favorites
     description: 我的最愛
+  - name: System
+    description: 系統資訊
 
 components:
   securitySchemes:
@@ -74,6 +76,9 @@ components:
 
     PageResponse:
       $ref: "./components/schemas/common.yml#/PageResponse"
+
+    VersionResponse:
+      $ref: "./components/schemas/common.yml#/VersionResponse"
 
     # --------------------------
     # User Models
@@ -226,6 +231,12 @@ components:
       $ref: "./components/schemas/favorite.yml#/FavoriteHostRequest"
 
 paths:
+  # ============================
+  # System
+  # ============================
+  /version:
+    $ref: "./paths/system.yml#/version"
+
   # ============================
   # Auth
   # ============================

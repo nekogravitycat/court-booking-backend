@@ -127,6 +127,8 @@ func NewRouter(cfg Config) *gin.Engine {
 	// Register Routes
 	v1 := r.Group("/v1")
 	{
+		v1.GET("/version", VersionInfo)
+
 		fileHttp.RegisterRoutes(v1, fileHandler, authMiddleware)
 		userHttp.RegisterRoutes(v1, userHandler, authMiddleware, sysAdminMiddleware)
 		orgHttp.RegisterRoutes(v1, orgHandler, authMiddleware, sysAdminMiddleware)

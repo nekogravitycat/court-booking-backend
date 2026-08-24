@@ -223,6 +223,9 @@ Password: <POSTGRES_PASSWORD>
 3.  **權限系統說明**：
     開發者可參考 `docs/role_system.md`，內含詳細的角色權限設計說明。
 
+4.  **確認部署版本**：
+    `GET /version`（Swagger 上的 **System** 分類）回傳目前伺服器建置所對應的 git commit（`git_commit`）、commit 時間（`build_time`）與建置當下工作目錄是否有未提交變更（`dirty`）。此資訊由 Go 工具鏈於 `go build` 時自動從 `.git` 嵌入（見 `internal/api/version.go`），部署後可直接在 Swagger 上呼叫此 API 確認新程式碼是否已生效，不需再手動比對行為。
+
 ## 🧪 測試
 
 專案包含整合測試，位於 `tests/` 目錄下。測試會連接測試用資料庫以確保邏輯正確且不影響實際資料庫。

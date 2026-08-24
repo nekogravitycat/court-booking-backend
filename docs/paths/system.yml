@@ -1,0 +1,19 @@
+version:
+  get:
+    tags:
+      - System
+    summary: "取得伺服器部署版本 (公開)"
+    description: |
+      回傳目前部署的 git commit 與建置時間，用於確認部署是否已套用最新的程式碼。
+
+      **權限 Access Control**:
+      - **Public**: 無需登入即可存取。
+    operationId: getVersion
+    security: []
+    responses:
+      "200":
+        description: Success
+        content:
+          application/json:
+            schema:
+              $ref: "../components/schemas/common.yml#/VersionResponse"
