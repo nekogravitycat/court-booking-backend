@@ -1,18 +1,23 @@
-# Ignore all files by default
-*
+# Mirror .gitignore: exclude local/secret artifacts, include everything else
+# (including .git). A full tracked-tree + .git copy lets `go build` accurately
+# embed vcs.revision/vcs.time/vcs.modified, exposed via GET /v1/version.
+.env
 
-# Include codebase directories
-!cmd/
-!internal/
-!db/
+# Local storage for uploaded files
+/storage/
 
-# Include Go module files
-!go.mod
-!go.sum
+# Binaries for programs and plugins
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
 
-# Include Dockerfile
-!Dockerfile
+# Test binary, built with `go test -c`
+*.test
+*.out
 
-# Include .git so `go build` can auto-stamp the binary with vcs.revision /
-# vcs.time (exposed via GET /v1/version), see internal/api/version.go
-!.git/
+# MacOS files
+.DS_Store
+
+ref-only/

@@ -13,13 +13,22 @@ COPY go.mod go.sum ./
 # Download dependencies
 RUN go mod download
 
-# Copy the source code
+# Copy the source code (includes .git, see .dockerignore)
 COPY . .
+
+# Git refuses to read a repo owned by a different UID than the current user
+# ("detected dubious ownership"). The build only ever runs against the source
+# copied into this throwaway image, so trusting any owner here is safe. This
+# lets `go build` auto-embed vcs.revision/vcs.time, exposed via GET /v1/version.
+RUN git config --global --add safe.directory '*'
 
 # Build the application
 # CGO_ENABLED=0: Build a statically linked binary (no C libraries dependency)
 # -ldflags="-s -w": Strip debug information to reduce binary size
-RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o server ./cmd/server/main.go
+# Built by package path (not by listing main.go) so `go build` auto-embeds
+# vcs.revision/vcs.time/vcs.modified, exposed via GET /v1/version — passing
+# explicit .go files instead disables that stamping.
+RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o server ./cmd/server
 
 # ==== Stage 2: Runner ====
 FROM alpine:latest
