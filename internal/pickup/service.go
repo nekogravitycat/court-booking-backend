@@ -3,32 +3,57 @@ package pickup
 import (
 	"context"
 	"errors"
+	"fmt"
+	"log"
+	"strings"
 	"time"
 
+	"github.com/nekogravitycat/court-booking-backend/internal/notification"
 	"github.com/nekogravitycat/court-booking-backend/internal/skilllevel"
 	"github.com/nekogravitycat/court-booking-backend/internal/sports"
 	"github.com/nekogravitycat/court-booking-backend/internal/user"
 )
 
+// Party size bounds for a multi-person enrollment. A single seat uses the
+// regular enrollment endpoint.
+const (
+	MinPartySize = 2
+	MaxPartySize = 50
+)
+
 type CreateGroupRequest struct {
-	HostID       string
-	Title        string
-	Description  *string
-	StartTime    time.Time
-	EndTime      time.Time
-	Fee          int
-	Capacity     int
-	LocationID   string
-	SportID      string
-	SkillLevelID string
-	Enable       bool
+	HostID      string
+	Title       string
+	Description *string
+	StartTime   time.Time
+	EndTime     time.Time
+	Fee         int
+	Capacity    int
+	LocationID  string
+	SportID     string
+	SkillLevel  int
+	Enable      bool
 }
 
+// CreateOrderRequest enrolls a single user. SkillLevel is the enrollee's
+// self-reported level on the group's sport scale.
 type CreateOrderRequest struct {
 	PickupGroupID string
 	UserID        string
 	BookerName    string
 	BookerPhone   string
+	SkillLevel    int
+}
+
+// CreatePartyOrderRequest enrolls several people under one order. Members holds
+// exactly PartySize entries; Members[0] is the organizer.
+type CreatePartyOrderRequest struct {
+	PickupGroupID string
+	UserID        string
+	OrganizerName string
+	BookerPhone   string
+	PartySize     int
+	Members       []OrderMember
 }
 
 type UpdateOrderRequest struct {
@@ -37,17 +62,17 @@ type UpdateOrderRequest struct {
 }
 
 type UpdateGroupRequest struct {
-	Title        *string
-	Description  *string
-	StartTime    *time.Time
-	EndTime      *time.Time
-	Fee          *int
-	Capacity     *int
-	LocationID   *string
-	SportID      *string
-	SkillLevelID *string
-	Status       *string
-	Enable       *bool
+	Title       *string
+	Description *string
+	StartTime   *time.Time
+	EndTime     *time.Time
+	Fee         *int
+	Capacity    *int
+	LocationID  *string
+	SportID     *string
+	SkillLevel  *int
+	Status      *string
+	Enable      *bool
 }
 
 type Service interface {
@@ -61,8 +86,15 @@ type Service interface {
 	GetOrdersByUserID(ctx context.Context, userID string) ([]*PickupOrder, error)
 
 	CreateOrder(ctx context.Context, req CreateOrderRequest) (*PickupOrder, error)
+	// CreatePartyOrder enrolls several people (one seat each) under one order.
+	// The members are anonymous and are never rated.
+	CreatePartyOrder(ctx context.Context, req CreatePartyOrderRequest) (*PickupOrder, error)
 	UpdateOrder(ctx context.Context, id string, req UpdateOrderRequest, updaterUserID string, isSysAdmin bool) (*PickupOrder, error)
 	DeleteOrder(ctx context.Context, id, requesterUserID string, isSysAdmin bool) error
+
+	// GetParticipantStats returns the anonymous gender / age / skill-level
+	// breakdown of the group's enrolled seats (pending and confirmed orders).
+	GetParticipantStats(ctx context.Context, groupID string) (*ParticipantStats, error)
 }
 
 type service struct {
@@ -70,20 +102,21 @@ type service struct {
 	userService       user.Service
 	sportsService     sports.Service
 	skillLevelService skilllevel.Service
+	notifier          notification.Service
 }
 
-func NewService(repo Repository, userService user.Service, sportsService sports.Service, skillLevelService skilllevel.Service) Service {
+func NewService(repo Repository, userService user.Service, sportsService sports.Service, skillLevelService skilllevel.Service, notifier notification.Service) Service {
 	return &service{
 		repo:              repo,
 		userService:       userService,
 		sportsService:     sportsService,
 		skillLevelService: skillLevelService,
+		notifier:          notifier,
 	}
 }
 
-// validateSportAndSkill verifies the sport exists and is active, and that the
-// skill level exists, is active, and belongs to that sport.
-func (s *service) validateSportAndSkill(ctx context.Context, sportID, skillLevelID string) error {
+// validateSport verifies the sport exists and is active.
+func (s *service) validateSport(ctx context.Context, sportID string) error {
 	sport, err := s.sportsService.GetByID(ctx, sportID)
 	if err != nil {
 		if errors.Is(err, sports.ErrNotFound) {
@@ -94,16 +127,18 @@ func (s *service) validateSportAndSkill(ctx context.Context, sportID, skillLevel
 	if !sport.IsActive {
 		return ErrSportInactive
 	}
+	return nil
+}
 
-	sl, err := s.skillLevelService.GetByID(ctx, skillLevelID)
+// validateSkillLevel verifies that the integer level is defined (and active) on
+// the sport's scale.
+func (s *service) validateSkillLevel(ctx context.Context, sportID string, level int) error {
+	sl, err := s.skillLevelService.GetBySportAndLevel(ctx, sportID, level)
 	if err != nil {
 		if errors.Is(err, skilllevel.ErrNotFound) {
 			return ErrSkillLevelNotFound
 		}
 		return err
-	}
-	if sl.SportID != sportID {
-		return ErrSkillLevelMismatch
 	}
 	if !sl.IsActive {
 		return ErrSkillLevelInactive
@@ -111,28 +146,48 @@ func (s *service) validateSportAndSkill(ctx context.Context, sportID, skillLevel
 	return nil
 }
 
+// validateSportAndSkill verifies the sport is usable and the level belongs to
+// its scale.
+func (s *service) validateSportAndSkill(ctx context.Context, sportID string, level int) error {
+	if err := s.validateSport(ctx, sportID); err != nil {
+		return err
+	}
+	return s.validateSkillLevel(ctx, sportID, level)
+}
+
+// notify delivers notifications on a best-effort basis: the operation that
+// triggered them has already succeeded, so a delivery failure is only logged.
+func (s *service) notify(ctx context.Context, ns ...*notification.Notification) {
+	if s.notifier == nil || len(ns) == 0 {
+		return
+	}
+	if err := s.notifier.NotifyMany(ctx, ns); err != nil {
+		log.Printf("warning: failed to deliver %d notification(s): %v", len(ns), err)
+	}
+}
+
 func (s *service) CreateGroup(ctx context.Context, req CreateGroupRequest) (*PickupGroup, error) {
 	if !req.EndTime.After(req.StartTime) {
 		return nil, ErrInvalidTimeRange
 	}
 
-	if err := s.validateSportAndSkill(ctx, req.SportID, req.SkillLevelID); err != nil {
+	if err := s.validateSportAndSkill(ctx, req.SportID, req.SkillLevel); err != nil {
 		return nil, err
 	}
 
 	group := &PickupGroup{
-		HostID:       req.HostID,
-		Title:        req.Title,
-		Description:  req.Description,
-		StartTime:    req.StartTime,
-		EndTime:      req.EndTime,
-		Fee:          req.Fee,
-		Capacity:     req.Capacity,
-		LocationID:   req.LocationID,
-		SportID:      req.SportID,
-		SkillLevelID: req.SkillLevelID,
-		Status:       GroupStatusActive,
-		Enable:       req.Enable,
+		HostID:      req.HostID,
+		Title:       req.Title,
+		Description: req.Description,
+		StartTime:   req.StartTime,
+		EndTime:     req.EndTime,
+		Fee:         req.Fee,
+		Capacity:    req.Capacity,
+		LocationID:  req.LocationID,
+		SportID:     req.SportID,
+		SkillLevel:  req.SkillLevel,
+		Status:      GroupStatusActive,
+		Enable:      req.Enable,
 	}
 
 	if err := s.repo.CreateGroup(ctx, group); err != nil {
@@ -147,6 +202,12 @@ func (s *service) GetGroupByID(ctx context.Context, id string) (*PickupGroup, er
 }
 
 func (s *service) ListGroups(ctx context.Context, filter GroupFilter) ([]*PickupGroup, int, error) {
+	if filter.SortBy == "distance" && (filter.Latitude == nil || filter.Longitude == nil) {
+		return nil, 0, ErrDistanceNeedsOrigin
+	}
+	if filter.FollowedOnly && filter.ViewerUserID == "" {
+		return nil, 0, ErrFollowedNeedsAuth
+	}
 	return s.repo.ListGroups(ctx, filter)
 }
 
@@ -155,6 +216,9 @@ func (s *service) UpdateGroup(ctx context.Context, id string, req UpdateGroupReq
 	if err != nil {
 		return nil, err
 	}
+
+	oldStatus := group.Status
+	oldStart, oldEnd, oldLocation := group.StartTime, group.EndTime, group.LocationID
 
 	if req.Title != nil {
 		group.Title = *req.Title
@@ -184,18 +248,18 @@ func (s *service) UpdateGroup(ctx context.Context, id string, req UpdateGroupReq
 	}
 
 	// Re-validate the sport / skill-level pair whenever either changes, so the
-	// two stay consistent (the skill level must belong to the group's sport).
+	// level stays defined on the group's sport scale.
 	sportOrSkillChanged := false
 	if req.SportID != nil {
 		group.SportID = *req.SportID
 		sportOrSkillChanged = true
 	}
-	if req.SkillLevelID != nil {
-		group.SkillLevelID = *req.SkillLevelID
+	if req.SkillLevel != nil {
+		group.SkillLevel = *req.SkillLevel
 		sportOrSkillChanged = true
 	}
 	if sportOrSkillChanged {
-		if err := s.validateSportAndSkill(ctx, group.SportID, group.SkillLevelID); err != nil {
+		if err := s.validateSportAndSkill(ctx, group.SportID, group.SkillLevel); err != nil {
 			return nil, err
 		}
 	}
@@ -219,7 +283,44 @@ func (s *service) UpdateGroup(ctx context.Context, id string, req UpdateGroupReq
 		return nil, err
 	}
 
+	switch {
+	case group.Status == GroupStatusCancelled && oldStatus != GroupStatusCancelled:
+		s.notifyEnrolled(ctx, group, notification.TypePickupGroupCancelled,
+			"臨打團已取消", fmt.Sprintf("「%s」已被團主取消。", group.Title))
+	case group.Status == GroupStatusActive &&
+		(!group.StartTime.Equal(oldStart) || !group.EndTime.Equal(oldEnd) || group.LocationID != oldLocation):
+		s.notifyEnrolled(ctx, group, notification.TypePickupGroupUpdated,
+			"臨打團資訊已更新", fmt.Sprintf("「%s」的時間或地點已變更，請重新確認活動資訊。", group.Title))
+	}
+
 	return s.repo.GetGroupByID(ctx, id)
+}
+
+// notifyEnrolled sends one notification to every user currently holding a seat
+// in the group (the host, who is notified of nothing about their own edit, is
+// excluded).
+func (s *service) notifyEnrolled(ctx context.Context, group *PickupGroup, ntype, title, content string) {
+	userIDs, err := s.repo.ListOccupyingUserIDs(ctx, group.ID)
+	if err != nil {
+		log.Printf("warning: failed to list enrolled users of group %s: %v", group.ID, err)
+		return
+	}
+
+	groupID := group.ID
+	var ns []*notification.Notification
+	for _, uid := range userIDs {
+		if uid == group.HostID {
+			continue
+		}
+		ns = append(ns, &notification.Notification{
+			UserID:        uid,
+			Type:          ntype,
+			Title:         title,
+			Content:       content,
+			PickupGroupID: &groupID,
+		})
+	}
+	s.notify(ctx, ns...)
 }
 
 func (s *service) DeleteGroup(ctx context.Context, id string) error {
@@ -238,6 +339,14 @@ func (s *service) GetOrdersByUserID(ctx context.Context, userID string) ([]*Pick
 }
 
 func (s *service) CreateOrder(ctx context.Context, req CreateOrderRequest) (*PickupOrder, error) {
+	group, err := s.repo.GetGroupByID(ctx, req.PickupGroupID)
+	if err != nil {
+		return nil, err
+	}
+	if err := s.validateSkillLevel(ctx, group.SportID, req.SkillLevel); err != nil {
+		return nil, err
+	}
+
 	order := &PickupOrder{
 		PickupGroupID: req.PickupGroupID,
 		UserID:        req.UserID,
@@ -245,13 +354,84 @@ func (s *service) CreateOrder(ctx context.Context, req CreateOrderRequest) (*Pic
 		BookerPhone:   req.BookerPhone,
 		Status:        OrderStatusPending,
 		PaymentStatus: PaymentStatusPending,
+		SkillLevel:    req.SkillLevel,
+		PartySize:     1,
 	}
 
 	if err := s.repo.CreateOrder(ctx, order); err != nil {
 		return nil, err
 	}
 
+	s.notifyHostOfEnrollment(ctx, group, order)
 	return order, nil
+}
+
+func (s *service) CreatePartyOrder(ctx context.Context, req CreatePartyOrderRequest) (*PickupOrder, error) {
+	if req.PartySize < MinPartySize || req.PartySize > MaxPartySize {
+		return nil, ErrInvalidPartySize
+	}
+	if len(req.Members) != req.PartySize {
+		return nil, ErrPartyMembersMismatch
+	}
+
+	group, err := s.repo.GetGroupByID(ctx, req.PickupGroupID)
+	if err != nil {
+		return nil, err
+	}
+
+	// Validate every member; each distinct level is looked up only once.
+	checkedLevels := make(map[int]struct{})
+	for _, m := range req.Members {
+		if !user.IsValidGender(m.Gender) {
+			return nil, user.ErrInvalidGender
+		}
+		if _, ok := checkedLevels[m.SkillLevel]; ok {
+			continue
+		}
+		if err := s.validateSkillLevel(ctx, group.SportID, m.SkillLevel); err != nil {
+			return nil, err
+		}
+		checkedLevels[m.SkillLevel] = struct{}{}
+	}
+
+	order := &PickupOrder{
+		PickupGroupID: req.PickupGroupID,
+		UserID:        req.UserID,
+		BookerName:    strings.TrimSpace(req.OrganizerName),
+		BookerPhone:   req.BookerPhone,
+		Status:        OrderStatusPending,
+		PaymentStatus: PaymentStatusPending,
+		SkillLevel:    req.Members[0].SkillLevel, // Members[0] is the organizer
+		PartySize:     req.PartySize,
+		Members:       req.Members,
+	}
+
+	if err := s.repo.CreateOrder(ctx, order); err != nil {
+		return nil, err
+	}
+
+	s.notifyHostOfEnrollment(ctx, group, order)
+	return order, nil
+}
+
+// notifyHostOfEnrollment tells the host that someone enrolled.
+func (s *service) notifyHostOfEnrollment(ctx context.Context, group *PickupGroup, order *PickupOrder) {
+	if group.HostID == order.UserID {
+		return
+	}
+	content := fmt.Sprintf("%s 報名了「%s」。", order.BookerName, group.Title)
+	if order.PartySize > 1 {
+		content = fmt.Sprintf("%s 報名了「%s」（共 %d 人）。", order.BookerName, group.Title, order.PartySize)
+	}
+	groupID, orderID := group.ID, order.ID
+	s.notify(ctx, &notification.Notification{
+		UserID:        group.HostID,
+		Type:          notification.TypePickupOrderCreated,
+		Title:         "有新的報名",
+		Content:       content,
+		PickupGroupID: &groupID,
+		PickupOrderID: &orderID,
+	})
 }
 
 // UpdateOrder updates an enrollment's lifecycle status and/or payment status.
@@ -280,6 +460,7 @@ func (s *service) UpdateOrder(ctx context.Context, id string, req UpdateOrderReq
 	}
 
 	oldStatus := order.Status
+	oldPaymentStatus := order.PaymentStatus
 
 	// Payment status is reviewer-only.
 	if req.PaymentStatus != nil {
@@ -314,27 +495,114 @@ func (s *service) UpdateOrder(ctx context.Context, id string, req UpdateOrderReq
 		if err := s.repo.UpdateOrderWithCapacityCheck(ctx, order); err != nil {
 			return nil, err
 		}
-		return order, nil
-	}
-
-	if err := s.repo.UpdateOrder(ctx, order); err != nil {
+	} else if err := s.repo.UpdateOrder(ctx, order); err != nil {
 		return nil, err
 	}
 
+	s.notifyOrderChange(ctx, group, order, oldStatus, oldPaymentStatus, updaterUserID, isReviewer && !isOwner)
 	return order, nil
+}
+
+// notifyOrderChange notifies the other party of a status / payment change: the
+// booker when a reviewer acted, the host when the booker acted.
+func (s *service) notifyOrderChange(ctx context.Context, group *PickupGroup, order *PickupOrder, oldStatus OrderStatus, oldPayment PaymentStatus, actorID string, byReviewer bool) {
+	groupID, orderID := group.ID, order.ID
+	base := func(userID, ntype, title, content string) *notification.Notification {
+		return &notification.Notification{
+			UserID:        userID,
+			Type:          ntype,
+			Title:         title,
+			Content:       content,
+			PickupGroupID: &groupID,
+			PickupOrderID: &orderID,
+		}
+	}
+
+	var ns []*notification.Notification
+
+	if byReviewer {
+		if order.UserID == actorID {
+			return
+		}
+		if order.Status != oldStatus {
+			switch order.Status {
+			case OrderStatusConfirmed:
+				ns = append(ns, base(order.UserID, notification.TypePickupOrderConfirmed,
+					"報名已確認", fmt.Sprintf("你在「%s」的報名已被團主確認。", group.Title)))
+			case OrderStatusRejected:
+				ns = append(ns, base(order.UserID, notification.TypePickupOrderRejected,
+					"報名未被接受", fmt.Sprintf("你在「%s」的報名未被團主接受。", group.Title)))
+			case OrderStatusCancelled:
+				ns = append(ns, base(order.UserID, notification.TypePickupOrderCancelledByHost,
+					"報名已被取消", fmt.Sprintf("你在「%s」的報名已被團主取消。", group.Title)))
+			}
+		}
+		if order.PaymentStatus != oldPayment {
+			ns = append(ns, base(order.UserID, notification.TypePickupPaymentUpdated,
+				"付款狀態已更新", fmt.Sprintf("你在「%s」的付款狀態已更新為%s。", group.Title, paymentStatusText(order.PaymentStatus))))
+		}
+	} else if order.Status != oldStatus && group.HostID != actorID {
+		switch order.Status {
+		case OrderStatusCancelled:
+			ns = append(ns, base(group.HostID, notification.TypePickupOrderCancelled,
+				"有人取消報名", fmt.Sprintf("%s 取消了「%s」的報名。", order.BookerName, group.Title)))
+		case OrderStatusCancelRequest:
+			ns = append(ns, base(group.HostID, notification.TypePickupOrderCancelRequested,
+				"有人申請取消報名", fmt.Sprintf("%s 申請取消「%s」的報名，請儘速處理。", order.BookerName, group.Title)))
+		}
+	}
+
+	s.notify(ctx, ns...)
+}
+
+func paymentStatusText(p PaymentStatus) string {
+	switch p {
+	case PaymentStatusDone:
+		return "已付款"
+	case PaymentStatusFailed:
+		return "付款失敗"
+	default:
+		return "待付款"
+	}
 }
 
 // DeleteOrder hard-deletes an enrollment. Only a system admin may do this; a
 // host removes a participant by rejecting the order (status=rejected) instead,
 // which keeps the row and blocks the user from re-enrolling. The group's
-// current_enrolled is derived from a live COUNT, so deleting the row decrements
-// it automatically.
+// current_enrolled is derived from a live SUM, so deleting the row releases its
+// seats automatically.
 func (s *service) DeleteOrder(ctx context.Context, id, requesterUserID string, isSysAdmin bool) error {
 	_ = requesterUserID // deletion is admin-only; the requester identity is not consulted.
 	if !isSysAdmin {
 		return ErrPermissionDenied
 	}
 	return s.repo.DeleteOrder(ctx, id)
+}
+
+func (s *service) GetParticipantStats(ctx context.Context, groupID string) (*ParticipantStats, error) {
+	group, err := s.repo.GetGroupByID(ctx, groupID)
+	if err != nil {
+		return nil, err
+	}
+
+	seats, tz, err := s.repo.ListParticipantSeats(ctx, groupID)
+	if err != nil {
+		return nil, err
+	}
+
+	labels, err := s.skillLevelService.LabelsBySport(ctx, group.SportID)
+	if err != nil {
+		return nil, err
+	}
+
+	// Ages are computed against the calendar date at the group's location.
+	loc, err := time.LoadLocation(tz)
+	if err != nil {
+		loc = time.UTC
+	}
+
+	stats := BuildParticipantStats(seats, time.Now().In(loc), labels)
+	return &stats, nil
 }
 
 // isOccupyingStatus reports whether an order in the given status counts against

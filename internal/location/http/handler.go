@@ -132,6 +132,9 @@ func (h *LocationHandler) Create(c *gin.Context) {
 		Description:       body.Description,
 		Longitude:         body.Longitude,
 		Latitude:          body.Latitude,
+		ParkingName:       body.ParkingName,
+		ParkingLatitude:   body.ParkingLatitude,
+		ParkingLongitude:  body.ParkingLongitude,
 	}
 
 	loc, err := h.service.Create(c.Request.Context(), req)
@@ -200,6 +203,10 @@ func (h *LocationHandler) Update(c *gin.Context) {
 		Description:       body.Description,
 		Longitude:         body.Longitude,
 		Latitude:          body.Latitude,
+		ParkingName:       body.ParkingName,
+		ParkingLatitude:   body.ParkingLatitude,
+		ParkingLongitude:  body.ParkingLongitude,
+		RemoveParking:     body.RemoveParking,
 	}
 
 	loc, err := h.service.Update(c.Request.Context(), uri.ID, req)

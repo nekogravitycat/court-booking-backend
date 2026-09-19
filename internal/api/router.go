@@ -19,6 +19,8 @@ import (
 	fileHttp "github.com/nekogravitycat/court-booking-backend/internal/file/http"
 	"github.com/nekogravitycat/court-booking-backend/internal/location"
 	locHttp "github.com/nekogravitycat/court-booking-backend/internal/location/http"
+	"github.com/nekogravitycat/court-booking-backend/internal/notification"
+	notificationHttp "github.com/nekogravitycat/court-booking-backend/internal/notification/http"
 	"github.com/nekogravitycat/court-booking-backend/internal/organization"
 	orgHttp "github.com/nekogravitycat/court-booking-backend/internal/organization/http"
 	"github.com/nekogravitycat/court-booking-backend/internal/pickup"
@@ -27,6 +29,8 @@ import (
 	resHttp "github.com/nekogravitycat/court-booking-backend/internal/resource/http"
 	"github.com/nekogravitycat/court-booking-backend/internal/skilllevel"
 	skillHttp "github.com/nekogravitycat/court-booking-backend/internal/skilllevel/http"
+	"github.com/nekogravitycat/court-booking-backend/internal/skillrating"
+	skillRatingHttp "github.com/nekogravitycat/court-booking-backend/internal/skillrating/http"
 	"github.com/nekogravitycat/court-booking-backend/internal/sports"
 	sportsHttp "github.com/nekogravitycat/court-booking-backend/internal/sports/http"
 	"github.com/nekogravitycat/court-booking-backend/internal/user"
@@ -35,20 +39,22 @@ import (
 
 // Config holds all dependencies required to initialize the router.
 type Config struct {
-	IsProduction      bool
-	ProdOrigins       string
-	UserService       user.Service
-	OrgService        organization.Service
-	LocService        location.Service
-	ResService        resource.Service
-	BookingService    booking.Service
-	AnnService        announcement.Service
-	SportsService     sports.Service
-	SkillLevelService skilllevel.Service
-	PickupService     pickup.Service
-	FavoriteService   favorite.Service
-	FileService       file.Service
-	JWTManager        *auth.JWTManager
+	IsProduction        bool
+	ProdOrigins         string
+	UserService         user.Service
+	OrgService          organization.Service
+	LocService          location.Service
+	ResService          resource.Service
+	BookingService      booking.Service
+	AnnService          announcement.Service
+	SportsService       sports.Service
+	SkillLevelService   skilllevel.Service
+	PickupService       pickup.Service
+	SkillRatingService  skillrating.Service
+	NotificationService notification.Service
+	FavoriteService     favorite.Service
+	FileService         file.Service
+	JWTManager          *auth.JWTManager
 }
 
 // maxRequestBodyBytes caps the size of any incoming request body. It must
@@ -123,6 +129,8 @@ func NewRouter(cfg Config) *gin.Engine {
 	skillHandler := skillHttp.NewHandler(cfg.SkillLevelService)
 	pickupHandler := pickupHttp.NewHandler(cfg.PickupService, cfg.UserService)
 	favoriteHandler := favoriteHttp.NewHandler(cfg.FavoriteService)
+	skillRatingHandler := skillRatingHttp.NewHandler(cfg.SkillRatingService, cfg.UserService)
+	notificationHandler := notificationHttp.NewHandler(cfg.NotificationService)
 
 	// Register Routes
 	v1 := r.Group("/v1")
@@ -140,6 +148,8 @@ func NewRouter(cfg Config) *gin.Engine {
 		skillHttp.RegisterRoutes(v1, skillHandler, authMiddleware, sysAdminMiddleware)
 		pickupHttp.RegisterRoutes(v1, pickupHandler, authMiddleware, optionalAuthMiddleware)
 		favoriteHttp.RegisterRoutes(v1, favoriteHandler, authMiddleware)
+		skillRatingHttp.RegisterRoutes(v1, skillRatingHandler, authMiddleware)
+		notificationHttp.RegisterRoutes(v1, notificationHandler, authMiddleware)
 	}
 
 	return r

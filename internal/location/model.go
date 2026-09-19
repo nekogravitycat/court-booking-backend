@@ -19,6 +19,7 @@ var (
 	ErrInvalidTimeRange    = apperror.New(http.StatusBadRequest, "start time must be before end time")
 	ErrUserNotFound        = apperror.New(http.StatusNotFound, "user not found")
 	ErrInvalidTimezone     = apperror.New(http.StatusBadRequest, "invalid timezone; expected an IANA name such as Asia/Taipei")
+	ErrInvalidParking      = apperror.New(http.StatusBadRequest, "parking name, latitude and longitude must be provided together and be valid")
 )
 
 // Location represents a physical venue under an organization.
@@ -39,7 +40,11 @@ type Location struct {
 	Description       string
 	Longitude         float64
 	Latitude          float64
-	Cover             *string // ID of cover image file
+	// Optional parking lot. The three fields are either all set or all nil.
+	ParkingName      *string
+	ParkingLatitude  *float64
+	ParkingLongitude *float64
+	Cover            *string // ID of cover image file
 }
 
 // LocationFilter defines parameters for listing locations.

@@ -21,7 +21,7 @@ Layered, dependencies point inward (handler → service → repository → model
 
 ### Module map (`internal/`)
 
-`user` · `auth` · `organization` · `location` · `resource` · `booking` · `pickup` (pickup-group enrollment) · `favorite` · `file` · `announcement`, plus shared `api` (router/middleware), `app` (DI container), `config`, `db`, `pkg` (e.g. `response`, `apperror`, `request`).
+`user` · `auth` · `organization` · `location` · `resource` · `booking` · `pickup` (pickup-group enrollment, party orders, participant stats) · `skilllevel` (per-sport level → label map) · `skillrating` (host ratings of participants) · `notification` (in-app inbox) · `favorite` · `file` · `announcement`, plus shared `api` (router/middleware), `app` (DI container), `config`, `db`, `pkg` (e.g. `response`, `apperror`, `request`).
 
 ## Conventions
 

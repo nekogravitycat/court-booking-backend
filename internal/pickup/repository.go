@@ -31,6 +31,15 @@ type Repository interface {
 	// from a live COUNT, so removing the row decrements it automatically.
 	DeleteOrder(ctx context.Context, id string) error
 
+	// ListOccupyingUserIDs returns the distinct users holding a seat-occupying order
+	// (pending, confirmed, cancel_request) in the group.
+	ListOccupyingUserIDs(ctx context.Context, groupID string) ([]string, error)
+
+	// ListParticipantSeats returns one entry per pending/confirmed seat of the
+	// group (party members expanded), along with the IANA timezone of the group's
+	// location. It returns ErrGroupNotFound when the group does not exist.
+	ListParticipantSeats(ctx context.Context, groupID string) ([]ParticipantSeat, string, error)
+
 	// UpdateOrderWithCapacityCheck re-validates the group capacity inside a
 	// transaction (with SELECT FOR UPDATE) before applying the update. It is used
 	// when an order moves back into a seat-occupying state to prevent overbooking.
@@ -51,9 +60,9 @@ func NewPgxRepository(pool *pgxpool.Pool) Repository {
 var groupSelectColumns = []string{
 	"pg.id", "pg.host_id", "pg.title", "pg.description", "pg.start_time", "pg.end_time", "pg.fee",
 	"pg.capacity", "pg.location_id", "pg.sport_id", "s.code", "s.name",
-	"pg.skill_level_id", "sl.name", "u.username", "u.display_name", "u.phone",
+	"pg.skill_level", "COALESCE(sl.label, '')", "u.username", "u.display_name", "u.phone",
 	"pg.status", "pg.enable", "pg.created_at", "pg.updated_at",
-	"COALESCE(COUNT(po.id) FILTER (WHERE po.status NOT IN ('cancelled', 'rejected')), 0) AS current_enrolled",
+	"COALESCE(SUM(po.party_size) FILTER (WHERE po.status NOT IN ('cancelled', 'rejected')), 0) AS current_enrolled",
 }
 
 // groupJoins wires the sport, skill-level, host, and orders tables onto a base
@@ -62,10 +71,11 @@ func groupJoins(b squirrel.SelectBuilder) squirrel.SelectBuilder {
 	return b.
 		From("public.pickup_groups pg").
 		Join("public.sports s ON pg.sport_id = s.id").
-		Join("public.skill_levels sl ON pg.skill_level_id = sl.id").
+		Join("public.locations l ON pg.location_id = l.id").
+		LeftJoin("public.skill_levels sl ON sl.sport_id = pg.sport_id AND sl.level = pg.skill_level").
 		Join("public.users u ON pg.host_id = u.id").
 		LeftJoin("public.pickup_orders po ON pg.id = po.pickup_group_id").
-		GroupBy("pg.id", "s.id", "sl.id", "u.id")
+		GroupBy("pg.id", "s.id", "sl.id", "u.id", "l.id")
 }
 
 // scanGroup scans a group row in the groupSelectColumns order. Extra trailing
@@ -74,7 +84,7 @@ func scanGroupInto(g *PickupGroup, extra ...any) []any {
 	targets := []any{
 		&g.ID, &g.HostID, &g.Title, &g.Description, &g.StartTime, &g.EndTime, &g.Fee,
 		&g.Capacity, &g.LocationID, &g.SportID, &g.SportCode, &g.SportName,
-		&g.SkillLevelID, &g.SkillLevelName, &g.HostUsername, &g.HostDisplayName, &g.HostPhone,
+		&g.SkillLevel, &g.SkillLevelLabel, &g.HostUsername, &g.HostDisplayName, &g.HostPhone,
 		&g.Status, &g.Enable, &g.CreatedAt, &g.UpdatedAt, &g.CurrentEnrolled,
 	}
 	return append(targets, extra...)
@@ -84,9 +94,9 @@ func (r *pgxRepository) CreateGroup(ctx context.Context, g *PickupGroup) error {
 	psql := squirrel.StatementBuilder.PlaceholderFormat(squirrel.Dollar)
 	query, args, err := psql.Insert("public.pickup_groups").
 		Columns("host_id", "title", "description", "start_time", "end_time",
-			"fee", "capacity", "location_id", "sport_id", "skill_level_id", "status", "enable").
+			"fee", "capacity", "location_id", "sport_id", "skill_level", "status", "enable").
 		Values(g.HostID, g.Title, g.Description, g.StartTime, g.EndTime,
-			g.Fee, g.Capacity, g.LocationID, g.SportID, g.SkillLevelID, g.Status, g.Enable).
+			g.Fee, g.Capacity, g.LocationID, g.SportID, g.SkillLevel, g.Status, g.Enable).
 		Suffix("RETURNING id, created_at, updated_at").
 		ToSql()
 	if err != nil {
@@ -127,14 +137,31 @@ func (r *pgxRepository) ListGroups(ctx context.Context, filter GroupFilter) ([]*
 			"LIMIT 1) AS enrolled_status", filter.ViewerUserID).
 		Column("COUNT(*) OVER() AS total_count"))
 
+	// distance_km is the haversine distance to the requested origin, or NULL when
+	// no origin was given. The column is always selected so the scan shape is fixed.
+	if filter.Latitude != nil && filter.Longitude != nil {
+		query = query.Column(squirrel.Expr(distanceKmExpr+" AS distance_km", *filter.Latitude, *filter.Latitude, *filter.Longitude))
+	} else {
+		query = query.Column("NULL::float8 AS distance_km")
+	}
+
 	if filter.Status != "" {
 		query = query.Where(squirrel.Eq{"pg.status": filter.Status})
 	}
 	if filter.SportID != "" {
 		query = query.Where(squirrel.Eq{"pg.sport_id": filter.SportID})
 	}
-	if filter.SkillLevelID != "" {
-		query = query.Where(squirrel.Eq{"pg.skill_level_id": filter.SkillLevelID})
+	if filter.SkillLevel != nil {
+		query = query.Where(squirrel.Eq{"pg.skill_level": *filter.SkillLevel})
+	}
+	if filter.FeeMin != nil {
+		query = query.Where(squirrel.GtOrEq{"pg.fee": *filter.FeeMin})
+	}
+	if filter.FeeMax != nil {
+		query = query.Where(squirrel.LtOrEq{"pg.fee": *filter.FeeMax})
+	}
+	if filter.FollowedOnly {
+		query = query.Where("EXISTS (SELECT 1 FROM public.favorite_hosts fh WHERE fh.user_id = NULLIF(?, '')::uuid AND fh.host_id = pg.host_id)", filter.ViewerUserID)
 	}
 	if filter.HostID != "" {
 		query = query.Where(squirrel.Eq{"pg.host_id": filter.HostID})
@@ -149,14 +176,26 @@ func (r *pgxRepository) ListGroups(ctx context.Context, filter GroupFilter) ([]*
 	}
 
 	orderBy := "pg.start_time"
-	if filter.SortBy != "" {
-		orderBy = "pg." + filter.SortBy
-	}
 	orderDir := "DESC"
+	switch filter.SortBy {
+	case "created_at":
+		orderBy = "pg.created_at"
+	case "skill_level":
+		orderBy = "pg.skill_level"
+	case "distance":
+		// Nearest first unless the caller asks otherwise; groups without a
+		// computable distance (no origin) sort last.
+		orderBy = "distance_km"
+		orderDir = "ASC"
+	}
 	if filter.SortOrder != "" {
 		orderDir = strings.ToUpper(filter.SortOrder)
 	}
-	query = query.OrderBy(orderBy + " " + orderDir)
+	if orderDir != "ASC" && orderDir != "DESC" {
+		orderDir = "DESC"
+	}
+	// pg.id is a tiebreaker so pagination stays stable across equal sort keys.
+	query = query.OrderBy(orderBy+" "+orderDir+" NULLS LAST", "pg.id")
 
 	if filter.Page < 1 {
 		filter.Page = 1
@@ -184,7 +223,7 @@ func (r *pgxRepository) ListGroups(ctx context.Context, filter GroupFilter) ([]*
 	for rows.Next() {
 		var g PickupGroup
 		var enrolledStatus *string
-		if err := rows.Scan(scanGroupInto(&g, &enrolledStatus, &total)...); err != nil {
+		if err := rows.Scan(scanGroupInto(&g, &enrolledStatus, &total, &g.DistanceKm)...); err != nil {
 			return nil, 0, fmt.Errorf("scan pickup group failed: %w", err)
 		}
 		if enrolledStatus != nil {
@@ -207,7 +246,7 @@ func (r *pgxRepository) UpdateGroup(ctx context.Context, g *PickupGroup) error {
 		Set("capacity", g.Capacity).
 		Set("location_id", g.LocationID).
 		Set("sport_id", g.SportID).
-		Set("skill_level_id", g.SkillLevelID).
+		Set("skill_level", g.SkillLevel).
 		Set("status", g.Status).
 		Set("enable", g.Enable).
 		Set("updated_at", squirrel.Expr("now()")).
@@ -328,13 +367,14 @@ func (r *pgxRepository) CreateOrder(ctx context.Context, order *PickupOrder) err
 	// double-counts against the capacity.
 	var currentEnrolled int
 	if err := tx.QueryRow(ctx,
-		"SELECT COUNT(*) FROM public.pickup_orders WHERE pickup_group_id = $1 AND status NOT IN ('cancelled', 'rejected')",
+		"SELECT COALESCE(SUM(party_size), 0) FROM public.pickup_orders WHERE pickup_group_id = $1 AND status NOT IN ('cancelled', 'rejected')",
 		order.PickupGroupID,
 	).Scan(&currentEnrolled); err != nil {
 		return fmt.Errorf("count enrollments failed: %w", err)
 	}
 
-	if currentEnrolled >= capacity {
+	// The order occupies PartySize seats, all of which must fit.
+	if currentEnrolled+order.PartySize > capacity {
 		return ErrGroupFullyBooked
 	}
 
@@ -348,6 +388,8 @@ func (r *pgxRepository) CreateOrder(ctx context.Context, order *PickupOrder) err
 			Set("payment_status", order.PaymentStatus).
 			Set("booker_name", order.BookerName).
 			Set("booker_phone", order.BookerPhone).
+			Set("skill_level", order.SkillLevel).
+			Set("party_size", order.PartySize).
 			Set("updated_at", squirrel.Expr("now()")).
 			Where(squirrel.Eq{"id": existingID}).
 			Suffix("RETURNING id, created_at, updated_at").
@@ -358,12 +400,15 @@ func (r *pgxRepository) CreateOrder(ctx context.Context, order *PickupOrder) err
 		if err := tx.QueryRow(ctx, q, args...).Scan(&order.ID, &order.CreatedAt, &order.UpdatedAt); err != nil {
 			return fmt.Errorf("re-enroll pickup order failed: %w", err)
 		}
+		if err := replaceMembers(ctx, tx, order.ID, order.Members); err != nil {
+			return err
+		}
 		return tx.Commit(ctx)
 	}
 
 	q, args, err := psql.Insert("public.pickup_orders").
-		Columns("pickup_group_id", "user_id", "booker_name", "booker_phone", "status", "payment_status").
-		Values(order.PickupGroupID, order.UserID, order.BookerName, order.BookerPhone, order.Status, order.PaymentStatus).
+		Columns("pickup_group_id", "user_id", "booker_name", "booker_phone", "status", "payment_status", "skill_level", "party_size").
+		Values(order.PickupGroupID, order.UserID, order.BookerName, order.BookerPhone, order.Status, order.PaymentStatus, order.SkillLevel, order.PartySize).
 		Suffix("RETURNING id, created_at, updated_at").
 		ToSql()
 	if err != nil {
@@ -378,15 +423,64 @@ func (r *pgxRepository) CreateOrder(ctx context.Context, order *PickupOrder) err
 		return fmt.Errorf("create pickup order failed: %w", err)
 	}
 
+	if err := replaceMembers(ctx, tx, order.ID, order.Members); err != nil {
+		return err
+	}
+
 	return tx.Commit(ctx)
+}
+
+// orderColumns are the pickup_orders columns returned by the order read queries,
+// in the order scanOrderInto expects.
+var orderColumns = []string{
+	"id", "pickup_group_id", "user_id", "booker_name", "booker_phone",
+	"status", "payment_status", "skill_level", "party_size", "created_at", "updated_at",
+}
+
+func scanOrderInto(o *PickupOrder) []any {
+	return []any{
+		&o.ID, &o.PickupGroupID, &o.UserID, &o.BookerName, &o.BookerPhone,
+		&o.Status, &o.PaymentStatus, &o.SkillLevel, &o.PartySize, &o.CreatedAt, &o.UpdatedAt,
+	}
+}
+
+// attachMembers loads the party members of the given orders in one query and
+// sets them on the matching orders. Single-enrollment orders have none.
+func (r *pgxRepository) attachMembers(ctx context.Context, orders []*PickupOrder) error {
+	if len(orders) == 0 {
+		return nil
+	}
+	ids := make([]string, len(orders))
+	byID := make(map[string]*PickupOrder, len(orders))
+	for i, o := range orders {
+		ids[i] = o.ID
+		byID[o.ID] = o
+	}
+
+	rows, err := r.pool.Query(ctx,
+		"SELECT order_id, gender, skill_level FROM public.pickup_order_members WHERE order_id = ANY($1::uuid[]) ORDER BY created_at, id",
+		ids)
+	if err != nil {
+		return fmt.Errorf("list pickup order members failed: %w", err)
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var orderID string
+		var m OrderMember
+		if err := rows.Scan(&orderID, &m.Gender, &m.SkillLevel); err != nil {
+			return fmt.Errorf("scan pickup order member failed: %w", err)
+		}
+		if o, ok := byID[orderID]; ok {
+			o.Members = append(o.Members, m)
+		}
+	}
+	return rows.Err()
 }
 
 func (r *pgxRepository) GetOrderByID(ctx context.Context, id string) (*PickupOrder, error) {
 	psql := squirrel.StatementBuilder.PlaceholderFormat(squirrel.Dollar)
-	query, args, err := psql.Select(
-		"id", "pickup_group_id", "user_id", "booker_name", "booker_phone",
-		"status", "payment_status", "created_at", "updated_at",
-	).
+	query, args, err := psql.Select(orderColumns...).
 		From("public.pickup_orders").
 		Where(squirrel.Eq{"id": id}).
 		ToSql()
@@ -395,24 +489,21 @@ func (r *pgxRepository) GetOrderByID(ctx context.Context, id string) (*PickupOrd
 	}
 
 	var o PickupOrder
-	if err := r.pool.QueryRow(ctx, query, args...).Scan(
-		&o.ID, &o.PickupGroupID, &o.UserID, &o.BookerName, &o.BookerPhone,
-		&o.Status, &o.PaymentStatus, &o.CreatedAt, &o.UpdatedAt,
-	); err != nil {
+	if err := r.pool.QueryRow(ctx, query, args...).Scan(scanOrderInto(&o)...); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, ErrOrderNotFound
 		}
 		return nil, fmt.Errorf("get pickup order failed: %w", err)
+	}
+	if err := r.attachMembers(ctx, []*PickupOrder{&o}); err != nil {
+		return nil, err
 	}
 	return &o, nil
 }
 
 func (r *pgxRepository) GetOrdersByGroupID(ctx context.Context, groupID string) ([]*PickupOrder, error) {
 	psql := squirrel.StatementBuilder.PlaceholderFormat(squirrel.Dollar)
-	query, args, err := psql.Select(
-		"id", "pickup_group_id", "user_id", "booker_name", "booker_phone",
-		"status", "payment_status", "created_at", "updated_at",
-	).
+	query, args, err := psql.Select(orderColumns...).
 		From("public.pickup_orders").
 		Where(squirrel.Eq{"pickup_group_id": groupID}).
 		OrderBy("created_at ASC").
@@ -430,23 +521,23 @@ func (r *pgxRepository) GetOrdersByGroupID(ctx context.Context, groupID string) 
 	var orders []*PickupOrder
 	for rows.Next() {
 		var o PickupOrder
-		if err := rows.Scan(
-			&o.ID, &o.PickupGroupID, &o.UserID, &o.BookerName, &o.BookerPhone,
-			&o.Status, &o.PaymentStatus, &o.CreatedAt, &o.UpdatedAt,
-		); err != nil {
+		if err := rows.Scan(scanOrderInto(&o)...); err != nil {
 			return nil, fmt.Errorf("scan pickup order failed: %w", err)
 		}
 		orders = append(orders, &o)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate pickup orders failed: %w", err)
+	}
+	if err := r.attachMembers(ctx, orders); err != nil {
+		return nil, err
 	}
 	return orders, nil
 }
 
 func (r *pgxRepository) GetOrdersByUserID(ctx context.Context, userID string) ([]*PickupOrder, error) {
 	psql := squirrel.StatementBuilder.PlaceholderFormat(squirrel.Dollar)
-	query, args, err := psql.Select(
-		"id", "pickup_group_id", "user_id", "booker_name", "booker_phone",
-		"status", "payment_status", "created_at", "updated_at",
-	).
+	query, args, err := psql.Select(orderColumns...).
 		From("public.pickup_orders").
 		Where(squirrel.Eq{"user_id": userID}).
 		OrderBy("created_at DESC").
@@ -464,13 +555,16 @@ func (r *pgxRepository) GetOrdersByUserID(ctx context.Context, userID string) ([
 	var orders []*PickupOrder
 	for rows.Next() {
 		var o PickupOrder
-		if err := rows.Scan(
-			&o.ID, &o.PickupGroupID, &o.UserID, &o.BookerName, &o.BookerPhone,
-			&o.Status, &o.PaymentStatus, &o.CreatedAt, &o.UpdatedAt,
-		); err != nil {
+		if err := rows.Scan(scanOrderInto(&o)...); err != nil {
 			return nil, fmt.Errorf("scan pickup order failed: %w", err)
 		}
 		orders = append(orders, &o)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate pickup orders failed: %w", err)
+	}
+	if err := r.attachMembers(ctx, orders); err != nil {
+		return nil, err
 	}
 	return orders, nil
 }
@@ -542,13 +636,13 @@ func (r *pgxRepository) UpdateOrderWithCapacityCheck(ctx context.Context, o *Pic
 	// occupying, so it must fit within the remaining capacity.
 	var currentEnrolled int
 	if err := tx.QueryRow(ctx,
-		"SELECT COUNT(*) FROM public.pickup_orders WHERE pickup_group_id = $1 AND id <> $2 AND status NOT IN ('cancelled', 'rejected')",
+		"SELECT COALESCE(SUM(party_size), 0) FROM public.pickup_orders WHERE pickup_group_id = $1 AND id <> $2 AND status NOT IN ('cancelled', 'rejected')",
 		o.PickupGroupID, o.ID,
 	).Scan(&currentEnrolled); err != nil {
 		return fmt.Errorf("count enrollments failed: %w", err)
 	}
 
-	if currentEnrolled >= capacity {
+	if currentEnrolled+o.PartySize > capacity {
 		return ErrGroupFullyBooked
 	}
 
@@ -572,4 +666,93 @@ func (r *pgxRepository) UpdateOrderWithCapacityCheck(ctx context.Context, o *Pic
 	}
 
 	return tx.Commit(ctx)
+}
+
+// distanceKmExpr is the haversine great-circle distance (km) between the origin
+// and the joined location "l". Its placeholders are, in order: origin latitude
+// (delta), origin latitude (cosine term), origin longitude. The argument of
+// asin is clamped to 1 to guard against floating-point overshoot.
+const distanceKmExpr = "(2 * 6371 * asin(sqrt(least(1::float8, " +
+	"power(sin(radians(l.latitude::float8 - ?::float8) / 2), 2) + " +
+	"cos(radians(?::float8)) * cos(radians(l.latitude::float8)) * " +
+	"power(sin(radians(l.longitude::float8 - ?::float8) / 2), 2)))))"
+
+// replaceMembers rewrites the party members of an order inside tx. A single
+// enrollment has no members, so the call only clears any stale rows.
+func replaceMembers(ctx context.Context, tx pgx.Tx, orderID string, members []OrderMember) error {
+	if _, err := tx.Exec(ctx, "DELETE FROM public.pickup_order_members WHERE order_id = $1", orderID); err != nil {
+		return fmt.Errorf("clear pickup order members failed: %w", err)
+	}
+	for _, m := range members {
+		if _, err := tx.Exec(ctx,
+			"INSERT INTO public.pickup_order_members (order_id, gender, skill_level) VALUES ($1, $2, $3)",
+			orderID, m.Gender, m.SkillLevel,
+		); err != nil {
+			return fmt.Errorf("insert pickup order member failed: %w", err)
+		}
+	}
+	return nil
+}
+
+func (r *pgxRepository) ListOccupyingUserIDs(ctx context.Context, groupID string) ([]string, error) {
+	rows, err := r.pool.Query(ctx,
+		`SELECT DISTINCT user_id::text FROM public.pickup_orders
+		 WHERE pickup_group_id = $1 AND status IN ('pending', 'confirmed', 'cancel_request')`,
+		groupID)
+	if err != nil {
+		return nil, fmt.Errorf("list occupying users failed: %w", err)
+	}
+	defer rows.Close()
+
+	var ids []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, fmt.Errorf("scan occupying user failed: %w", err)
+		}
+		ids = append(ids, id)
+	}
+	return ids, rows.Err()
+}
+
+func (r *pgxRepository) ListParticipantSeats(ctx context.Context, groupID string) ([]ParticipantSeat, string, error) {
+	var tz string
+	if err := r.pool.QueryRow(ctx,
+		`SELECT l.timezone FROM public.pickup_groups pg
+		 JOIN public.locations l ON l.id = pg.location_id WHERE pg.id = $1`,
+		groupID,
+	).Scan(&tz); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, "", ErrGroupNotFound
+		}
+		return nil, "", fmt.Errorf("get group timezone failed: %w", err)
+	}
+
+	// Single enrollments take gender / birth date from the enrolling user; party
+	// orders contribute one anonymous seat per member (no birth date).
+	rows, err := r.pool.Query(ctx,
+		`SELECT u.gender, u.birth_date, po.skill_level
+		   FROM public.pickup_orders po
+		   JOIN public.users u ON u.id = po.user_id
+		  WHERE po.pickup_group_id = $1 AND po.status IN ('pending', 'confirmed') AND po.party_size = 1
+		 UNION ALL
+		 SELECT m.gender, NULL::date, m.skill_level
+		   FROM public.pickup_order_members m
+		   JOIN public.pickup_orders po ON po.id = m.order_id
+		  WHERE po.pickup_group_id = $1 AND po.status IN ('pending', 'confirmed')`,
+		groupID)
+	if err != nil {
+		return nil, "", fmt.Errorf("list participant seats failed: %w", err)
+	}
+	defer rows.Close()
+
+	var seats []ParticipantSeat
+	for rows.Next() {
+		var s ParticipantSeat
+		if err := rows.Scan(&s.Gender, &s.BirthDate, &s.SkillLevel); err != nil {
+			return nil, "", fmt.Errorf("scan participant seat failed: %w", err)
+		}
+		seats = append(seats, s)
+	}
+	return seats, tz, rows.Err()
 }

@@ -12,25 +12,24 @@ type ListSkillLevelsRequest struct {
 	request.ListParams
 	SportID    string `form:"sport_id" binding:"omitempty,uuid"`
 	ActiveOnly bool   `form:"active_only"`
-	SortBy     string `form:"sort_by" binding:"omitempty,oneof=sort_order name created_at"`
+	SortBy     string `form:"sort_by" binding:"omitempty,oneof=level label created_at"`
 }
 
 // Validate performs custom validation for ListSkillLevelsRequest.
 func (r *ListSkillLevelsRequest) Validate() error { return nil }
 
 type CreateSkillLevelBody struct {
-	SportID   string `json:"sport_id" binding:"required,uuid"`
-	Name      string `json:"name" binding:"required,min=1,max=100"`
-	SortOrder int    `json:"sort_order" binding:"min=0,max=1000"`
+	SportID string `json:"sport_id" binding:"required,uuid"`
+	Level   int    `json:"level" binding:"required,min=1,max=100"`
+	Label   string `json:"label" binding:"required,min=1,max=100"`
 }
 
 // Validate performs custom validation for CreateSkillLevelBody.
 func (r *CreateSkillLevelBody) Validate() error { return nil }
 
 type UpdateSkillLevelBody struct {
-	Name      *string `json:"name" binding:"omitempty,min=1,max=100"`
-	SortOrder *int    `json:"sort_order" binding:"omitempty,min=0,max=1000"`
-	IsActive  *bool   `json:"is_active"`
+	Label    *string `json:"label" binding:"omitempty,min=1,max=100"`
+	IsActive *bool   `json:"is_active"`
 }
 
 // Validate performs custom validation for UpdateSkillLevelBody.
@@ -40,8 +39,8 @@ func (r *UpdateSkillLevelBody) Validate() error { return nil }
 type SkillLevelResponse struct {
 	ID        string    `json:"id"`
 	SportID   string    `json:"sport_id"`
-	Name      string    `json:"name"`
-	SortOrder int       `json:"sort_order"`
+	Level     int       `json:"level"`
+	Label     string    `json:"label"`
 	IsActive  bool      `json:"is_active"`
 	CreatedAt time.Time `json:"created_at"`
 	UpdatedAt time.Time `json:"updated_at"`
@@ -51,8 +50,8 @@ func NewSkillLevelResponse(s *skilllevel.SkillLevel) SkillLevelResponse {
 	return SkillLevelResponse{
 		ID:        s.ID,
 		SportID:   s.SportID,
-		Name:      s.Name,
-		SortOrder: s.SortOrder,
+		Level:     s.Level,
+		Label:     s.Label,
 		IsActive:  s.IsActive,
 		CreatedAt: s.CreatedAt.UTC(),
 		UpdatedAt: s.UpdatedAt.UTC(),
@@ -62,6 +61,6 @@ func NewSkillLevelResponse(s *skilllevel.SkillLevel) SkillLevelResponse {
 // SkillLevelTag is a brief representation of a skill level, used when embedding
 // into other responses (e.g. pickup groups).
 type SkillLevelTag struct {
-	ID   string `json:"id"`
-	Name string `json:"name"`
+	Level int    `json:"level"`
+	Label string `json:"label"`
 }

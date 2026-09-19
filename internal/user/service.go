@@ -16,16 +16,29 @@ import (
 // letters, digits, or underscore. Input is lowercased before matching.
 var usernamePattern = regexp.MustCompile(`^[a-z0-9_]{4,15}$`)
 
+// RegisterRequest carries the input for creating a new account. Gender and
+// BirthDate are optional.
+type RegisterRequest struct {
+	Email       string
+	Username    string
+	Password    string
+	DisplayName string
+	Gender      *string
+	BirthDate   *time.Time
+}
+
 type UpdateUserRequest struct {
 	DisplayName   *string
 	Phone         *string
+	Gender        *string
+	BirthDate     *time.Time
 	IsActive      *bool
 	IsSystemAdmin *bool
 }
 
 // Service defines business logic related to users.
 type Service interface {
-	Register(ctx context.Context, email, username, password, displayName string) (*User, error)
+	Register(ctx context.Context, req RegisterRequest) (*User, error)
 	Login(ctx context.Context, email, password string) (*User, error)
 	GetByID(ctx context.Context, id string) (*User, error)
 	GetByEmail(ctx context.Context, email string) (*User, error)
@@ -86,7 +99,8 @@ func NewService(repo Repository, hasher auth.PasswordHasher, fileService file.Se
 	}
 }
 
-func (s *service) Register(ctx context.Context, email, username, password, displayName string) (*User, error) {
+func (s *service) Register(ctx context.Context, req RegisterRequest) (*User, error) {
+	email, username, password, displayName := req.Email, req.Username, req.Password, req.DisplayName
 	cleanEmail := normalizeEmail(email)
 	if cleanEmail == "" {
 		return nil, ErrEmailRequired
@@ -124,6 +138,10 @@ func (s *service) Register(ctx context.Context, email, username, password, displ
 		return nil, fmt.Errorf("failed to hash password: %w", err)
 	}
 
+	if req.Gender != nil && !IsValidGender(*req.Gender) {
+		return nil, ErrInvalidGender
+	}
+
 	var displayNamePtr *string
 	if strings.TrimSpace(displayName) != "" {
 		d := strings.TrimSpace(displayName)
@@ -135,6 +153,8 @@ func (s *service) Register(ctx context.Context, email, username, password, displ
 		Username:     cleanUsername,
 		PasswordHash: hash,
 		DisplayName:  displayNamePtr,
+		Gender:       req.Gender,
+		BirthDate:    req.BirthDate,
 		IsActive:     true,
 	}
 
@@ -229,6 +249,15 @@ func (s *service) Update(ctx context.Context, id string, req UpdateUserRequest, 
 	}
 	if req.Phone != nil {
 		u.Phone = req.Phone
+	}
+	if req.Gender != nil {
+		if !IsValidGender(*req.Gender) {
+			return nil, ErrInvalidGender
+		}
+		u.Gender = req.Gender
+	}
+	if req.BirthDate != nil {
+		u.BirthDate = req.BirthDate
 	}
 	if req.IsActive != nil {
 		u.IsActive = *req.IsActive

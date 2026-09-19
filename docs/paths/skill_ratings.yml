@@ -1,0 +1,190 @@
+groupRatings:
+  get:
+    tags:
+      - Skill Ratings
+    summary: "取得該臨打團已給出的評分 (主辦人 / 系統管理員)"
+    description: |
+      **權限 Access Control**:
+      - **Group Host / System Admin**: 其他人回 403。
+    security:
+      - bearerAuth: []
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    responses:
+      "200":
+        description: Success
+        content:
+          application/json:
+            schema:
+              type: array
+              items:
+                $ref: "../components/schemas/skillrating.yml#/SkillRatingResponse"
+      "403":
+        description: Forbidden
+        content:
+          application/json:
+            schema:
+              $ref: "../components/schemas/common.yml#/ErrorResponse"
+
+groupRatingDetail:
+  put:
+    tags:
+      - Skill Ratings
+    summary: "評定 (或改評) 參加者的程度"
+    description: |
+      臨打團結束後，主辦人可選擇性地為個別參加者評定程度。同一參加者在同一臨打團只有一筆評分，
+      再次 PUT 會覆蓋。每位使用者在每個球類的評分平均即為其綜合評級 (見 GET /users/{id}/skill-ratings)。
+
+      規則：
+      - 臨打團須已結束：狀態為 completed，或狀態 active 且 end_time 已過；否則 409。
+      - 被評分者須為該團**已確認 (confirmed)** 的報名者，否則 400。
+        多人報名的同行成員沒有帳號，**不適用評分**。
+      - 不可評自己 (400)。
+      - skill_level 須為該球類對照表已定義且啟用的程度 (400)。
+      - 成功後會通知被評分者 (skill_rated)。
+
+      **權限 Access Control**:
+      - **Group Host / System Admin**: 其他人回 403。
+    security:
+      - bearerAuth: []
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: user_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: "../components/schemas/skillrating.yml#/RateParticipantRequest"
+    responses:
+      "200":
+        description: Success
+        content:
+          application/json:
+            schema:
+              $ref: "../components/schemas/skillrating.yml#/SkillRatingResponse"
+      "400":
+        description: "非已確認參加者 / 程度未定義 / 評自己"
+        content:
+          application/json:
+            schema:
+              $ref: "../components/schemas/common.yml#/ErrorResponse"
+      "403":
+        description: Forbidden
+        content:
+          application/json:
+            schema:
+              $ref: "../components/schemas/common.yml#/ErrorResponse"
+      "409":
+        description: "臨打團尚未結束"
+        content:
+          application/json:
+            schema:
+              $ref: "../components/schemas/common.yml#/ErrorResponse"
+  delete:
+    tags:
+      - Skill Ratings
+    summary: "刪除對該參加者在此臨打團的評分"
+    description: |
+      **權限 Access Control**:
+      - **Group Host / System Admin**
+    security:
+      - bearerAuth: []
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: user_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    responses:
+      "204":
+        description: No Content
+      "403":
+        description: Forbidden
+        content:
+          application/json:
+            schema:
+              $ref: "../components/schemas/common.yml#/ErrorResponse"
+      "404":
+        description: Rating not found
+        content:
+          application/json:
+            schema:
+              $ref: "../components/schemas/common.yml#/ErrorResponse"
+
+userSkillRatings:
+  get:
+    tags:
+      - Skill Ratings
+    summary: "取得某使用者的綜合程度評級"
+    description: |
+      回傳該使用者在各球類的綜合評級 (所有評分的算術平均)；沒被評過的使用者回傳空陣列。
+
+      **權限 Access Control**:
+      - **Login Required**: 任何已登入的使用者皆可查詢 (評級屬於公開信譽資訊)。
+    security:
+      - bearerAuth: []
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    responses:
+      "200":
+        description: Success
+        content:
+          application/json:
+            schema:
+              type: array
+              items:
+                $ref: "../components/schemas/skillrating.yml#/SkillSummaryResponse"
+      "404":
+        description: User not found
+        content:
+          application/json:
+            schema:
+              $ref: "../components/schemas/common.yml#/ErrorResponse"
+
+mySkillRatings:
+  get:
+    tags:
+      - Skill Ratings
+    summary: "取得我自己的綜合程度評級"
+    description: |
+      **權限 Access Control**:
+      - **Login Required**
+    security:
+      - bearerAuth: []
+    responses:
+      "200":
+        description: Success
+        content:
+          application/json:
+            schema:
+              type: array
+              items:
+                $ref: "../components/schemas/skillrating.yml#/SkillSummaryResponse"

@@ -59,17 +59,17 @@ func (h *Handler) CreateGroup(c *gin.Context) {
 	}
 
 	req := pickup.CreateGroupRequest{
-		HostID:       userID,
-		Title:        body.Title,
-		Description:  body.Description,
-		StartTime:    body.StartTime,
-		EndTime:      body.EndTime,
-		Fee:          body.Fee,
-		Capacity:     body.Capacity,
-		LocationID:   body.LocationID,
-		SportID:      body.SportID,
-		SkillLevelID: body.SkillLevelID,
-		Enable:       enable,
+		HostID:      userID,
+		Title:       body.Title,
+		Description: body.Description,
+		StartTime:   body.StartTime,
+		EndTime:     body.EndTime,
+		Fee:         body.Fee,
+		Capacity:    body.Capacity,
+		LocationID:  body.LocationID,
+		SportID:     body.SportID,
+		SkillLevel:  body.SkillLevel,
+		Enable:      enable,
 	}
 
 	group, err := h.service.CreateGroup(c.Request.Context(), req)
@@ -89,12 +89,21 @@ func (h *Handler) ListGroups(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid query parameters", "details": err.Error()})
 		return
 	}
+	if err := req.Validate(); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
 
 	sortOrder := strings.ToUpper(req.SortOrder)
 
 	filter := pickup.GroupFilter{
 		SportID:             req.SportID,
-		SkillLevelID:        req.SkillLevelID,
+		SkillLevel:          req.SkillLevel,
+		FeeMin:              req.FeeMin,
+		FeeMax:              req.FeeMax,
+		FollowedOnly:        req.FollowedOnly,
+		Latitude:            req.Latitude,
+		Longitude:           req.Longitude,
 		PubliclyVisibleOnly: true,
 		ViewerUserID:        auth.GetUserID(c),
 		Page:                req.Page,
@@ -132,13 +141,22 @@ func (h *Handler) ListGroupsByHost(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid query parameters", "details": err.Error()})
 		return
 	}
+	if err := req.Validate(); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
 
 	sortOrder := strings.ToUpper(req.SortOrder)
 
 	filter := pickup.GroupFilter{
 		Status:       req.Status,
 		SportID:      req.SportID,
-		SkillLevelID: req.SkillLevelID,
+		SkillLevel:   req.SkillLevel,
+		FeeMin:       req.FeeMin,
+		FeeMax:       req.FeeMax,
+		FollowedOnly: req.FollowedOnly,
+		Latitude:     req.Latitude,
+		Longitude:    req.Longitude,
 		HostID:       uri.HostID,
 		ViewerUserID: auth.GetUserID(c),
 		Page:         req.Page,
@@ -232,17 +250,17 @@ func (h *Handler) UpdateGroup(c *gin.Context) {
 	}
 
 	req := pickup.UpdateGroupRequest{
-		Title:        body.Title,
-		Description:  body.Description,
-		StartTime:    body.StartTime,
-		EndTime:      body.EndTime,
-		Fee:          body.Fee,
-		Capacity:     body.Capacity,
-		LocationID:   body.LocationID,
-		SportID:      body.SportID,
-		SkillLevelID: body.SkillLevelID,
-		Status:       body.Status,
-		Enable:       body.Enable,
+		Title:       body.Title,
+		Description: body.Description,
+		StartTime:   body.StartTime,
+		EndTime:     body.EndTime,
+		Fee:         body.Fee,
+		Capacity:    body.Capacity,
+		LocationID:  body.LocationID,
+		SportID:     body.SportID,
+		SkillLevel:  body.SkillLevel,
+		Status:      body.Status,
+		Enable:      body.Enable,
 	}
 
 	group, err := h.service.UpdateGroup(c.Request.Context(), uri.ID, req)
@@ -293,6 +311,12 @@ func (h *Handler) CreateOrder(c *gin.Context) {
 		return
 	}
 
+	var body CreateOrderBody
+	if err := c.ShouldBindJSON(&body); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request body", "details": err.Error()})
+		return
+	}
+
 	userID := auth.GetUserID(c)
 	if userID == "" {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
@@ -319,6 +343,7 @@ func (h *Handler) CreateOrder(c *gin.Context) {
 		UserID:        userID,
 		BookerName:    bookerName,
 		BookerPhone:   bookerPhone,
+		SkillLevel:    body.SkillLevel,
 	}
 
 	order, err := h.service.CreateOrder(c.Request.Context(), req)
@@ -462,4 +487,76 @@ func (h *Handler) ListMyOrders(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, items)
+}
+
+// CreatePartyOrder enrolls several people under one order. The caller is the
+// organizer; the other seats are anonymous members described only by gender and
+// skill level. The whole party must fit within the group's remaining capacity.
+func (h *Handler) CreatePartyOrder(c *gin.Context) {
+	var uri request.ByIDRequest
+	if err := c.ShouldBindUri(&uri); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request", "details": err.Error()})
+		return
+	}
+
+	var body CreatePartyOrderBody
+	if err := c.ShouldBindJSON(&body); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request body", "details": err.Error()})
+		return
+	}
+
+	userID := auth.GetUserID(c)
+	if userID == "" {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+		return
+	}
+
+	u, err := h.userService.GetByID(c.Request.Context(), userID)
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+
+	bookerPhone := ""
+	if u.Phone != nil {
+		bookerPhone = *u.Phone
+	}
+
+	members := make([]pickup.OrderMember, len(body.Members))
+	for i, m := range body.Members {
+		members[i] = pickup.OrderMember{Gender: m.Gender, SkillLevel: m.SkillLevel}
+	}
+
+	order, err := h.service.CreatePartyOrder(c.Request.Context(), pickup.CreatePartyOrderRequest{
+		PickupGroupID: uri.ID,
+		UserID:        userID,
+		OrganizerName: body.OrganizerName,
+		BookerPhone:   bookerPhone,
+		PartySize:     body.PartySize,
+		Members:       members,
+	})
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+
+	c.JSON(http.StatusCreated, NewPickupOrderResponse(order))
+}
+
+// GetParticipantStats returns the anonymous gender / age / skill-level breakdown
+// of a group's enrolled seats. Public: it exposes counts only, never identities.
+func (h *Handler) GetParticipantStats(c *gin.Context) {
+	var uri request.ByIDRequest
+	if err := c.ShouldBindUri(&uri); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request", "details": err.Error()})
+		return
+	}
+
+	stats, err := h.service.GetParticipantStats(c.Request.Context(), uri.ID)
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+
+	c.JSON(http.StatusOK, NewParticipantStatsResponse(stats))
 }

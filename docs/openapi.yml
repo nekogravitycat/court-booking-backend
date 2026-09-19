@@ -51,6 +51,10 @@ tags:
     description: 球團主辦人身分管理 (系統管理員)
   - name: Favorites
     description: 我的最愛
+  - name: Skill Ratings
+    description: 主辦人對參加者的程度評分與使用者綜合評級
+  - name: Notifications
+    description: 站內通知 (個人收件匣)
   - name: System
     description: 系統資訊
 
@@ -100,6 +104,9 @@ components:
 
     UpdateUserRequest:
       $ref: "./components/schemas/user.yml#/UpdateUserRequest"
+
+    UpdateMeRequest:
+      $ref: "./components/schemas/user.yml#/UpdateMeRequest"
 
     # --------------------------
     # Organization Models
@@ -215,6 +222,42 @@ components:
     UpdatePickupOrderRequest:
       $ref: "./components/schemas/pickup.yml#/UpdatePickupOrderRequest"
 
+    CreatePickupOrderRequest:
+      $ref: "./components/schemas/pickup.yml#/CreatePickupOrderRequest"
+
+    CreatePartyOrderRequest:
+      $ref: "./components/schemas/pickup.yml#/CreatePartyOrderRequest"
+
+    PartyMember:
+      $ref: "./components/schemas/pickup.yml#/PartyMember"
+
+    ParticipantStatsResponse:
+      $ref: "./components/schemas/pickup.yml#/ParticipantStatsResponse"
+
+    # --------------------------
+    # Skill Rating Models
+    # --------------------------
+    RateParticipantRequest:
+      $ref: "./components/schemas/skillrating.yml#/RateParticipantRequest"
+
+    SkillRatingResponse:
+      $ref: "./components/schemas/skillrating.yml#/SkillRatingResponse"
+
+    SkillSummaryResponse:
+      $ref: "./components/schemas/skillrating.yml#/SkillSummaryResponse"
+
+    # --------------------------
+    # Notification Models
+    # --------------------------
+    NotificationResponse:
+      $ref: "./components/schemas/notification.yml#/NotificationResponse"
+
+    UnreadCountResponse:
+      $ref: "./components/schemas/notification.yml#/UnreadCountResponse"
+
+    MarkAllReadResponse:
+      $ref: "./components/schemas/notification.yml#/MarkAllReadResponse"
+
     # --------------------------
     # Pickup Host Models
     # --------------------------
@@ -252,6 +295,9 @@ paths:
   /me:
     $ref: "./paths/me.yml#/me"
 
+  /me/skill-ratings:
+    $ref: "./paths/skill_ratings.yml#/mySkillRatings"
+
   # ============================
   # Users (System Admin)
   # ============================
@@ -263,6 +309,9 @@ paths:
 
   /users/{id}/avatar:
     $ref: "./paths/users.yml#/avatarUpload"
+
+  /users/{id}/skill-ratings:
+    $ref: "./paths/skill_ratings.yml#/userSkillRatings"
 
   # ============================
   # Organizations
@@ -387,6 +436,18 @@ paths:
   /pickup-groups/{id}/orders:
     $ref: "./paths/pickup.yml#/pickupGroupOrders"
 
+  /pickup-groups/{id}/party-orders:
+    $ref: "./paths/pickup.yml#/pickupGroupPartyOrders"
+
+  /pickup-groups/{id}/participant-stats:
+    $ref: "./paths/pickup.yml#/pickupGroupParticipantStats"
+
+  /pickup-groups/{id}/ratings:
+    $ref: "./paths/skill_ratings.yml#/groupRatings"
+
+  /pickup-groups/{id}/ratings/{user_id}:
+    $ref: "./paths/skill_ratings.yml#/groupRatingDetail"
+
   /hosts/{host_id}/pickup-groups:
     $ref: "./paths/pickup.yml#/hostPickupGroups"
 
@@ -413,6 +474,21 @@ paths:
   # ============================
   /favorites/host:
     $ref: "./paths/favorites.yml#/favoriteHosts"
+
+  # ============================
+  # Notifications
+  # ============================
+  /notifications:
+    $ref: "./paths/notifications.yml#/notifications"
+
+  /notifications/unread-count:
+    $ref: "./paths/notifications.yml#/unreadCount"
+
+  /notifications/read-all:
+    $ref: "./paths/notifications.yml#/readAll"
+
+  /notifications/{id}/read:
+    $ref: "./paths/notifications.yml#/markRead"
 
   # ============================
   # Shared / Common Schemas for Reference

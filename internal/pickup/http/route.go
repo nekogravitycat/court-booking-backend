@@ -12,6 +12,9 @@ func RegisterRoutes(g *gin.RouterGroup, h *Handler, authMiddleware, optionalAuth
 	// Public list of a specific host's pickup groups (optional auth, trimmed).
 	g.GET("/hosts/:host_id/pickup-groups", optionalAuthMiddleware, h.ListGroupsByHost)
 
+	// Anonymous participant statistics for a group (public, counts only).
+	g.GET("/pickup-groups/:id/participant-stats", h.GetParticipantStats)
+
 	// Authenticated pickup group routes
 	groupsGroup := g.Group("/pickup-groups")
 	groupsGroup.Use(authMiddleware)
@@ -21,6 +24,7 @@ func RegisterRoutes(g *gin.RouterGroup, h *Handler, authMiddleware, optionalAuth
 		groupsGroup.PATCH("/:id", h.UpdateGroup)
 		groupsGroup.DELETE("/:id", h.DeleteGroup)
 		groupsGroup.POST("/:id/orders", h.CreateOrder)
+		groupsGroup.POST("/:id/party-orders", h.CreatePartyOrder)
 		groupsGroup.GET("/:id/orders", h.ListGroupOrders)
 	}
 

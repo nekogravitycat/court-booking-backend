@@ -1,0 +1,108 @@
+notifications:
+  get:
+    tags:
+      - Notifications
+    summary: "取得我的通知 (由新到舊)"
+    description: |
+      列出目前使用者的站內通知，最新的在前。通知由系統在下列事件自動寫入 (不會推播)：
+
+      | type | 收件者 | 觸發 |
+      |------|--------|------|
+      | pickup_order_created | 主辦人 | 有人報名 (單人或多人) |
+      | pickup_order_confirmed | 報名者 | 主辦人確認報名 |
+      | pickup_order_rejected | 報名者 | 主辦人拒絕報名 |
+      | pickup_order_cancelled_by_host | 報名者 | 主辦人取消報名 |
+      | pickup_payment_updated | 報名者 | 主辦人變更付款狀態 |
+      | pickup_order_cancelled | 主辦人 | 報名者取消報名 |
+      | pickup_order_cancel_requested | 主辦人 | 報名者申請取消 |
+      | pickup_group_cancelled | 已佔名額的報名者 | 臨打團被取消 |
+      | pickup_group_updated | 已佔名額的報名者 | 臨打團時間或場地變更 |
+      | skill_rated | 被評分者 | 主辦人為其評定程度 |
+
+      自己的操作不會通知自己。
+
+      **權限 Access Control**:
+      - **Login Required**: 只能看到自己的通知。
+    security:
+      - bearerAuth: []
+    parameters:
+      - name: unread_only
+        in: query
+        required: false
+        schema:
+          type: boolean
+        description: "只回傳未讀"
+      - $ref: "../components/parameters.yml#/page"
+      - $ref: "../components/parameters.yml#/page_size"
+    responses:
+      "200":
+        description: Success
+        content:
+          application/json:
+            schema:
+              $ref: "../components/schemas/notification.yml#/NotificationPageResponse"
+
+unreadCount:
+  get:
+    tags:
+      - Notifications
+    summary: "取得未讀通知數"
+    description: |
+      **權限 Access Control**:
+      - **Login Required**
+    security:
+      - bearerAuth: []
+    responses:
+      "200":
+        description: Success
+        content:
+          application/json:
+            schema:
+              $ref: "../components/schemas/notification.yml#/UnreadCountResponse"
+
+readAll:
+  post:
+    tags:
+      - Notifications
+    summary: "全部標為已讀"
+    description: |
+      **權限 Access Control**:
+      - **Login Required**
+    security:
+      - bearerAuth: []
+    responses:
+      "200":
+        description: Success
+        content:
+          application/json:
+            schema:
+              $ref: "../components/schemas/notification.yml#/MarkAllReadResponse"
+
+markRead:
+  patch:
+    tags:
+      - Notifications
+    summary: "將單則通知標為已讀"
+    description: |
+      重複標記為冪等 (仍回 204)。通知不存在或不屬於自己時回 404。
+
+      **權限 Access Control**:
+      - **Login Required**: 只能操作自己的通知。
+    security:
+      - bearerAuth: []
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    responses:
+      "204":
+        description: No Content
+      "404":
+        description: Not Found
+        content:
+          application/json:
+            schema:
+              $ref: "../components/schemas/common.yml#/ErrorResponse"

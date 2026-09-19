@@ -26,6 +26,9 @@ type LocationResponse struct {
 	Description       string                  `json:"description"`
 	Longitude         float64                 `json:"longitude"`
 	Latitude          float64                 `json:"latitude"`
+	ParkingName       *string                 `json:"parking_name"`
+	ParkingLatitude   *float64                `json:"parking_latitude"`
+	ParkingLongitude  *float64                `json:"parking_longitude"`
 	Cover             *string                 `json:"cover"`           // URL to cover image
 	CoverThumbnail    *string                 `json:"cover_thumbnail"` // URL to cover thumbnail
 }
@@ -64,6 +67,9 @@ func NewLocationResponse(l *location.Location) LocationResponse {
 		Description:       l.Description,
 		Longitude:         l.Longitude,
 		Latitude:          l.Latitude,
+		ParkingName:       l.ParkingName,
+		ParkingLatitude:   l.ParkingLatitude,
+		ParkingLongitude:  l.ParkingLongitude,
 		Cover:             coverURL,
 		CoverThumbnail:    coverThumbnailURL,
 	}
@@ -88,19 +94,22 @@ func NewManagerResponse(u *user.User) ManagerResponse {
 }
 
 type CreateLocationRequest struct {
-	OrganizationID    string  `json:"organization_id" binding:"required,uuid"`
-	Name              string  `json:"name" binding:"required,min=1,max=100"`
-	Capacity          int64   `json:"capacity" binding:"required,min=1,max=100000"`
-	OpeningHoursStart string  `json:"opening_hours_start" binding:"required,max=8"`
-	OpeningHoursEnd   string  `json:"opening_hours_end" binding:"required,max=8"`
-	Timezone          string  `json:"timezone" binding:"omitempty,max=64"`
-	LocationInfo      string  `json:"location_info" binding:"required,max=500"`
-	Opening           bool    `json:"opening"`
-	Rule              string  `json:"rule" binding:"omitempty,max=2000"`
-	Facility          string  `json:"facility" binding:"omitempty,max=2000"`
-	Description       string  `json:"description" binding:"omitempty,max=2000"`
-	Longitude         float64 `json:"longitude" binding:"required,min=-180,max=180"`
-	Latitude          float64 `json:"latitude" binding:"required,min=-90,max=90"`
+	OrganizationID    string   `json:"organization_id" binding:"required,uuid"`
+	Name              string   `json:"name" binding:"required,min=1,max=100"`
+	Capacity          int64    `json:"capacity" binding:"required,min=1,max=100000"`
+	OpeningHoursStart string   `json:"opening_hours_start" binding:"required,max=8"`
+	OpeningHoursEnd   string   `json:"opening_hours_end" binding:"required,max=8"`
+	Timezone          string   `json:"timezone" binding:"omitempty,max=64"`
+	LocationInfo      string   `json:"location_info" binding:"required,max=500"`
+	Opening           bool     `json:"opening"`
+	Rule              string   `json:"rule" binding:"omitempty,max=2000"`
+	Facility          string   `json:"facility" binding:"omitempty,max=2000"`
+	Description       string   `json:"description" binding:"omitempty,max=2000"`
+	Longitude         float64  `json:"longitude" binding:"required,min=-180,max=180"`
+	Latitude          float64  `json:"latitude" binding:"required,min=-90,max=90"`
+	ParkingName       *string  `json:"parking_name" binding:"omitempty,min=1,max=100"`
+	ParkingLatitude   *float64 `json:"parking_latitude" binding:"omitempty,min=-90,max=90"`
+	ParkingLongitude  *float64 `json:"parking_longitude" binding:"omitempty,min=-180,max=180"`
 }
 
 type UpdateLocationRequest struct {
@@ -116,6 +125,10 @@ type UpdateLocationRequest struct {
 	Description       *string  `json:"description" binding:"omitempty,max=2000"`
 	Longitude         *float64 `json:"longitude" binding:"omitempty,min=-180,max=180"`
 	Latitude          *float64 `json:"latitude" binding:"omitempty,min=-90,max=90"`
+	ParkingName       *string  `json:"parking_name" binding:"omitempty,min=1,max=100"`
+	ParkingLatitude   *float64 `json:"parking_latitude" binding:"omitempty,min=-90,max=90"`
+	ParkingLongitude  *float64 `json:"parking_longitude" binding:"omitempty,min=-180,max=180"`
+	RemoveParking     bool     `json:"remove_parking"`
 }
 
 type ListLocationsRequest struct {

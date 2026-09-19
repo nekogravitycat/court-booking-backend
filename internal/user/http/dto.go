@@ -31,6 +31,9 @@ type UserResponse struct {
 	Username        string                      `json:"username"`
 	DisplayName     *string                     `json:"display_name"`
 	Phone           *string                     `json:"phone"`
+	Gender          *string                     `json:"gender"`
+	BirthDate       *string                     `json:"birth_date"`       // YYYY-MM-DD
+	Age             *int                        `json:"age"`              // Derived from birth_date
 	Avatar          *string                     `json:"avatar"`           // URL to avatar image
 	AvatarThumbnail *string                     `json:"avatar_thumbnail"` // URL to avatar thumbnail
 	CreatedAt       time.Time                   `json:"created_at"`
@@ -82,12 +85,27 @@ func NewUserResponse(u *user.User) UserResponse {
 		}
 	}
 
+	var birthDate *string
+	var age *int
+	if u.BirthDate != nil {
+		bd := u.BirthDate.Format("2006-01-02")
+		birthDate = &bd
+		a := user.AgeOn(*u.BirthDate, time.Now())
+		if a < 0 {
+			a = 0
+		}
+		age = &a
+	}
+
 	return UserResponse{
 		ID:              u.ID,
 		Email:           u.Email,
 		Username:        u.Username,
 		DisplayName:     u.DisplayName,
 		Phone:           u.Phone,
+		Gender:          u.Gender,
+		BirthDate:       birthDate,
+		Age:             age,
 		Avatar:          avatarURL,
 		AvatarThumbnail: avatarThumbnailURL,
 		CreatedAt:       createdAt,
@@ -101,10 +119,12 @@ func NewUserResponse(u *user.User) UserResponse {
 
 // RegisterRequest defines the payload for user registration.
 type RegisterRequest struct {
-	Email       string `json:"email" binding:"required,email,max=254"`
-	Username    string `json:"username" binding:"required,min=4,max=15"`
-	Password    string `json:"password" binding:"required,min=8,max=72"`
-	DisplayName string `json:"display_name" binding:"required,max=50"`
+	Email       string  `json:"email" binding:"required,email,max=254"`
+	Username    string  `json:"username" binding:"required,min=4,max=15"`
+	Password    string  `json:"password" binding:"required,min=8,max=72"`
+	DisplayName string  `json:"display_name" binding:"required,max=50"`
+	Gender      *string `json:"gender" binding:"omitempty,oneof=male female other"`
+	BirthDate   *string `json:"birth_date" binding:"omitempty,datetime=2006-01-02"`
 }
 
 // Validate performs custom validation for RegisterRequest.
@@ -128,6 +148,8 @@ func (r *LoginRequest) Validate() error {
 type UpdateUserRequest struct {
 	DisplayName   *string `json:"display_name" binding:"omitempty,max=50"`
 	Phone         *string `json:"phone" binding:"omitempty,tw_phone"`
+	Gender        *string `json:"gender" binding:"omitempty,oneof=male female other"`
+	BirthDate     *string `json:"birth_date" binding:"omitempty,datetime=2006-01-02"`
 	IsActive      *bool   `json:"is_active"`
 	IsSystemAdmin *bool   `json:"is_system_admin"`
 }
@@ -151,4 +173,14 @@ type LoginResponse struct {
 // MeResponse returns the current user info.
 type MeResponse struct {
 	User UserResponse `json:"user"`
+}
+
+// UpdateMeRequest defines the profile fields a user may change on their own
+// account via PATCH /me. Privileged fields (is_active, is_system_admin) are
+// intentionally absent.
+type UpdateMeRequest struct {
+	DisplayName *string `json:"display_name" binding:"omitempty,max=50"`
+	Phone       *string `json:"phone" binding:"omitempty,tw_phone"`
+	Gender      *string `json:"gender" binding:"omitempty,oneof=male female other"`
+	BirthDate   *string `json:"birth_date" binding:"omitempty,datetime=2006-01-02"`
 }

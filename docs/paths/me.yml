@@ -20,3 +20,37 @@ me:
               $ref: "../components/schemas/user.yml#/MeResponse"
       "401":
         description: Unauthorized - Token 無效或過期
+  patch:
+    tags:
+      - Me
+    summary: "修改自己的個人資料"
+    description: |
+      使用者修改自己的 display_name、phone、gender、birth_date。
+      只更新有傳的欄位；無法透過此 API 修改 is_active / is_system_admin 等管理欄位。
+
+      **權限 Access Control**:
+      - **Login Required**: 任何已登入的使用者皆可修改自己的資料。
+    operationId: updateCurrentUser
+    security:
+      - bearerAuth: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: "../components/schemas/user.yml#/UpdateMeRequest"
+    responses:
+      "200":
+        description: Updated user profile
+        content:
+          application/json:
+            schema:
+              $ref: "../components/schemas/user.yml#/MeResponse"
+      "400":
+        description: 欄位格式錯誤 (gender 不在 male/female/other、birth_date 非 YYYY-MM-DD 或為未來日期)
+        content:
+          application/json:
+            schema:
+              $ref: "../components/schemas/common.yml#/ErrorResponse"
+      "401":
+        description: Unauthorized - Token 無效或過期

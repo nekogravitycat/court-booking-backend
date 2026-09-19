@@ -12,11 +12,13 @@ import (
 	"github.com/nekogravitycat/court-booking-backend/internal/favorite"
 	"github.com/nekogravitycat/court-booking-backend/internal/file"
 	"github.com/nekogravitycat/court-booking-backend/internal/location"
+	"github.com/nekogravitycat/court-booking-backend/internal/notification"
 	"github.com/nekogravitycat/court-booking-backend/internal/organization"
 	"github.com/nekogravitycat/court-booking-backend/internal/pickup"
 	"github.com/nekogravitycat/court-booking-backend/internal/pkg/storage"
 	"github.com/nekogravitycat/court-booking-backend/internal/resource"
 	"github.com/nekogravitycat/court-booking-backend/internal/skilllevel"
+	"github.com/nekogravitycat/court-booking-backend/internal/skillrating"
 	"github.com/nekogravitycat/court-booking-backend/internal/sports"
 	"github.com/nekogravitycat/court-booking-backend/internal/user"
 )
@@ -88,24 +90,34 @@ func NewContainer(cfg Config) *Container {
 
 	// Pickup Module
 	pickupRepo := pickup.NewPgxRepository(cfg.DBPool)
-	pickupService := pickup.NewService(pickupRepo, userService, sportsService, skillLevelService)
+	// Notification Module (injected into pickup and rating for event notifications)
+	notificationRepo := notification.NewPgxRepository(cfg.DBPool)
+	notificationService := notification.NewService(notificationRepo)
+
+	pickupService := pickup.NewService(pickupRepo, userService, sportsService, skillLevelService, notificationService)
+
+	// Skill Rating Module
+	skillRatingRepo := skillrating.NewPgxRepository(cfg.DBPool)
+	skillRatingService := skillrating.NewService(skillRatingRepo, pickupService, skillLevelService, userService, notificationService)
 
 	// API Router Config
 	routerParams := api.Config{
-		IsProduction:      cfg.IsProduction,
-		ProdOrigins:       cfg.ProdOrigins,
-		UserService:       userService,
-		OrgService:        orgService,
-		LocService:        locService,
-		ResService:        resService,
-		BookingService:    bookingService,
-		AnnService:        annService,
-		SportsService:     sportsService,
-		SkillLevelService: skillLevelService,
-		PickupService:     pickupService,
-		FavoriteService:   favoriteService,
-		FileService:       fileService,
-		JWTManager:        jwtManager,
+		IsProduction:        cfg.IsProduction,
+		ProdOrigins:         cfg.ProdOrigins,
+		UserService:         userService,
+		OrgService:          orgService,
+		LocService:          locService,
+		ResService:          resService,
+		BookingService:      bookingService,
+		AnnService:          annService,
+		SportsService:       sportsService,
+		SkillLevelService:   skillLevelService,
+		PickupService:       pickupService,
+		SkillRatingService:  skillRatingService,
+		NotificationService: notificationService,
+		FavoriteService:     favoriteService,
+		FileService:         fileService,
+		JWTManager:          jwtManager,
 	}
 
 	// Router

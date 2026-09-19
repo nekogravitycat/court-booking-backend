@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
@@ -48,7 +49,20 @@ func (h *UserHandler) Register(c *gin.Context) {
 
 	ctx := c.Request.Context()
 
-	u, err := h.userService.Register(ctx, req.Email, req.Username, req.Password, req.DisplayName)
+	birthDate, err := parseOptionalBirthDate(req.BirthDate)
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+
+	u, err := h.userService.Register(ctx, user.RegisterRequest{
+		Email:       req.Email,
+		Username:    req.Username,
+		Password:    req.Password,
+		DisplayName: req.DisplayName,
+		Gender:      req.Gender,
+		BirthDate:   birthDate,
+	})
 	if err != nil {
 		response.Error(c, err)
 		return
@@ -229,9 +243,17 @@ func (h *UserHandler) Update(c *gin.Context) {
 		return
 	}
 
+	birthDate, err := parseOptionalBirthDate(body.BirthDate)
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+
 	req := user.UpdateUserRequest{
 		DisplayName:   body.DisplayName,
 		Phone:         body.Phone,
+		Gender:        body.Gender,
+		BirthDate:     birthDate,
 		IsActive:      body.IsActive,
 		IsSystemAdmin: body.IsSystemAdmin,
 	}
@@ -399,4 +421,51 @@ func (h *UserHandler) RemoveAvatar(c *gin.Context) {
 	}
 
 	c.Status(http.StatusNoContent)
+}
+
+// parseOptionalBirthDate converts an optional "YYYY-MM-DD" string into a date.
+func parseOptionalBirthDate(s *string) (*time.Time, error) {
+	if s == nil {
+		return nil, nil
+	}
+	d, err := user.ParseBirthDate(*s)
+	if err != nil {
+		return nil, err
+	}
+	return &d, nil
+}
+
+// UpdateMe lets the authenticated user edit their own profile (display name,
+// phone, gender, birth date). Privileged fields are not accepted here.
+func (h *UserHandler) UpdateMe(c *gin.Context) {
+	userID := auth.GetUserID(c)
+	if userID == "" {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+		return
+	}
+
+	var body UpdateMeRequest
+	if err := c.ShouldBindJSON(&body); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid body", "details": err.Error()})
+		return
+	}
+
+	birthDate, err := parseOptionalBirthDate(body.BirthDate)
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+
+	updated, err := h.userService.Update(c.Request.Context(), userID, user.UpdateUserRequest{
+		DisplayName: body.DisplayName,
+		Phone:       body.Phone,
+		Gender:      body.Gender,
+		BirthDate:   birthDate,
+	}, userID)
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+
+	c.JSON(http.StatusOK, MeResponse{User: NewUserResponse(updated)})
 }

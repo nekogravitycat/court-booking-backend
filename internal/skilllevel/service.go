@@ -6,20 +6,25 @@ import (
 )
 
 type CreateRequest struct {
-	SportID   string
-	Name      string
-	SortOrder int
+	SportID string
+	Level   int
+	Label   string
 }
 
 type UpdateRequest struct {
-	Name      *string
-	SortOrder *int
-	IsActive  *bool
+	Label    *string
+	IsActive *bool
 }
 
 type Service interface {
 	Create(ctx context.Context, req CreateRequest) (*SkillLevel, error)
 	GetByID(ctx context.Context, id string) (*SkillLevel, error)
+	// GetBySportAndLevel returns the mapping row for a sport's integer level, or
+	// ErrNotFound when the sport has no such level.
+	GetBySportAndLevel(ctx context.Context, sportID string, level int) (*SkillLevel, error)
+	// LabelsBySport returns level -> label for every level of the sport
+	// (including inactive ones, so historical data still resolves a label).
+	LabelsBySport(ctx context.Context, sportID string) (map[int]string, error)
 	List(ctx context.Context, filter Filter) ([]*SkillLevel, int, error)
 	Update(ctx context.Context, id string, req UpdateRequest) (*SkillLevel, error)
 	Delete(ctx context.Context, id string) error
@@ -37,16 +42,19 @@ func (s *service) Create(ctx context.Context, req CreateRequest) (*SkillLevel, e
 	if strings.TrimSpace(req.SportID) == "" {
 		return nil, ErrSportRequired
 	}
-	name := strings.TrimSpace(req.Name)
-	if name == "" {
-		return nil, ErrNameRequired
+	if req.Level < 1 {
+		return nil, ErrLevelInvalid
+	}
+	label := strings.TrimSpace(req.Label)
+	if label == "" {
+		return nil, ErrLabelRequired
 	}
 
 	sl := &SkillLevel{
-		SportID:   req.SportID,
-		Name:      name,
-		SortOrder: req.SortOrder,
-		IsActive:  true,
+		SportID:  req.SportID,
+		Level:    req.Level,
+		Label:    label,
+		IsActive: true,
 	}
 	if err := s.repo.Create(ctx, sl); err != nil {
 		return nil, err
@@ -58,27 +66,33 @@ func (s *service) GetByID(ctx context.Context, id string) (*SkillLevel, error) {
 	return s.repo.GetByID(ctx, id)
 }
 
+func (s *service) GetBySportAndLevel(ctx context.Context, sportID string, level int) (*SkillLevel, error) {
+	return s.repo.GetBySportAndLevel(ctx, sportID, level)
+}
+
+func (s *service) LabelsBySport(ctx context.Context, sportID string) (map[int]string, error) {
+	return s.repo.LabelsBySport(ctx, sportID)
+}
+
 func (s *service) List(ctx context.Context, filter Filter) ([]*SkillLevel, int, error) {
 	return s.repo.List(ctx, filter)
 }
 
-// Update mutates a skill level's name, ordering, and active flag. The owning
-// sport is fixed at creation time and cannot be reassigned.
+// Update mutates a skill level's label and active flag. The owning sport and the
+// integer level are fixed at creation time: changing either would silently
+// change the meaning of data already recorded against that level.
 func (s *service) Update(ctx context.Context, id string, req UpdateRequest) (*SkillLevel, error) {
 	sl, err := s.repo.GetByID(ctx, id)
 	if err != nil {
 		return nil, err
 	}
 
-	if req.Name != nil {
-		name := strings.TrimSpace(*req.Name)
-		if name == "" {
-			return nil, ErrNameRequired
+	if req.Label != nil {
+		label := strings.TrimSpace(*req.Label)
+		if label == "" {
+			return nil, ErrLabelRequired
 		}
-		sl.Name = name
-	}
-	if req.SortOrder != nil {
-		sl.SortOrder = *req.SortOrder
+		sl.Label = label
 	}
 	if req.IsActive != nil {
 		sl.IsActive = *req.IsActive

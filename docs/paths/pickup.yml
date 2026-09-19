@@ -8,6 +8,10 @@ pickupGroups:
       已額滿的臨打團仍會列出（僅無法再報名），方便使用者瀏覽。
       回傳精簡欄位：主辦人 (id / username / display_name)、位置、球團名稱、球類、程度、
       開始時間、費用，以及 enrolled_status。
+      帶座標時另含 distance_km。
+
+      **篩選與排序**：sport_id、skill_level (整數)、fee_min / fee_max (價位)、followed_only (只看追蹤的教練)；
+      sort_by 可選 start_time / created_at / skill_level / distance。
 
       **選擇性登入**：帶有有效 Bearer Token 時，enrolled_status 會反映該使用者對每個
       臨打團的訂單狀態；未登入則一律為 free。
@@ -24,12 +28,64 @@ pickupGroups:
         schema:
           type: string
           format: uuid
-      - name: skill_level_id
+      - name: skill_level
+        in: query
+        required: false
+        schema:
+          type: integer
+          minimum: 1
+        description: "精確篩選程度 (整數)"
+      - name: fee_min
+        in: query
+        required: false
+        schema:
+          type: integer
+          minimum: 0
+        description: "費用下限 (含)"
+      - name: fee_max
+        in: query
+        required: false
+        schema:
+          type: integer
+          minimum: 0
+        description: "費用上限 (含)；不可小於 fee_min (400)"
+      - name: followed_only
+        in: query
+        required: false
+        schema:
+          type: boolean
+        description: "只顯示我追蹤的教練 (主辦人) 的臨打團。需帶有效 Token，否則 401。"
+      - name: latitude
+        in: query
+        required: false
+        schema:
+          type: number
+          minimum: -90
+          maximum: 90
+        description: "使用者所在緯度。須與 longitude 一起提供；提供後每筆會回傳 distance_km。"
+      - name: longitude
+        in: query
+        required: false
+        schema:
+          type: number
+          minimum: -180
+          maximum: 180
+      - name: sort_by
         in: query
         required: false
         schema:
           type: string
-          format: uuid
+          enum: [start_time, created_at, skill_level, distance]
+          default: start_time
+        description: |
+          排序欄位。distance 依「使用者座標到場地」的球面距離排序，必須同時提供 latitude 與 longitude (否則 400)。
+      - name: sort_order
+        in: query
+        required: false
+        schema:
+          type: string
+          enum: [asc, desc]
+        description: "預設：distance 為 asc (最近優先)，其餘為 desc。"
       - name: page
         in: query
         required: false
@@ -79,6 +135,7 @@ pickupGroupDetail:
     summary: "取得單一臨打團詳細資訊"
     description: |
       包含 current_enrolled，並選擇性夾帶該團的所有訂單明細。
+      current_enrolled 為已佔用名額數 (多人報名的訂單依 party_size 計算)。
       
       **權限 Access Control**:
       - **Login Required**: 任何已登入的使用者皆可存取。
@@ -192,10 +249,13 @@ pickupGroupOrders:
     summary: "新增報名訂單（加入臨打團）"
     description: |
       加入臨打團。user_id 由 JWT Token 解析得出。
-      會檢查目前有效報名人數是否超過 capacity。
+      會檢查目前已佔用名額 (各有效訂單 party_size 加總) 加上本次名額是否超過 capacity。
       確保同一使用者不可重複報名同一臨打團。
       同時會檢查該使用者是否已報名其他時段重疊的臨打團，若有衝突則回傳 409
       並帶有 "error": "time_conflict"。
+
+      報名時須自填 skill_level (整數，必須是該球類對照表已定義且啟用的程度)。
+      一張單人訂單佔 1 個名額；若要一次替多人報名請用 POST /pickup-groups/{id}/party-orders。
 
       **權限 Access Control**:
       - **Login Required**: 任何已登入的使用者皆可存取。
@@ -208,6 +268,12 @@ pickupGroupOrders:
         schema:
           type: string
           format: uuid
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: "../components/schemas/pickup.yml#/CreatePickupOrderRequest"
     responses:
       "201":
         description: Created
@@ -266,7 +332,7 @@ pickupOrderDetail:
     summary: "硬刪除報名訂單 (僅限系統管理員)"
     description: |
       硬刪除一筆報名訂單。刪除後，原本占用名額的訂單會使該臨打團的
-      current_enrolled 自動 -1，且該使用者可再次報名該團。
+      current_enrolled 自動減去該訂單的 party_size，且該使用者可再次報名該團。
 
       主辦人請改用 PATCH status=rejected 拒絕報名者：拒絕會保留訂單、釋放名額，
       並使該使用者無法再次報名。
@@ -331,12 +397,64 @@ hostPickupGroups:
         schema:
           type: string
           format: uuid
-      - name: skill_level_id
+      - name: skill_level
+        in: query
+        required: false
+        schema:
+          type: integer
+          minimum: 1
+        description: "精確篩選程度 (整數)"
+      - name: fee_min
+        in: query
+        required: false
+        schema:
+          type: integer
+          minimum: 0
+        description: "費用下限 (含)"
+      - name: fee_max
+        in: query
+        required: false
+        schema:
+          type: integer
+          minimum: 0
+        description: "費用上限 (含)；不可小於 fee_min (400)"
+      - name: followed_only
+        in: query
+        required: false
+        schema:
+          type: boolean
+        description: "只顯示我追蹤的教練 (主辦人) 的臨打團。需帶有效 Token，否則 401。"
+      - name: latitude
+        in: query
+        required: false
+        schema:
+          type: number
+          minimum: -90
+          maximum: 90
+        description: "使用者所在緯度。須與 longitude 一起提供；提供後每筆會回傳 distance_km。"
+      - name: longitude
+        in: query
+        required: false
+        schema:
+          type: number
+          minimum: -180
+          maximum: 180
+      - name: sort_by
         in: query
         required: false
         schema:
           type: string
-          format: uuid
+          enum: [start_time, created_at, skill_level, distance]
+          default: start_time
+        description: |
+          排序欄位。distance 依「使用者座標到場地」的球面距離排序，必須同時提供 latitude 與 longitude (否則 400)。
+      - name: sort_order
+        in: query
+        required: false
+        schema:
+          type: string
+          enum: [asc, desc]
+        description: "預設：distance 為 asc (最近優先)，其餘為 desc。"
       - name: page
         in: query
         required: false
@@ -376,3 +494,93 @@ pickupOrders:
               type: array
               items:
                 $ref: "../components/schemas/pickup.yml#/PickupOrderResponse"
+
+pickupGroupPartyOrders:
+  post:
+    tags:
+      - Pickup Orders
+    summary: "多人報名 (一張訂單佔多個名額)"
+    description: |
+      由登入者 (揪團主) 一次替整團報名。訂單佔 party_size 個名額，整團必須放得進剩餘名額，
+      否則 409 (group is fully booked)。
+
+      - members 為每一個座位 (**含揪團主本人，放在第一筆**)，長度必須等於 party_size。
+      - 成員不需要帳號，僅記錄性別與程度，會併入報名統計；**不適用未來的評分系統**。
+      - organizer_name 會存成訂單的 booker_name。
+      - 其餘規則同單人報名：同一使用者對同一團只能有一張訂單 (409)、時段衝突回 409 time_conflict、
+        被拒絕過不可再報名、曾取消者可重新報名 (原訂單被重置，成員會被整批取代)。
+
+      **權限 Access Control**:
+      - **Login Required**: 任何已登入的使用者皆可存取。
+    security:
+      - bearerAuth: []
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: "../components/schemas/pickup.yml#/CreatePartyOrderRequest"
+    responses:
+      "201":
+        description: Created
+        content:
+          application/json:
+            schema:
+              $ref: "../components/schemas/pickup.yml#/PickupOrderResponse"
+      "400":
+        description: "party_size 不在 2~50、members 數量不符、gender 不合法、或程度未在該球類對照表中定義"
+        content:
+          application/json:
+            schema:
+              $ref: "../components/schemas/common.yml#/ErrorResponse"
+      "409":
+        description: "名額不足、已報名、或時段衝突 (time_conflict)"
+        content:
+          application/json:
+            schema:
+              $ref: "../components/schemas/common.yml#/ErrorResponse"
+
+pickupGroupParticipantStats:
+  get:
+    tags:
+      - Pickup Groups
+    summary: "取得已報名者的匿名統計 (公開)"
+    description: |
+      回傳該團目前已報名座位 (訂單狀態為 pending 與 confirmed) 的匿名統計：性別比、年齡分級、程度分佈。
+      多人報名的每個成員各算一個座位。**只回傳人數，不含任何身分資訊。**
+
+      - 性別、年齡來自報名者的個人資料；沒填的計入 unknown。多人報名的成員沒有年齡，計入 age_group=unknown。
+      - 年齡以場地所在時區的今天計算；分級為 under_18 / 18_24 / 25_34 / 35_44 / 45_54 / 55_plus / unknown。
+      - 程度為報名時**自填**的整數；skill_levels 會列出該球類對照表的所有程度 (人數可為 0)，
+        以及任何出現在資料中但對照表已無的程度 (label 為空字串)。
+
+      **權限 Access Control**:
+      - **Public**: 無需登入即可存取。
+    security: []
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    responses:
+      "200":
+        description: Success
+        content:
+          application/json:
+            schema:
+              $ref: "../components/schemas/pickup.yml#/ParticipantStatsResponse"
+      "404":
+        description: Not Found
+        content:
+          application/json:
+            schema:
+              $ref: "../components/schemas/common.yml#/ErrorResponse"

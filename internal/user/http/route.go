@@ -14,7 +14,8 @@ func RegisterRoutes(g *gin.RouterGroup, h *UserHandler, authMiddleware, adminMid
 	}
 
 	// === Authenticated Routes ===
-	g.GET("/me", authMiddleware, h.Me) // Get current user profile
+	g.GET("/me", authMiddleware, h.Me)         // Get current user profile
+	g.PATCH("/me", authMiddleware, h.UpdateMe) // Update own profile
 
 	// === Avatar Routes (Self or System Admin; enforced in the handler) ===
 	avatarGroup := g.Group("/users")

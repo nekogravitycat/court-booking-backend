@@ -31,6 +31,20 @@ UserResponse:
     phone:
       type: string
       nullable: true
+    gender:
+      type: string
+      enum: [male, female, other]
+      nullable: true
+      description: "性別 (選填)"
+    birth_date:
+      type: string
+      format: date
+      nullable: true
+      description: "出生年月日 YYYY-MM-DD (選填)。僅本人與系統管理員可見。"
+    age:
+      type: integer
+      nullable: true
+      description: "由 birth_date 推算的足歲；未提供 birth_date 時為 null"
     is_active:
       type: boolean
     is_system_admin:
@@ -77,6 +91,14 @@ RegisterRequest:
       minLength: 8
     display_name:
       type: string
+    gender:
+      type: string
+      enum: [male, female, other]
+      description: "選填"
+    birth_date:
+      type: string
+      format: date
+      description: "選填。YYYY-MM-DD，不可為未來日期，且不早於 1900-01-01。"
   required:
     - email
     - username
@@ -111,10 +133,37 @@ UpdateUserRequest:
   properties:
     display_name:
       type: string
+    phone:
+      type: string
+    gender:
+      type: string
+      enum: [male, female, other]
+    birth_date:
+      type: string
+      format: date
     is_active:
       type: boolean
     is_system_admin:
       type: boolean
+
+# PATCH /me：使用者修改自己的個人資料。不含 is_active / is_system_admin 等管理欄位。
+# 所有欄位皆為選填，只更新有傳的欄位 (無法藉由本 API 清除 gender / birth_date)。
+UpdateMeRequest:
+  type: object
+  properties:
+    display_name:
+      type: string
+      maxLength: 50
+    phone:
+      type: string
+      description: "台灣手機號碼格式"
+    gender:
+      type: string
+      enum: [male, female, other]
+    birth_date:
+      type: string
+      format: date
+      description: "YYYY-MM-DD，不可為未來日期，且不早於 1900-01-01。"
 
 UserTag:
   type: object

@@ -1,0 +1,74 @@
+NotificationResponse:
+  type: object
+  description: "站內通知 (個人收件匣中的一則)。title / content 為可直接顯示的繁體中文文字。"
+  properties:
+    id:
+      type: string
+      format: uuid
+    type:
+      type: string
+      description: "穩定的機器碼，前端可據此決定圖示或導向"
+      enum:
+        - pickup_order_created
+        - pickup_order_confirmed
+        - pickup_order_rejected
+        - pickup_order_cancelled_by_host
+        - pickup_order_cancelled
+        - pickup_order_cancel_requested
+        - pickup_payment_updated
+        - pickup_group_cancelled
+        - pickup_group_updated
+        - skill_rated
+    title:
+      type: string
+    content:
+      type: string
+    pickup_group_id:
+      type: string
+      format: uuid
+      nullable: true
+      description: "相關臨打團 (可用於導向)；該團被刪除後為 null"
+    pickup_order_id:
+      type: string
+      format: uuid
+      nullable: true
+    is_read:
+      type: boolean
+    created_at:
+      type: string
+      format: date-time
+  required:
+    - id
+    - type
+    - title
+    - content
+    - is_read
+    - created_at
+
+NotificationPageResponse:
+  allOf:
+    - $ref: "./common.yml#/PageResponse"
+    - type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/NotificationResponse"
+
+UnreadCountResponse:
+  type: object
+  properties:
+    unread:
+      type: integer
+  required:
+    - unread
+
+MarkAllReadResponse:
+  type: object
+  properties:
+    updated:
+      type: integer
+      format: int64
+      description: "本次被標為已讀的則數"
+  required:
+    - updated

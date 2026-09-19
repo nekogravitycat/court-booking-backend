@@ -168,6 +168,10 @@
   - `bookings`：預約紀錄。
   - `files`：檔案上傳紀錄 (Avatar, Cover)。
   - `announcements`：系統公告。
+  - `sports` / `skill_levels`：球類，以及各球類的程度對照表 (整數 `level` → `label`)。
+  - `pickup_groups` / `pickup_orders` / `pickup_order_members`：臨打團、報名訂單（一張訂單可佔多個名額）與多人報名的匿名成員。
+  - `skill_ratings`：主辦人對參加者的程度評分（平均即綜合評級）。
+  - `notifications`：個人站內通知。
 
 ### 從 host 直接操作資料庫
 

@@ -56,6 +56,7 @@ PickupGroupResponse:
       description: "啟用狀態"
     current_enrolled:
       type: integer
+      description: "已佔用的名額數 = 各有效訂單 (非 cancelled / rejected) 的 party_size 加總；多人報名一張訂單佔多個名額。"
     created_at:
       type: string
       format: date-time
@@ -125,6 +126,11 @@ PickupGroupBrief:
       description: |
         呼叫者對此臨打團的狀態。未登入或未報名時為 free；
         已報名時反映該使用者訂單的實際狀態。rejected 表示已被主辦人拒絕，無法再次報名。
+    distance_km:
+      type: number
+      format: double
+      nullable: true
+      description: "使用者座標 (latitude/longitude 查詢參數) 到場地的距離，公里；未提供座標時為 null"
   required:
     - id
     - host_id
@@ -165,10 +171,10 @@ CreatePickupGroupRequest:
       type: string
       format: uuid
       description: "球類 ID (關聯至 Sport)"
-    skill_level_id:
-      type: string
-      format: uuid
-      description: "程度分級 ID (關聯至 SkillLevel，必須隸屬於所選 sport_id)"
+    skill_level:
+      type: integer
+      minimum: 1
+      description: "程度整數。必須是所選 sport_id 對照表 (GET /skill-levels) 已定義且啟用的程度。"
     enable:
       type: boolean
       default: true
@@ -181,7 +187,7 @@ CreatePickupGroupRequest:
     - capacity
     - location_id
     - sport_id
-    - skill_level_id
+    - skill_level
 
 UpdatePickupGroupRequest:
   type: object
@@ -209,10 +215,10 @@ UpdatePickupGroupRequest:
     sport_id:
       type: string
       format: uuid
-    skill_level_id:
-      type: string
-      format: uuid
-      description: "若變更 sport_id 或 skill_level_id，分級仍須隸屬於該球類。"
+    skill_level:
+      type: integer
+      minimum: 1
+      description: "若變更 sport_id 或 skill_level，程度仍須在該球類對照表中已定義且啟用。"
     status:
       type: string
       enum: [active, cancelled, completed]
@@ -236,6 +242,17 @@ PickupOrderResponse:
     booker_phone:
       type: string
       nullable: true
+    skill_level:
+      type: integer
+      description: "報名者自填的程度 (整數)。多人報名時為揪團主 (members 第一筆) 的程度。"
+    party_size:
+      type: integer
+      description: "此訂單佔用的名額數；單人報名為 1"
+    members:
+      type: array
+      description: "多人報名的每個座位 (含揪團主)；單人報名時省略此欄位"
+      items:
+        $ref: "#/PartyMember"
     status:
       type: string
       enum: [pending, confirmed, cancelled, cancel_request, rejected]
@@ -255,6 +272,8 @@ PickupOrderResponse:
     - pickup_group_id
     - user_id
     - booker_name
+    - skill_level
+    - party_size
     - status
     - payment_status
     - created_at
@@ -262,8 +281,52 @@ PickupOrderResponse:
 
 CreatePickupOrderRequest:
   type: object
-  description: "目前無必要欄位，因報名通常只依據路徑參數群組 ID 和 Token 中的使用者 ID 決定。"
-  properties: {}
+  description: "單人報名。群組 ID 取自路徑、使用者取自 Token；只需自填程度。"
+  properties:
+    skill_level:
+      type: integer
+      minimum: 1
+      description: "報名者自填的程度整數，須為該球類對照表已定義且啟用的程度 (否則 400)。"
+  required:
+    - skill_level
+
+PartyMember:
+  type: object
+  description: "多人報名的一個座位。匿名，無帳號。"
+  properties:
+    gender:
+      type: string
+      enum: [male, female, other]
+    skill_level:
+      type: integer
+      minimum: 1
+  required:
+    - gender
+    - skill_level
+
+CreatePartyOrderRequest:
+  type: object
+  properties:
+    organizer_name:
+      type: string
+      maxLength: 50
+      description: "揪團主名稱，會存成訂單的 booker_name"
+    party_size:
+      type: integer
+      minimum: 2
+      maximum: 50
+      description: "揪團總人數 (含揪團主)，佔用同樣數量的名額"
+    members:
+      type: array
+      minItems: 2
+      maxItems: 50
+      description: "每個座位的性別與程度；含揪團主本人，放第一筆。長度須等於 party_size。"
+      items:
+        $ref: "#/PartyMember"
+  required:
+    - organizer_name
+    - party_size
+    - members
 
 UpdatePickupOrderRequest:
   type: object
@@ -302,3 +365,53 @@ PickupGroupPageResponse:
           type: array
           items:
             $ref: "#/PickupGroupResponse"
+
+ParticipantStatsResponse:
+  type: object
+  description: "已報名座位 (pending + confirmed) 的匿名統計"
+  properties:
+    total:
+      type: integer
+      description: "座位總數 (多人報名每人一個座位)"
+    genders:
+      type: array
+      description: "固定依序包含 male / female / other / unknown"
+      items:
+        type: object
+        properties:
+          gender:
+            type: string
+            enum: [male, female, other, unknown]
+          count:
+            type: integer
+        required: [gender, count]
+    age_groups:
+      type: array
+      description: "固定依序包含 under_18 / 18_24 / 25_34 / 35_44 / 45_54 / 55_plus / unknown"
+      items:
+        type: object
+        properties:
+          age_group:
+            type: string
+            enum: [under_18, 18_24, 25_34, 35_44, 45_54, 55_plus, unknown]
+          count:
+            type: integer
+        required: [age_group, count]
+    skill_levels:
+      type: array
+      description: "依程度由低到高；包含該球類對照表所有程度 (人數可為 0)"
+      items:
+        type: object
+        properties:
+          level:
+            type: integer
+          label:
+            type: string
+          count:
+            type: integer
+        required: [level, label, count]
+  required:
+    - total
+    - genders
+    - age_groups
+    - skill_levels

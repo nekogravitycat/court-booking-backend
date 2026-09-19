@@ -38,6 +38,18 @@ LocationResponse:
     latitude:
       type: number
       format: double
+    parking_name:
+      type: string
+      nullable: true
+      description: "停車場名稱。parking_name / parking_latitude / parking_longitude 三者要嘛全有、要嘛全為 null。"
+    parking_latitude:
+      type: number
+      format: double
+      nullable: true
+    parking_longitude:
+      type: number
+      format: double
+      nullable: true
     cover:
       type: string
       description: "URL to cover image (e.g., /files/{file-id})"
@@ -94,6 +106,18 @@ CreateLocationRequest:
       type: number
       minimum: -90
       maximum: 90
+    parking_name:
+      type: string
+      maxLength: 100
+      description: "選填。停車場名稱、緯度、經度須三者一起提供 (否則 400)。"
+    parking_latitude:
+      type: number
+      minimum: -90
+      maximum: 90
+    parking_longitude:
+      type: number
+      minimum: -180
+      maximum: 180
   required:
     - organization_id
     - name
@@ -127,6 +151,22 @@ UpdateLocationRequest:
       type: string
     latitude:
       type: number
+    longitude:
+      type: number
+    parking_name:
+      type: string
+      maxLength: 100
+    parking_latitude:
+      type: number
+      minimum: -90
+      maximum: 90
+    parking_longitude:
+      type: number
+      minimum: -180
+      maximum: 180
+    remove_parking:
+      type: boolean
+      description: "設為 true 會清除整組停車場資訊；不可與 parking_* 欄位同時提供 (400)。三個 parking_* 欄位都不傳則維持不變。"
 
 LocationTag:
   type: object

@@ -72,9 +72,9 @@ func (h *Handler) Create(c *gin.Context) {
 	}
 
 	s, err := h.service.Create(c.Request.Context(), skilllevel.CreateRequest{
-		SportID:   body.SportID,
-		Name:      body.Name,
-		SortOrder: body.SortOrder,
+		SportID: body.SportID,
+		Level:   body.Level,
+		Label:   body.Label,
 	})
 	if err != nil {
 		response.Error(c, err)
@@ -98,9 +98,8 @@ func (h *Handler) Update(c *gin.Context) {
 	}
 
 	s, err := h.service.Update(c.Request.Context(), uri.ID, skilllevel.UpdateRequest{
-		Name:      body.Name,
-		SortOrder: body.SortOrder,
-		IsActive:  body.IsActive,
+		Label:    body.Label,
+		IsActive: body.IsActive,
 	})
 	if err != nil {
 		response.Error(c, err)

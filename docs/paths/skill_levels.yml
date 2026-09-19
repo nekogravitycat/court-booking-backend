@@ -29,7 +29,7 @@ skillLevels:
         required: false
         schema:
           type: string
-          enum: [sort_order, name, created_at]
+          enum: [level, label, created_at]
       - $ref: "../components/parameters.yml#/sort_order"
     responses:
       "200":
@@ -69,7 +69,7 @@ skillLevels:
             schema:
               $ref: "../components/schemas/common.yml#/ErrorResponse"
       "409":
-        description: skill level name already used for this sport
+        description: "skill level (整數) 或 label 在該球類內已存在"
         content:
           application/json:
             schema:

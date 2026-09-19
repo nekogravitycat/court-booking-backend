@@ -19,17 +19,24 @@ import (
 	"github.com/nekogravitycat/court-booking-backend/internal/pkg/response"
 )
 
-// getSportSkill returns the seeded sport id and one of its seeded skill-level
-// ids (by name). The sports/skill_levels catalog is seeded by migration 000004
-// and is not cleared by clearTables (it is not referenced by users).
-func getSportSkill(t *testing.T, sportCode, skillName string) (sportID, skillLevelID string) {
+// getSportSkill returns the seeded sport id and the integer level of one of its
+// seeded skill levels (by label). The sports/skill_levels catalog is seeded by
+// migration 000004 and is not cleared by clearTables (it is not referenced by
+// users). The seeded labels A, B, C, D map to levels 1..4.
+func getSportSkill(t *testing.T, sportCode, skillLabel string) (sportID string, level int) {
 	err := testPool.QueryRow(context.Background(),
 		"SELECT id FROM public.sports WHERE code = $1", sportCode).Scan(&sportID)
 	require.NoError(t, err, "seeded sport %s should exist", sportCode)
 	err = testPool.QueryRow(context.Background(),
-		"SELECT id FROM public.skill_levels WHERE sport_id = $1 AND name = $2", sportID, skillName).Scan(&skillLevelID)
-	require.NoError(t, err, "seeded skill level %s for sport %s should exist", skillName, sportCode)
-	return sportID, skillLevelID
+		"SELECT level FROM public.skill_levels WHERE sport_id = $1 AND label = $2", sportID, skillLabel).Scan(&level)
+	require.NoError(t, err, "seeded skill level %s for sport %s should exist", skillLabel, sportCode)
+	return sportID, level
+}
+
+// enrollBody is the enrollment body used by tests that do not care about the
+// self-reported level.
+func enrollBody() pickupHttp.CreateOrderBody {
+	return pickupHttp.CreateOrderBody{SkillLevel: 1}
 }
 
 func TestPickupGroupCRUD(t *testing.T) {
@@ -44,20 +51,20 @@ func TestPickupGroupCRUD(t *testing.T) {
 	noToken := ""
 
 	locationID := setupTestLocation(t, hostToken, host.ID)
-	sportID, skillLevelID := getSportSkill(t, "BADMINTON", "B")
+	sportID, skillLevel := getSportSkill(t, "BADMINTON", "B")
 
 	var groupID string
 
 	t.Run("Create Group: Success", func(t *testing.T) {
 		payload := pickupHttp.CreateGroupBody{
-			Title:        "Sunday Morning Badminton",
-			StartTime:    time.Now().Add(24 * time.Hour),
-			EndTime:      time.Now().Add(26 * time.Hour),
-			Fee:          200,
-			Capacity:     8,
-			LocationID:   locationID,
-			SportID:      sportID,
-			SkillLevelID: skillLevelID,
+			Title:      "Sunday Morning Badminton",
+			StartTime:  time.Now().Add(24 * time.Hour),
+			EndTime:    time.Now().Add(26 * time.Hour),
+			Fee:        200,
+			Capacity:   8,
+			LocationID: locationID,
+			SportID:    sportID,
+			SkillLevel: skillLevel,
 		}
 
 		w := executeRequest("POST", "/v1/pickup-groups", payload, hostToken)
@@ -81,14 +88,14 @@ func TestPickupGroupCRUD(t *testing.T) {
 
 	t.Run("Create Group: Unauthorized (No Token)", func(t *testing.T) {
 		payload := pickupHttp.CreateGroupBody{
-			Title:        "Secret Group",
-			StartTime:    time.Now().Add(24 * time.Hour),
-			EndTime:      time.Now().Add(26 * time.Hour),
-			Fee:          100,
-			Capacity:     4,
-			LocationID:   locationID,
-			SportID:      sportID,
-			SkillLevelID: skillLevelID,
+			Title:      "Secret Group",
+			StartTime:  time.Now().Add(24 * time.Hour),
+			EndTime:    time.Now().Add(26 * time.Hour),
+			Fee:        100,
+			Capacity:   4,
+			LocationID: locationID,
+			SportID:    sportID,
+			SkillLevel: skillLevel,
 		}
 		w := executeRequest("POST", "/v1/pickup-groups", payload, noToken)
 		assert.Equal(t, http.StatusUnauthorized, w.Code)
@@ -97,14 +104,14 @@ func TestPickupGroupCRUD(t *testing.T) {
 	t.Run("Create Group: Validation Failure", func(t *testing.T) {
 		// EndTime before StartTime
 		payload := pickupHttp.CreateGroupBody{
-			Title:        "Bad Time",
-			StartTime:    time.Now().Add(26 * time.Hour),
-			EndTime:      time.Now().Add(24 * time.Hour),
-			Fee:          100,
-			Capacity:     4,
-			LocationID:   locationID,
-			SportID:      sportID,
-			SkillLevelID: skillLevelID,
+			Title:      "Bad Time",
+			StartTime:  time.Now().Add(26 * time.Hour),
+			EndTime:    time.Now().Add(24 * time.Hour),
+			Fee:        100,
+			Capacity:   4,
+			LocationID: locationID,
+			SportID:    sportID,
+			SkillLevel: skillLevel,
 		}
 		w := executeRequest("POST", "/v1/pickup-groups", payload, hostToken)
 		assert.Equal(t, http.StatusBadRequest, w.Code)
@@ -119,13 +126,14 @@ func TestPickupGroupCRUD(t *testing.T) {
 		assert.GreaterOrEqual(t, listResp.Total, 1)
 
 		// Filter by skill level
-		wFilter := executeRequest("GET", "/v1/pickup-groups?skill_level_id="+skillLevelID, nil, regularUserToken)
+		wFilter := executeRequest("GET", fmt.Sprintf("/v1/pickup-groups?skill_level=%d", skillLevel), nil, regularUserToken)
 		assert.Equal(t, http.StatusOK, wFilter.Code)
 
 		var filterResp response.PageResponse[pickupHttp.PickupGroupResponse]
 		json.Unmarshal(wFilter.Body.Bytes(), &filterResp)
 		assert.Equal(t, 1, filterResp.Total)
-		assert.Equal(t, "B", filterResp.Items[0].SkillLevel.Name)
+		assert.Equal(t, "B", filterResp.Items[0].SkillLevel.Label)
+		assert.Equal(t, skillLevel, filterResp.Items[0].SkillLevel.Level)
 	})
 
 	t.Run("Get Group: Success", func(t *testing.T) {
@@ -154,18 +162,18 @@ func TestPickupOrderAndCapacity(t *testing.T) {
 	hostToken := generateToken(host.ID)
 
 	locationID := setupTestLocation(t, hostToken, host.ID)
-	sportID, skillLevelID := getSportSkill(t, "BADMINTON", "C")
+	sportID, skillLevel := getSportSkill(t, "BADMINTON", "C")
 
 	// Create a group with capacity 2
 	payload := pickupHttp.CreateGroupBody{
-		Title:        "Small Group",
-		StartTime:    time.Now().Add(24 * time.Hour),
-		EndTime:      time.Now().Add(26 * time.Hour),
-		Fee:          100,
-		Capacity:     2,
-		LocationID:   locationID,
-		SportID:      sportID,
-		SkillLevelID: skillLevelID,
+		Title:      "Small Group",
+		StartTime:  time.Now().Add(24 * time.Hour),
+		EndTime:    time.Now().Add(26 * time.Hour),
+		Fee:        100,
+		Capacity:   2,
+		LocationID: locationID,
+		SportID:    sportID,
+		SkillLevel: skillLevel,
 	}
 	w := executeRequest("POST", "/v1/pickup-groups", payload, hostToken)
 	require.Equal(t, http.StatusCreated, w.Code)
@@ -178,7 +186,7 @@ func TestPickupOrderAndCapacity(t *testing.T) {
 
 	t.Run("Create Order: Success", func(t *testing.T) {
 		path := fmt.Sprintf("/v1/pickup-groups/%s/orders", groupID)
-		w := executeRequest("POST", path, nil, user1Token)
+		w := executeRequest("POST", path, enrollBody(), user1Token)
 		require.Equal(t, http.StatusCreated, w.Code)
 
 		var resp pickupHttp.PickupOrderResponse
@@ -193,20 +201,20 @@ func TestPickupOrderAndCapacity(t *testing.T) {
 
 	t.Run("Create Order: Duplicate Enrollment", func(t *testing.T) {
 		path := fmt.Sprintf("/v1/pickup-groups/%s/orders", groupID)
-		w := executeRequest("POST", path, nil, user1Token) // user1 again
+		w := executeRequest("POST", path, enrollBody(), user1Token) // user1 again
 		assert.Equal(t, http.StatusConflict, w.Code)
 	})
 
 	t.Run("Create Order: Success 2nd User", func(t *testing.T) {
 		path := fmt.Sprintf("/v1/pickup-groups/%s/orders", groupID)
-		w := executeRequest("POST", path, nil, user2Token)
+		w := executeRequest("POST", path, enrollBody(), user2Token)
 		require.Equal(t, http.StatusCreated, w.Code)
 	})
 
 	t.Run("Create Order: Overbooking", func(t *testing.T) {
 		// Group capacity is 2, and 2 users have enrolled
 		path := fmt.Sprintf("/v1/pickup-groups/%s/orders", groupID)
-		w := executeRequest("POST", path, nil, user3Token) // user3
+		w := executeRequest("POST", path, enrollBody(), user3Token) // user3
 		assert.Equal(t, http.StatusConflict, w.Code)
 	})
 
@@ -245,7 +253,7 @@ func TestPickupOrderAndCapacity(t *testing.T) {
 
 		// Check capacity is freed, user3 should be able to join now
 		pathJoin := fmt.Sprintf("/v1/pickup-groups/%s/orders", groupID)
-		wJoin := executeRequest("POST", pathJoin, nil, user3Token)
+		wJoin := executeRequest("POST", pathJoin, enrollBody(), user3Token)
 		assert.Equal(t, http.StatusCreated, wJoin.Code)
 	})
 
@@ -275,18 +283,18 @@ func TestPickupOrdersList(t *testing.T) {
 	hostToken := generateToken(host.ID)
 
 	locationID := setupTestLocation(t, hostToken, host.ID)
-	sportID, skillLevelID := getSportSkill(t, "BADMINTON", "A")
+	sportID, skillLevel := getSportSkill(t, "BADMINTON", "A")
 
 	// Create a group
 	payload := pickupHttp.CreateGroupBody{
-		Title:        "Listing Group",
-		StartTime:    time.Now().Add(24 * time.Hour),
-		EndTime:      time.Now().Add(26 * time.Hour),
-		Fee:          150,
-		Capacity:     4,
-		LocationID:   locationID,
-		SportID:      sportID,
-		SkillLevelID: skillLevelID,
+		Title:      "Listing Group",
+		StartTime:  time.Now().Add(24 * time.Hour),
+		EndTime:    time.Now().Add(26 * time.Hour),
+		Fee:        150,
+		Capacity:   4,
+		LocationID: locationID,
+		SportID:    sportID,
+		SkillLevel: skillLevel,
 	}
 	w := executeRequest("POST", "/v1/pickup-groups", payload, hostToken)
 	require.Equal(t, http.StatusCreated, w.Code)
@@ -295,10 +303,10 @@ func TestPickupOrdersList(t *testing.T) {
 	groupID := groupResp.ID
 
 	// Create orders
-	w = executeRequest("POST", fmt.Sprintf("/v1/pickup-groups/%s/orders", groupID), nil, user1Token)
+	w = executeRequest("POST", fmt.Sprintf("/v1/pickup-groups/%s/orders", groupID), enrollBody(), user1Token)
 	require.Equal(t, http.StatusCreated, w.Code)
 
-	w = executeRequest("POST", fmt.Sprintf("/v1/pickup-groups/%s/orders", groupID), nil, user2Token)
+	w = executeRequest("POST", fmt.Sprintf("/v1/pickup-groups/%s/orders", groupID), enrollBody(), user2Token)
 	require.Equal(t, http.StatusCreated, w.Code)
 
 	t.Run("List Group Orders: Success by Host", func(t *testing.T) {
@@ -360,18 +368,18 @@ func TestPickupGroupAdminActions(t *testing.T) {
 	regularUserToken := generateToken(regularUser.ID)
 
 	locationID := setupTestLocation(t, hostToken, host.ID)
-	sportID, skillLevelID := getSportSkill(t, "BADMINTON", "B")
+	sportID, skillLevel := getSportSkill(t, "BADMINTON", "B")
 
 	// Create a group
 	payload := pickupHttp.CreateGroupBody{
-		Title:        "Original Title",
-		StartTime:    time.Now().Add(24 * time.Hour),
-		EndTime:      time.Now().Add(26 * time.Hour),
-		Fee:          100,
-		Capacity:     10,
-		LocationID:   locationID,
-		SportID:      sportID,
-		SkillLevelID: skillLevelID,
+		Title:      "Original Title",
+		StartTime:  time.Now().Add(24 * time.Hour),
+		EndTime:    time.Now().Add(26 * time.Hour),
+		Fee:        100,
+		Capacity:   10,
+		LocationID: locationID,
+		SportID:    sportID,
+		SkillLevel: skillLevel,
 	}
 	w := executeRequest("POST", "/v1/pickup-groups", payload, hostToken)
 	require.Equal(t, http.StatusCreated, w.Code)
@@ -443,7 +451,7 @@ func TestPickupGroupAdminActions(t *testing.T) {
 		newGroupID := groupResp.ID
 
 		// Add an order
-		wOrder := executeRequest("POST", fmt.Sprintf("/v1/pickup-groups/%s/orders", newGroupID), nil, regularUserToken)
+		wOrder := executeRequest("POST", fmt.Sprintf("/v1/pickup-groups/%s/orders", newGroupID), enrollBody(), regularUserToken)
 		require.Equal(t, http.StatusCreated, wOrder.Code)
 
 		// Try to delete
@@ -465,17 +473,17 @@ func TestPickupGroupFullyBookedStillListed(t *testing.T) {
 	user1Token := generateToken(user1.ID)
 
 	locationID := setupTestLocation(t, hostToken, host.ID)
-	sportID, skillLevelID := getSportSkill(t, "BADMINTON", "A")
+	sportID, skillLevel := getSportSkill(t, "BADMINTON", "A")
 
 	payload := pickupHttp.CreateGroupBody{
-		Title:        "Full Group",
-		StartTime:    time.Now().Add(24 * time.Hour),
-		EndTime:      time.Now().Add(26 * time.Hour),
-		Fee:          100,
-		Capacity:     1,
-		LocationID:   locationID,
-		SportID:      sportID,
-		SkillLevelID: skillLevelID,
+		Title:      "Full Group",
+		StartTime:  time.Now().Add(24 * time.Hour),
+		EndTime:    time.Now().Add(26 * time.Hour),
+		Fee:        100,
+		Capacity:   1,
+		LocationID: locationID,
+		SportID:    sportID,
+		SkillLevel: skillLevel,
 	}
 	w := executeRequest("POST", "/v1/pickup-groups", payload, hostToken)
 	require.Equal(t, http.StatusCreated, w.Code)
@@ -484,7 +492,7 @@ func TestPickupGroupFullyBookedStillListed(t *testing.T) {
 	groupID := groupResp.ID
 
 	// Fill the single seat.
-	w = executeRequest("POST", fmt.Sprintf("/v1/pickup-groups/%s/orders", groupID), nil, user1Token)
+	w = executeRequest("POST", fmt.Sprintf("/v1/pickup-groups/%s/orders", groupID), enrollBody(), user1Token)
 	require.Equal(t, http.StatusCreated, w.Code)
 
 	containsGroup := func(w *httptest.ResponseRecorder) bool {
@@ -514,21 +522,21 @@ func TestPickupGroupTimeConflict(t *testing.T) {
 	user1Token := generateToken(user1.ID)
 
 	locationID := setupTestLocation(t, hostToken, host.ID)
-	sportID, skillLevelID := getSportSkill(t, "BADMINTON", "A")
+	sportID, skillLevel := getSportSkill(t, "BADMINTON", "A")
 
 	start := time.Now().Add(24 * time.Hour)
 	end := start.Add(2 * time.Hour)
 
 	createGroup := func(title string, s, e time.Time) string {
 		payload := pickupHttp.CreateGroupBody{
-			Title:        title,
-			StartTime:    s,
-			EndTime:      e,
-			Fee:          0,
-			Capacity:     5,
-			LocationID:   locationID,
-			SportID:      sportID,
-			SkillLevelID: skillLevelID,
+			Title:      title,
+			StartTime:  s,
+			EndTime:    e,
+			Fee:        0,
+			Capacity:   5,
+			LocationID: locationID,
+			SportID:    sportID,
+			SkillLevel: skillLevel,
 		}
 		w := executeRequest("POST", "/v1/pickup-groups", payload, hostToken)
 		require.Equal(t, http.StatusCreated, w.Code)
@@ -539,12 +547,12 @@ func TestPickupGroupTimeConflict(t *testing.T) {
 
 	groupA := createGroup("Group A", start, end)
 
-	w := executeRequest("POST", fmt.Sprintf("/v1/pickup-groups/%s/orders", groupA), nil, user1Token)
+	w := executeRequest("POST", fmt.Sprintf("/v1/pickup-groups/%s/orders", groupA), enrollBody(), user1Token)
 	require.Equal(t, http.StatusCreated, w.Code)
 
 	t.Run("overlapping time range is rejected", func(t *testing.T) {
 		groupB := createGroup("Group B (overlaps)", start.Add(1*time.Hour), end.Add(1*time.Hour))
-		w := executeRequest("POST", fmt.Sprintf("/v1/pickup-groups/%s/orders", groupB), nil, user1Token)
+		w := executeRequest("POST", fmt.Sprintf("/v1/pickup-groups/%s/orders", groupB), enrollBody(), user1Token)
 		require.Equal(t, http.StatusConflict, w.Code)
 
 		var errResp response.ErrorResponse
@@ -554,7 +562,7 @@ func TestPickupGroupTimeConflict(t *testing.T) {
 
 	t.Run("back-to-back (non-overlapping) time range is allowed", func(t *testing.T) {
 		groupC := createGroup("Group C (back to back)", end, end.Add(2*time.Hour))
-		w := executeRequest("POST", fmt.Sprintf("/v1/pickup-groups/%s/orders", groupC), nil, user1Token)
+		w := executeRequest("POST", fmt.Sprintf("/v1/pickup-groups/%s/orders", groupC), enrollBody(), user1Token)
 		assert.Equal(t, http.StatusCreated, w.Code)
 	})
 
@@ -562,7 +570,7 @@ func TestPickupGroupTimeConflict(t *testing.T) {
 		user2 := createTestUser(t, "tcuser2@pickup.com", "pass", false)
 		user2Token := generateToken(user2.ID)
 		groupD := createGroup("Group D (overlaps, different user)", start, end)
-		w := executeRequest("POST", fmt.Sprintf("/v1/pickup-groups/%s/orders", groupD), nil, user2Token)
+		w := executeRequest("POST", fmt.Sprintf("/v1/pickup-groups/%s/orders", groupD), enrollBody(), user2Token)
 		assert.Equal(t, http.StatusCreated, w.Code)
 	})
 }
@@ -575,20 +583,20 @@ func TestPickupGroupDescription(t *testing.T) {
 
 	hostToken := generateToken(host.ID)
 	locationID := setupTestLocation(t, hostToken, host.ID)
-	sportID, skillLevelID := getSportSkill(t, "BADMINTON", "A")
+	sportID, skillLevel := getSportSkill(t, "BADMINTON", "A")
 
 	t.Run("description is set on create and returned by get", func(t *testing.T) {
 		desc := "Bring your own racket. 2 courts booked."
 		payload := pickupHttp.CreateGroupBody{
-			Title:        "Described Group",
-			Description:  &desc,
-			StartTime:    time.Now().Add(24 * time.Hour),
-			EndTime:      time.Now().Add(26 * time.Hour),
-			Fee:          0,
-			Capacity:     5,
-			LocationID:   locationID,
-			SportID:      sportID,
-			SkillLevelID: skillLevelID,
+			Title:       "Described Group",
+			Description: &desc,
+			StartTime:   time.Now().Add(24 * time.Hour),
+			EndTime:     time.Now().Add(26 * time.Hour),
+			Fee:         0,
+			Capacity:    5,
+			LocationID:  locationID,
+			SportID:     sportID,
+			SkillLevel:  skillLevel,
 		}
 		w := executeRequest("POST", "/v1/pickup-groups", payload, hostToken)
 		require.Equal(t, http.StatusCreated, w.Code)
@@ -617,15 +625,15 @@ func TestPickupGroupDescription(t *testing.T) {
 	t.Run("description over 100 characters is rejected", func(t *testing.T) {
 		longDesc := strings.Repeat("a", 101)
 		payload := pickupHttp.CreateGroupBody{
-			Title:        "Too Long",
-			Description:  &longDesc,
-			StartTime:    time.Now().Add(24 * time.Hour),
-			EndTime:      time.Now().Add(26 * time.Hour),
-			Fee:          0,
-			Capacity:     5,
-			LocationID:   locationID,
-			SportID:      sportID,
-			SkillLevelID: skillLevelID,
+			Title:       "Too Long",
+			Description: &longDesc,
+			StartTime:   time.Now().Add(24 * time.Hour),
+			EndTime:     time.Now().Add(26 * time.Hour),
+			Fee:         0,
+			Capacity:    5,
+			LocationID:  locationID,
+			SportID:     sportID,
+			SkillLevel:  skillLevel,
 		}
 		w := executeRequest("POST", "/v1/pickup-groups", payload, hostToken)
 		assert.Equal(t, http.StatusBadRequest, w.Code)
@@ -634,15 +642,15 @@ func TestPickupGroupDescription(t *testing.T) {
 	t.Run("description is omitted from the public list shape", func(t *testing.T) {
 		desc := "Should not leak into the list"
 		payload := pickupHttp.CreateGroupBody{
-			Title:        "List Shape Group",
-			Description:  &desc,
-			StartTime:    time.Now().Add(24 * time.Hour),
-			EndTime:      time.Now().Add(26 * time.Hour),
-			Fee:          0,
-			Capacity:     5,
-			LocationID:   locationID,
-			SportID:      sportID,
-			SkillLevelID: skillLevelID,
+			Title:       "List Shape Group",
+			Description: &desc,
+			StartTime:   time.Now().Add(24 * time.Hour),
+			EndTime:     time.Now().Add(26 * time.Hour),
+			Fee:         0,
+			Capacity:    5,
+			LocationID:  locationID,
+			SportID:     sportID,
+			SkillLevel:  skillLevel,
 		}
 		w := executeRequest("POST", "/v1/pickup-groups", payload, hostToken)
 		require.Equal(t, http.StatusCreated, w.Code)

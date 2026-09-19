@@ -1,0 +1,65 @@
+RateParticipantRequest:
+  type: object
+  properties:
+    skill_level:
+      type: integer
+      minimum: 1
+      description: "評定的程度整數，須為該臨打團球類對照表已定義且啟用的程度"
+  required:
+    - skill_level
+
+SkillRatingResponse:
+  type: object
+  description: "主辦人對某參加者在某臨打團的程度評分"
+  properties:
+    id:
+      type: string
+      format: uuid
+    pickup_group_id:
+      type: string
+      format: uuid
+    user_id:
+      type: string
+      format: uuid
+      description: "被評分的參加者"
+    skill_level:
+      type: integer
+    created_at:
+      type: string
+      format: date-time
+    updated_at:
+      type: string
+      format: date-time
+  required:
+    - id
+    - pickup_group_id
+    - user_id
+    - skill_level
+    - created_at
+    - updated_at
+
+# 使用者在某球類的綜合評級：所有評分的算術平均 (類似地圖評價星星)。
+SkillSummaryResponse:
+  type: object
+  properties:
+    sport:
+      $ref: "./sport.yml#/SportTag"
+    average:
+      type: number
+      format: double
+      description: "所有評分的算術平均，取小數 2 位"
+    rating_count:
+      type: integer
+      description: "平均值背後的評分數"
+    level:
+      type: integer
+      description: "average 四捨五入後的整數程度"
+    label:
+      type: string
+      description: "該球類對照表中 level 對應的文字；對照表沒有時為空字串"
+  required:
+    - sport
+    - average
+    - rating_count
+    - level
+    - label

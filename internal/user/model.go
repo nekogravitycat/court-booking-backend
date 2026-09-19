@@ -21,6 +21,8 @@ var (
 	ErrInvalidUsername      = apperror.New(http.StatusBadRequest, "username must be 4-15 characters of lowercase letters, digits, or underscore")
 	ErrUsernameAlreadyUsed  = apperror.New(http.StatusConflict, "username already used")
 	ErrCannotRevokeOwnAdmin = apperror.New(http.StatusForbidden, "cannot revoke your own system admin privilege")
+	ErrInvalidGender        = apperror.New(http.StatusBadRequest, "gender must be one of male, female, other")
+	ErrInvalidBirthDate     = apperror.New(http.StatusBadRequest, "birth_date must be a past date on or after 1900-01-01")
 )
 
 // User represents a user in the system.
@@ -31,7 +33,9 @@ type User struct {
 	PasswordHash  string
 	DisplayName   *string
 	Phone         *string
-	Avatar        *string // ID of avatar image file
+	Gender        *string    // One of the Gender* constants; nil when not provided
+	BirthDate     *time.Time // Calendar date (UTC midnight); nil when not provided
+	Avatar        *string    // ID of avatar image file
 	CreatedAt     time.Time
 	LastLoginAt   *time.Time
 	IsActive      bool
@@ -62,4 +66,43 @@ type UserOrganizationBrief struct {
 	Owner               bool     `json:"owner"`
 	OrganizationManager bool     `json:"organization_manager"`
 	LocationManager     []string `json:"location_manager"`
+}
+
+// Gender values accepted for users and party members.
+const (
+	GenderMale   = "male"
+	GenderFemale = "female"
+	GenderOther  = "other"
+)
+
+// IsValidGender reports whether g is one of the accepted gender values.
+func IsValidGender(g string) bool {
+	return g == GenderMale || g == GenderFemale || g == GenderOther
+}
+
+// minBirthDate is the earliest accepted birth date.
+var minBirthDate = time.Date(1900, time.January, 1, 0, 0, 0, 0, time.UTC)
+
+// ParseBirthDate parses a "YYYY-MM-DD" birth date and rejects future dates and
+// dates before 1900-01-01. The result is the calendar date at UTC midnight.
+func ParseBirthDate(s string) (time.Time, error) {
+	d, err := time.Parse("2006-01-02", s)
+	if err != nil {
+		return time.Time{}, ErrInvalidBirthDate
+	}
+	if d.Before(minBirthDate) || d.After(time.Now().UTC().AddDate(0, 0, 1)) {
+		return time.Time{}, ErrInvalidBirthDate
+	}
+	return d, nil
+}
+
+// AgeOn returns the age in whole years of someone born on the calendar date
+// birth, as of the calendar date of now. Only the year/month/day of each value
+// is considered, so callers pass now already converted to the desired zone.
+func AgeOn(birth, now time.Time) int {
+	age := now.Year() - birth.Year()
+	if now.Month() < birth.Month() || (now.Month() == birth.Month() && now.Day() < birth.Day()) {
+		age--
+	}
+	return age
 }

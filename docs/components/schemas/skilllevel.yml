@@ -1,3 +1,5 @@
+# 程度以「整數」表示 (方便取平均)；每個球類各自維護 (level -> label) 對照，
+# 因此不同球類可以有不同的量表最高值與定義。
 SkillLevelResponse:
   type: object
   properties:
@@ -8,15 +10,16 @@ SkillLevelResponse:
       type: string
       format: uuid
       description: "所屬球類 ID"
-    name:
-      type: string
-      description: "分級名稱，例如 A / 初級"
-    sort_order:
+    level:
       type: integer
-      description: "同一球類內的排序"
+      minimum: 1
+      description: "程度整數 (越大越強)。同一球類內唯一，建立後不可變更。"
+    label:
+      type: string
+      description: "此程度的顯示文字，例如 1 -> 新手、2 -> 初學者"
     is_active:
       type: boolean
-      description: "是否啟用 (軟刪除旗標)"
+      description: "是否啟用 (軟刪除旗標)。停用後不可再用於新臨打團 / 報名 / 評分，既有資料仍保留其整數值。"
     created_at:
       type: string
       format: date-time
@@ -26,24 +29,25 @@ SkillLevelResponse:
   required:
     - id
     - sport_id
-    - name
-    - sort_order
+    - level
+    - label
     - is_active
     - created_at
     - updated_at
 
-# 用於嵌入其他回應 (如臨打團) 的精簡分級物件。
+# 用於嵌入其他回應 (如臨打團) 的精簡程度物件。
 SkillLevelTag:
   type: object
   properties:
-    id:
+    level:
+      type: integer
+      description: "程度整數"
+    label:
       type: string
-      format: uuid
-    name:
-      type: string
+      description: "該球類對照表中此程度的文字；若對照表沒有此程度則為空字串"
   required:
-    - id
-    - name
+    - level
+    - label
 
 CreateSkillLevelRequest:
   type: object
@@ -52,23 +56,25 @@ CreateSkillLevelRequest:
       type: string
       format: uuid
       description: "所屬球類 ID。分級一旦建立即固定隸屬此球類，不可變更。"
-    name:
-      type: string
-    sort_order:
+    level:
       type: integer
-      default: 0
+      minimum: 1
+      maximum: 100
+      description: "程度整數。同一球類內不可重複 (409)；允許跳號。"
+    label:
+      type: string
+      description: "顯示文字。同一球類內不可重複 (409)。"
   required:
     - sport_id
-    - name
+    - level
+    - label
 
 UpdateSkillLevelRequest:
   type: object
-  description: "所屬球類固定於建立時，不可透過更新變更。"
+  description: "所屬球類與 level 固定於建立時，不可透過更新變更；只能改名稱與啟用狀態。"
   properties:
-    name:
+    label:
       type: string
-    sort_order:
-      type: integer
     is_active:
       type: boolean
 

@@ -56,7 +56,7 @@ func TestSportsAndSkillLevelAdmin(t *testing.T) {
 	})
 
 	t.Run("Create and list skill levels scoped to sport", func(t *testing.T) {
-		body := skillHttp.CreateSkillLevelBody{SportID: newSportID, Name: "Beginner", SortOrder: 1}
+		body := skillHttp.CreateSkillLevelBody{SportID: newSportID, Level: 1, Label: "Beginner"}
 		w := executeRequest("POST", "/v1/skill-levels", body, adminToken)
 		require.Equal(t, http.StatusCreated, w.Code)
 
@@ -66,7 +66,8 @@ func TestSportsAndSkillLevelAdmin(t *testing.T) {
 		var resp response.PageResponse[skillHttp.SkillLevelResponse]
 		require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
 		assert.Equal(t, 1, resp.Total)
-		assert.Equal(t, "Beginner", resp.Items[0].Name)
+		assert.Equal(t, "Beginner", resp.Items[0].Label)
+		assert.Equal(t, 1, resp.Items[0].Level)
 		assert.Equal(t, newSportID, resp.Items[0].SportID)
 	})
 }
@@ -84,17 +85,17 @@ func TestPickupEnrolledStatusAndOrderDelete(t *testing.T) {
 	adminToken := generateToken(admin.ID)
 
 	locationID := setupTestLocation(t, hostToken, host.ID)
-	sportID, skillID := getSportSkill(t, "BADMINTON", "A")
+	sportID, skillLevel := getSportSkill(t, "BADMINTON", "A")
 
 	payload := pickupHttp.CreateGroupBody{
-		Title:        "Enroll Group",
-		StartTime:    time.Now().Add(24 * time.Hour),
-		EndTime:      time.Now().Add(26 * time.Hour),
-		Fee:          50,
-		Capacity:     4,
-		LocationID:   locationID,
-		SportID:      sportID,
-		SkillLevelID: skillID,
+		Title:      "Enroll Group",
+		StartTime:  time.Now().Add(24 * time.Hour),
+		EndTime:    time.Now().Add(26 * time.Hour),
+		Fee:        50,
+		Capacity:   4,
+		LocationID: locationID,
+		SportID:    sportID,
+		SkillLevel: skillLevel,
 	}
 	w := executeRequest("POST", "/v1/pickup-groups", payload, hostToken)
 	require.Equal(t, http.StatusCreated, w.Code)
@@ -131,7 +132,7 @@ func TestPickupEnrolledStatusAndOrderDelete(t *testing.T) {
 
 	var orderID string
 	t.Run("enrolled_status reflects the viewer's order", func(t *testing.T) {
-		wo := executeRequest("POST", fmt.Sprintf("/v1/pickup-groups/%s/orders", groupID), nil, user1Token)
+		wo := executeRequest("POST", fmt.Sprintf("/v1/pickup-groups/%s/orders", groupID), enrollBody(), user1Token)
 		require.Equal(t, http.StatusCreated, wo.Code)
 		var o pickupHttp.PickupOrderResponse
 		require.NoError(t, json.Unmarshal(wo.Body.Bytes(), &o))
@@ -170,7 +171,7 @@ func TestPickupEnrolledStatusAndOrderDelete(t *testing.T) {
 		assert.Equal(t, "cancelled", briefFor(user1Token).EnrolledStatus)
 		assert.Equal(t, 0, groupEnrolled(hostToken))
 
-		wr := executeRequest("POST", fmt.Sprintf("/v1/pickup-groups/%s/orders", groupID), nil, user1Token)
+		wr := executeRequest("POST", fmt.Sprintf("/v1/pickup-groups/%s/orders", groupID), enrollBody(), user1Token)
 		require.Equal(t, http.StatusCreated, wr.Code)
 		var o pickupHttp.PickupOrderResponse
 		require.NoError(t, json.Unmarshal(wr.Body.Bytes(), &o))
@@ -188,7 +189,7 @@ func TestPickupEnrolledStatusAndOrderDelete(t *testing.T) {
 		assert.Equal(t, 1, groupEnrolled(hostToken))
 
 		// Re-enrolling while in cancel_request is a duplicate, not a fresh enroll.
-		wr := executeRequest("POST", fmt.Sprintf("/v1/pickup-groups/%s/orders", groupID), nil, user1Token)
+		wr := executeRequest("POST", fmt.Sprintf("/v1/pickup-groups/%s/orders", groupID), enrollBody(), user1Token)
 		assert.Equal(t, http.StatusConflict, wr.Code)
 
 		// Restore to pending (reviewer-only) for the subsequent reject subtest.
@@ -214,7 +215,7 @@ func TestPickupEnrolledStatusAndOrderDelete(t *testing.T) {
 	})
 
 	t.Run("rejected user cannot re-enroll", func(t *testing.T) {
-		w := executeRequest("POST", fmt.Sprintf("/v1/pickup-groups/%s/orders", groupID), nil, user1Token)
+		w := executeRequest("POST", fmt.Sprintf("/v1/pickup-groups/%s/orders", groupID), enrollBody(), user1Token)
 		assert.Equal(t, http.StatusConflict, w.Code)
 	})
 
@@ -223,19 +224,19 @@ func TestPickupEnrolledStatusAndOrderDelete(t *testing.T) {
 		assert.Equal(t, http.StatusNoContent, wDel.Code)
 	})
 
-	t.Run("skill level must belong to the selected sport", func(t *testing.T) {
+	t.Run("skill level must be defined on the selected sport scale", func(t *testing.T) {
 		badmintonSport, _ := getSportSkill(t, "BADMINTON", "A")
-		_, volleyballSkill := getSportSkill(t, "VOLLEYBALL", "A")
+		undefinedLevel := 99
 
 		mismatch := pickupHttp.CreateGroupBody{
-			Title:        "Mismatch Group",
-			StartTime:    time.Now().Add(24 * time.Hour),
-			EndTime:      time.Now().Add(26 * time.Hour),
-			Fee:          0,
-			Capacity:     2,
-			LocationID:   locationID,
-			SportID:      badmintonSport,
-			SkillLevelID: volleyballSkill,
+			Title:      "Mismatch Group",
+			StartTime:  time.Now().Add(24 * time.Hour),
+			EndTime:    time.Now().Add(26 * time.Hour),
+			Fee:        0,
+			Capacity:   2,
+			LocationID: locationID,
+			SportID:    badmintonSport,
+			SkillLevel: undefinedLevel,
 		}
 		wm := executeRequest("POST", "/v1/pickup-groups", mismatch, hostToken)
 		assert.Equal(t, http.StatusBadRequest, wm.Code)

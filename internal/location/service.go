@@ -29,6 +29,9 @@ type CreateLocationRequest struct {
 	Description       string
 	Longitude         float64
 	Latitude          float64
+	ParkingName       *string
+	ParkingLatitude   *float64
+	ParkingLongitude  *float64
 }
 
 // UpdateLocationRequest carries data for partial updates.
@@ -45,6 +48,11 @@ type UpdateLocationRequest struct {
 	Description       *string
 	Longitude         *float64
 	Latitude          *float64
+	ParkingName       *string
+	ParkingLatitude   *float64
+	ParkingLongitude  *float64
+	// RemoveParking clears the parking lot. It cannot be combined with parking fields.
+	RemoveParking bool
 }
 
 type Service interface {
@@ -156,6 +164,10 @@ func (s *service) Create(ctx context.Context, req CreateLocationRequest) (*Locat
 		Latitude:          req.Latitude,
 	}
 
+	if err := applyParking(loc, req.ParkingName, req.ParkingLatitude, req.ParkingLongitude, false); err != nil {
+		return nil, err
+	}
+
 	// Validate logical rules
 	if err := validateLocation(loc); err != nil {
 		return nil, err
@@ -217,6 +229,9 @@ func (s *service) Update(ctx context.Context, id string, req UpdateLocationReque
 	}
 	if req.Latitude != nil {
 		loc.Latitude = *req.Latitude
+	}
+	if err := applyParking(loc, req.ParkingName, req.ParkingLatitude, req.ParkingLongitude, req.RemoveParking); err != nil {
+		return nil, err
 	}
 
 	// Validate logical rules
@@ -398,4 +413,42 @@ func (s *service) GetOrganizationID(ctx context.Context, locationID string) (str
 		return "", err
 	}
 	return s.repo.GetOrganizationID(ctx, locationID)
+}
+
+// applyParking sets or clears the location's parking lot. The name, latitude and
+// longitude must be provided together; providing none leaves the parking lot
+// unchanged unless remove is set, in which case it is cleared (and providing
+// parking fields at the same time is rejected).
+func applyParking(loc *Location, name *string, lat, lng *float64, remove bool) error {
+	provided := 0
+	if name != nil {
+		provided++
+	}
+	if lat != nil {
+		provided++
+	}
+	if lng != nil {
+		provided++
+	}
+
+	if remove {
+		if provided > 0 {
+			return ErrInvalidParking
+		}
+		loc.ParkingName, loc.ParkingLatitude, loc.ParkingLongitude = nil, nil, nil
+		return nil
+	}
+	if provided == 0 {
+		return nil
+	}
+	if provided != 3 {
+		return ErrInvalidParking
+	}
+
+	trimmed := strings.TrimSpace(*name)
+	if trimmed == "" || *lat < -90 || *lat > 90 || *lng < -180 || *lng > 180 {
+		return ErrInvalidParking
+	}
+	loc.ParkingName, loc.ParkingLatitude, loc.ParkingLongitude = &trimmed, lat, lng
+	return nil
 }

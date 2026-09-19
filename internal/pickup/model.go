@@ -20,9 +20,12 @@ var (
 	ErrGroupNotActive        = apperror.New(http.StatusBadRequest, "pickup group is not active")
 	ErrSportNotFound         = apperror.New(http.StatusNotFound, "sport not found")
 	ErrSportInactive         = apperror.New(http.StatusBadRequest, "sport is not active")
-	ErrSkillLevelNotFound    = apperror.New(http.StatusNotFound, "skill level not found")
-	ErrSkillLevelMismatch    = apperror.New(http.StatusBadRequest, "skill level does not belong to the selected sport")
+	ErrSkillLevelNotFound    = apperror.New(http.StatusBadRequest, "skill level is not defined for the selected sport")
 	ErrSkillLevelInactive    = apperror.New(http.StatusBadRequest, "skill level is not active")
+	ErrInvalidPartySize      = apperror.New(http.StatusBadRequest, "party size must be between 2 and 50")
+	ErrPartyMembersMismatch  = apperror.New(http.StatusBadRequest, "members must contain exactly party_size entries")
+	ErrDistanceNeedsOrigin   = apperror.New(http.StatusBadRequest, "latitude and longitude are required to sort by distance")
+	ErrFollowedNeedsAuth     = apperror.New(http.StatusUnauthorized, "authentication is required to filter by followed hosts")
 	ErrTimeConflict          = apperror.New(http.StatusConflict, "time_conflict")
 )
 
@@ -88,7 +91,7 @@ type PickupGroup struct {
 	Capacity        int
 	LocationID      string
 	SportID         string
-	SkillLevelID    string
+	SkillLevel      int // Integer level; its label comes from the sport's skill_levels mapping
 	Status          GroupStatus
 	Enable          bool
 	CurrentEnrolled int
@@ -98,7 +101,7 @@ type PickupGroup struct {
 	// Fields resolved via JOIN for display; not stored on pickup_groups.
 	SportCode       string
 	SportName       string
-	SkillLevelName  string
+	SkillLevelLabel string
 	HostUsername    string
 	HostDisplayName *string
 	HostPhone       *string
@@ -107,6 +110,10 @@ type PickupGroup struct {
 	// It is only populated by list queries that receive a viewer id; it is the
 	// empty string otherwise (the handler maps empty to "free").
 	EnrolledStatus string
+
+	// DistanceKm is the great-circle distance from the requested origin to the
+	// group's location. It is only populated by list queries given an origin.
+	DistanceKm *float64
 }
 
 type PickupOrder struct {
@@ -117,15 +124,38 @@ type PickupOrder struct {
 	BookerPhone   string
 	Status        OrderStatus
 	PaymentStatus PaymentStatus
-	CreatedAt     time.Time
-	UpdatedAt     time.Time
+	// SkillLevel is the enrollee's self-reported level (for a party order, the
+	// organizer's; each member carries their own).
+	SkillLevel int
+	// PartySize is the number of seats the order occupies (1 for a single enrollment).
+	PartySize int
+	// Members lists the anonymous seats of a party order (PartySize entries,
+	// organizer included). It is empty for a single enrollment.
+	Members   []OrderMember
+	CreatedAt time.Time
+	UpdatedAt time.Time
+}
+
+// OrderMember is one anonymous seat of a party order.
+type OrderMember struct {
+	Gender     string
+	SkillLevel int
 }
 
 type GroupFilter struct {
-	Status       string
-	SportID      string
-	SkillLevelID string
-	HostID       string
+	Status     string
+	SportID    string
+	SkillLevel *int
+	HostID     string
+	// FeeMin / FeeMax bound the per-person fee (inclusive) when set.
+	FeeMin *int
+	FeeMax *int
+	// FollowedOnly limits results to groups hosted by a host the viewer follows.
+	// It requires ViewerUserID.
+	FollowedOnly bool
+	// Latitude / Longitude are the origin for distance computation and sorting.
+	Latitude  *float64
+	Longitude *float64
 	// PubliclyVisibleOnly limits results to groups eligible for the public
 	// listing: status=active, enable=true, and not yet ended. Fully booked
 	// groups are still included so users can see (though not join) them.
