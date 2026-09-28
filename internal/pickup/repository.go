@@ -60,7 +60,8 @@ func NewPgxRepository(pool *pgxpool.Pool) Repository {
 var groupSelectColumns = []string{
 	"pg.id", "pg.host_id", "pg.title", "pg.description", "pg.start_time", "pg.end_time", "pg.fee",
 	"pg.capacity", "pg.location_id", "pg.sport_id", "s.code", "s.name",
-	"pg.skill_level", "COALESCE(sl.label, '')", "u.username", "u.display_name", "u.phone",
+	"pg.min_skill_level", "COALESCE(sl_min.label, '')", "pg.max_skill_level", "sl_max.label",
+	"u.username", "u.display_name", "u.phone",
 	"pg.status", "pg.enable", "pg.created_at", "pg.updated_at",
 	"COALESCE(SUM(po.party_size) FILTER (WHERE po.status NOT IN ('cancelled', 'rejected')), 0) AS current_enrolled",
 }
@@ -72,10 +73,11 @@ func groupJoins(b squirrel.SelectBuilder) squirrel.SelectBuilder {
 		From("public.pickup_groups pg").
 		Join("public.sports s ON pg.sport_id = s.id").
 		Join("public.locations l ON pg.location_id = l.id").
-		LeftJoin("public.skill_levels sl ON sl.sport_id = pg.sport_id AND sl.level = pg.skill_level").
+		LeftJoin("public.skill_levels sl_min ON sl_min.sport_id = pg.sport_id AND sl_min.level = pg.min_skill_level").
+		LeftJoin("public.skill_levels sl_max ON sl_max.sport_id = pg.sport_id AND sl_max.level = pg.max_skill_level").
 		Join("public.users u ON pg.host_id = u.id").
 		LeftJoin("public.pickup_orders po ON pg.id = po.pickup_group_id").
-		GroupBy("pg.id", "s.id", "sl.id", "u.id", "l.id")
+		GroupBy("pg.id", "s.id", "sl_min.id", "sl_max.id", "u.id", "l.id")
 }
 
 // scanGroup scans a group row in the groupSelectColumns order. Extra trailing
@@ -84,7 +86,8 @@ func scanGroupInto(g *PickupGroup, extra ...any) []any {
 	targets := []any{
 		&g.ID, &g.HostID, &g.Title, &g.Description, &g.StartTime, &g.EndTime, &g.Fee,
 		&g.Capacity, &g.LocationID, &g.SportID, &g.SportCode, &g.SportName,
-		&g.SkillLevel, &g.SkillLevelLabel, &g.HostUsername, &g.HostDisplayName, &g.HostPhone,
+		&g.MinSkillLevel, &g.MinSkillLevelLabel, &g.MaxSkillLevel, &g.MaxSkillLevelLabel,
+		&g.HostUsername, &g.HostDisplayName, &g.HostPhone,
 		&g.Status, &g.Enable, &g.CreatedAt, &g.UpdatedAt, &g.CurrentEnrolled,
 	}
 	return append(targets, extra...)
@@ -94,9 +97,9 @@ func (r *pgxRepository) CreateGroup(ctx context.Context, g *PickupGroup) error {
 	psql := squirrel.StatementBuilder.PlaceholderFormat(squirrel.Dollar)
 	query, args, err := psql.Insert("public.pickup_groups").
 		Columns("host_id", "title", "description", "start_time", "end_time",
-			"fee", "capacity", "location_id", "sport_id", "skill_level", "status", "enable").
+			"fee", "capacity", "location_id", "sport_id", "min_skill_level", "max_skill_level", "status", "enable").
 		Values(g.HostID, g.Title, g.Description, g.StartTime, g.EndTime,
-			g.Fee, g.Capacity, g.LocationID, g.SportID, g.SkillLevel, g.Status, g.Enable).
+			g.Fee, g.Capacity, g.LocationID, g.SportID, g.MinSkillLevel, g.MaxSkillLevel, g.Status, g.Enable).
 		Suffix("RETURNING id, created_at, updated_at").
 		ToSql()
 	if err != nil {
@@ -151,8 +154,14 @@ func (r *pgxRepository) ListGroups(ctx context.Context, filter GroupFilter) ([]*
 	if filter.SportID != "" {
 		query = query.Where(squirrel.Eq{"pg.sport_id": filter.SportID})
 	}
-	if filter.SkillLevel != nil {
-		query = query.Where(squirrel.Eq{"pg.skill_level": *filter.SkillLevel})
+	// A group matches when its [min_skill_level, max_skill_level] range overlaps
+	// the requested [MinSkillLevel, MaxSkillLevel] one (an unset bound, on either
+	// side, is unbounded).
+	if filter.MinSkillLevel != nil {
+		query = query.Where("(pg.max_skill_level IS NULL OR pg.max_skill_level >= ?)", *filter.MinSkillLevel)
+	}
+	if filter.MaxSkillLevel != nil {
+		query = query.Where(squirrel.LtOrEq{"pg.min_skill_level": *filter.MaxSkillLevel})
 	}
 	if filter.FeeMin != nil {
 		query = query.Where(squirrel.GtOrEq{"pg.fee": *filter.FeeMin})
@@ -180,8 +189,10 @@ func (r *pgxRepository) ListGroups(ctx context.Context, filter GroupFilter) ([]*
 	switch filter.SortBy {
 	case "created_at":
 		orderBy = "pg.created_at"
-	case "skill_level":
-		orderBy = "pg.skill_level"
+	case "min_skill_level":
+		orderBy = "pg.min_skill_level"
+	case "max_skill_level":
+		orderBy = "pg.max_skill_level"
 	case "distance":
 		// Nearest first unless the caller asks otherwise; groups without a
 		// computable distance (no origin) sort last.
@@ -246,7 +257,8 @@ func (r *pgxRepository) UpdateGroup(ctx context.Context, g *PickupGroup) error {
 		Set("capacity", g.Capacity).
 		Set("location_id", g.LocationID).
 		Set("sport_id", g.SportID).
-		Set("skill_level", g.SkillLevel).
+		Set("min_skill_level", g.MinSkillLevel).
+		Set("max_skill_level", g.MaxSkillLevel).
 		Set("status", g.Status).
 		Set("enable", g.Enable).
 		Set("updated_at", squirrel.Expr("now()")).

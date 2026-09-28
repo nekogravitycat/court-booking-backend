@@ -20,18 +20,21 @@ import (
 	userHttp "github.com/nekogravitycat/court-booking-backend/internal/user/http"
 )
 
-// createGroup creates a pickup group through the API and returns it.
+// createGroup creates a pickup group through the API, bounding its skill range
+// to the single given level (min == max), and returns it.
 func createGroup(t *testing.T, hostToken, locationID, sportID string, level, capacity, fee int, start, end time.Time) pickupHttp.PickupGroupResponse {
 	t.Helper()
+	maxLevel := level
 	w := executeRequest("POST", "/v1/pickup-groups", pickupHttp.CreateGroupBody{
-		Title:      fmt.Sprintf("Group L%d F%d", level, fee),
-		StartTime:  start,
-		EndTime:    end,
-		Fee:        fee,
-		Capacity:   capacity,
-		LocationID: locationID,
-		SportID:    sportID,
-		SkillLevel: level,
+		Title:         fmt.Sprintf("Group L%d F%d", level, fee),
+		StartTime:     start,
+		EndTime:       end,
+		Fee:           fee,
+		Capacity:      capacity,
+		LocationID:    locationID,
+		SportID:       sportID,
+		MinSkillLevel: level,
+		MaxSkillLevel: &maxLevel,
 	}, hostToken)
 	require.Equal(t, http.StatusCreated, w.Code, w.Body.String())
 
@@ -293,18 +296,18 @@ func TestPickupListFilters(t *testing.T) {
 	})
 
 	t.Run("sort by skill level", func(t *testing.T) {
-		_, asc := list(t, "", "?sort_by=skill_level&sort_order=asc")
+		_, asc := list(t, "", "?sort_by=min_skill_level&sort_order=asc")
 		assert.Equal(t, []string{cheap.ID, pricey.ID, mid.ID, other.ID}, ids(asc))
 
-		_, desc := list(t, "", "?sort_by=skill_level&sort_order=desc")
+		_, desc := list(t, "", "?sort_by=min_skill_level&sort_order=desc")
 		assert.Equal(t, []string{other.ID, mid.ID, pricey.ID, cheap.ID}, ids(desc))
 	})
 
 	t.Run("filter by exact skill level", func(t *testing.T) {
-		_, resp := list(t, "", "?skill_level=3")
+		_, resp := list(t, "", "?min_skill_level=3&max_skill_level=3")
 		assert.Equal(t, []string{mid.ID}, ids(resp))
-		assert.Equal(t, 3, resp.Items[0].SkillLevel.Level)
-		assert.Equal(t, "C", resp.Items[0].SkillLevel.Label)
+		assert.Equal(t, 3, resp.Items[0].MinSkillLevel.Level)
+		assert.Equal(t, "C", resp.Items[0].MinSkillLevel.Label)
 	})
 
 	t.Run("sort by distance nearest first", func(t *testing.T) {
@@ -371,7 +374,7 @@ func TestPickupListFilters(t *testing.T) {
 	})
 
 	t.Run("filters combine with pagination totals", func(t *testing.T) {
-		_, resp := list(t, "", "?fee_min=0&page_size=2&page=2&sort_by=skill_level&sort_order=asc")
+		_, resp := list(t, "", "?fee_min=0&page_size=2&page=2&sort_by=min_skill_level&sort_order=asc")
 		assert.Equal(t, 4, resp.Total)
 		assert.Equal(t, []string{mid.ID, other.ID}, ids(resp))
 	})

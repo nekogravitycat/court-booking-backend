@@ -14,11 +14,15 @@ import (
 
 type ListGroupsRequest struct {
 	request.ListParams
-	Status     string `form:"status" binding:"omitempty,oneof=active cancelled completed"`
-	SportID    string `form:"sport_id" binding:"omitempty,uuid"`
-	SkillLevel *int   `form:"skill_level" binding:"omitempty,min=1,max=100"`
-	HostID     string `form:"host_id" binding:"omitempty,uuid"`
-	SortBy     string `form:"sort_by" binding:"omitempty,oneof=start_time created_at skill_level distance"`
+	Status  string `form:"status" binding:"omitempty,oneof=active cancelled completed"`
+	SportID string `form:"sport_id" binding:"omitempty,uuid"`
+	// MinSkillLevel / MaxSkillLevel filter to groups whose accepted range
+	// overlaps this one; either bound may be omitted to leave that side
+	// unbounded.
+	MinSkillLevel *int   `form:"min_skill_level" binding:"omitempty,min=1,max=100"`
+	MaxSkillLevel *int   `form:"max_skill_level" binding:"omitempty,min=1,max=100"`
+	HostID        string `form:"host_id" binding:"omitempty,uuid"`
+	SortBy        string `form:"sort_by" binding:"omitempty,oneof=start_time created_at min_skill_level max_skill_level distance"`
 
 	// FeeMin / FeeMax bound the per-person fee (inclusive).
 	FeeMin *int `form:"fee_min" binding:"omitempty,min=0"`
@@ -40,6 +44,9 @@ func (r *ListGroupsRequest) Validate() error {
 	}
 	if r.FeeMin != nil && r.FeeMax != nil && *r.FeeMin > *r.FeeMax {
 		return errors.New("fee_min must not exceed fee_max")
+	}
+	if r.MinSkillLevel != nil && r.MaxSkillLevel != nil && *r.MinSkillLevel > *r.MaxSkillLevel {
+		return errors.New("min_skill_level must not exceed max_skill_level")
 	}
 	return nil
 }
@@ -63,13 +70,19 @@ type CreateGroupBody struct {
 	Capacity    int       `json:"capacity" binding:"required,min=1,max=200"`
 	LocationID  string    `json:"location_id" binding:"required,uuid"`
 	SportID     string    `json:"sport_id" binding:"required,uuid"`
-	SkillLevel  int       `json:"skill_level" binding:"required,min=1,max=100"`
-	Enable      *bool     `json:"enable"`
+	// MinSkillLevel is required; MaxSkillLevel is optional (nil leaves the
+	// range unbounded above).
+	MinSkillLevel int   `json:"min_skill_level" binding:"required,min=1,max=100"`
+	MaxSkillLevel *int  `json:"max_skill_level" binding:"omitempty,min=1,max=100"`
+	Enable        *bool `json:"enable"`
 }
 
 func (r *CreateGroupBody) Validate() error {
 	if !r.EndTime.After(r.StartTime) {
 		return pickup.ErrInvalidTimeRange
+	}
+	if r.MaxSkillLevel != nil && *r.MaxSkillLevel < r.MinSkillLevel {
+		return pickup.ErrInvalidSkillLevelRange
 	}
 	return nil
 }
@@ -88,9 +101,13 @@ type UpdateGroupBody struct {
 	Capacity    *int       `json:"capacity" binding:"omitempty,min=1,max=200"`
 	LocationID  *string    `json:"location_id" binding:"omitempty,uuid"`
 	SportID     *string    `json:"sport_id" binding:"omitempty,uuid"`
-	SkillLevel  *int       `json:"skill_level" binding:"omitempty,min=1,max=100"`
-	Status      *string    `json:"status" binding:"omitempty,oneof=active cancelled completed"`
-	Enable      *bool      `json:"enable"`
+	// MinSkillLevel may not be cleared (the group always has a lower bound).
+	// MaxSkillLevel may be raised, lowered, or set (but not cleared back to
+	// null once set, same as the other optional fields on this endpoint).
+	MinSkillLevel *int    `json:"min_skill_level" binding:"omitempty,min=1,max=100"`
+	MaxSkillLevel *int    `json:"max_skill_level" binding:"omitempty,min=1,max=100"`
+	Status        *string `json:"status" binding:"omitempty,oneof=active cancelled completed"`
+	Enable        *bool   `json:"enable"`
 }
 
 // --- Response types ---
@@ -145,21 +162,35 @@ type PickupHostTag struct {
 // endpoints (GET /pickup-groups and GET /hosts/{host_id}/pickup-groups).
 // The host phone is intentionally omitted from the public shape.
 type PickupGroupBrief struct {
-	ID              string                  `json:"id"`
-	HostID          string                  `json:"host_id"`
-	HostUsername    string                  `json:"host_username"`
-	HostDisplayName *string                 `json:"host_display_name"`
-	LocationID      string                  `json:"location_id"`
-	Title           string                  `json:"title"`
-	Sport           sportsHttp.SportTag     `json:"sport"`
-	SkillLevel      skillHttp.SkillLevelTag `json:"skill_level"`
-	StartTime       time.Time               `json:"start_time"`
-	Fee             int                     `json:"fee"`
+	ID              string                   `json:"id"`
+	HostID          string                   `json:"host_id"`
+	HostUsername    string                   `json:"host_username"`
+	HostDisplayName *string                  `json:"host_display_name"`
+	LocationID      string                   `json:"location_id"`
+	Title           string                   `json:"title"`
+	Sport           sportsHttp.SportTag      `json:"sport"`
+	MinSkillLevel   skillHttp.SkillLevelTag  `json:"min_skill_level"`
+	MaxSkillLevel   *skillHttp.SkillLevelTag `json:"max_skill_level"`
+	StartTime       time.Time                `json:"start_time"`
+	Fee             int                      `json:"fee"`
 	// EnrolledStatus is the requesting user's status for this group: "free" when
 	// not enrolled (or unauthenticated), otherwise their order status.
 	EnrolledStatus string `json:"enrolled_status"`
 	// DistanceKm is set only when latitude and longitude were supplied.
 	DistanceKm *float64 `json:"distance_km"`
+}
+
+// maxSkillLevelTag builds the nullable max_skill_level tag: nil when the group
+// has no upper bound.
+func maxSkillLevelTag(g *pickup.PickupGroup) *skillHttp.SkillLevelTag {
+	if g.MaxSkillLevel == nil {
+		return nil
+	}
+	label := ""
+	if g.MaxSkillLevelLabel != nil {
+		label = *g.MaxSkillLevelLabel
+	}
+	return &skillHttp.SkillLevelTag{Level: *g.MaxSkillLevel, Label: label}
 }
 
 func NewPickupGroupBrief(g *pickup.PickupGroup) PickupGroupBrief {
@@ -175,7 +206,8 @@ func NewPickupGroupBrief(g *pickup.PickupGroup) PickupGroupBrief {
 		LocationID:      g.LocationID,
 		Title:           g.Title,
 		Sport:           sportsHttp.SportTag{ID: g.SportID, Code: g.SportCode, Name: g.SportName},
-		SkillLevel:      skillHttp.SkillLevelTag{Level: g.SkillLevel, Label: g.SkillLevelLabel},
+		MinSkillLevel:   skillHttp.SkillLevelTag{Level: g.MinSkillLevel, Label: g.MinSkillLevelLabel},
+		MaxSkillLevel:   maxSkillLevelTag(g),
 		StartTime:       g.StartTime.UTC(),
 		Fee:             g.Fee,
 		EnrolledStatus:  enrolled,
@@ -184,23 +216,24 @@ func NewPickupGroupBrief(g *pickup.PickupGroup) PickupGroupBrief {
 }
 
 type PickupGroupResponse struct {
-	ID              string                  `json:"id"`
-	Host            PickupHostTag           `json:"host"`
-	Title           string                  `json:"title"`
-	Description     *string                 `json:"description"`
-	StartTime       time.Time               `json:"start_time"`
-	EndTime         time.Time               `json:"end_time"`
-	Fee             int                     `json:"fee"`
-	Capacity        int                     `json:"capacity"`
-	LocationID      string                  `json:"location_id"`
-	Sport           sportsHttp.SportTag     `json:"sport"`
-	SkillLevel      skillHttp.SkillLevelTag `json:"skill_level"`
-	Status          string                  `json:"status"`
-	Enable          bool                    `json:"enable"`
-	CurrentEnrolled int                     `json:"current_enrolled"`
-	CreatedAt       time.Time               `json:"created_at"`
-	UpdatedAt       time.Time               `json:"updated_at"`
-	Orders          *[]PickupOrderResponse  `json:"orders,omitempty"`
+	ID              string                   `json:"id"`
+	Host            PickupHostTag            `json:"host"`
+	Title           string                   `json:"title"`
+	Description     *string                  `json:"description"`
+	StartTime       time.Time                `json:"start_time"`
+	EndTime         time.Time                `json:"end_time"`
+	Fee             int                      `json:"fee"`
+	Capacity        int                      `json:"capacity"`
+	LocationID      string                   `json:"location_id"`
+	Sport           sportsHttp.SportTag      `json:"sport"`
+	MinSkillLevel   skillHttp.SkillLevelTag  `json:"min_skill_level"`
+	MaxSkillLevel   *skillHttp.SkillLevelTag `json:"max_skill_level"`
+	Status          string                   `json:"status"`
+	Enable          bool                     `json:"enable"`
+	CurrentEnrolled int                      `json:"current_enrolled"`
+	CreatedAt       time.Time                `json:"created_at"`
+	UpdatedAt       time.Time                `json:"updated_at"`
+	Orders          *[]PickupOrderResponse   `json:"orders,omitempty"`
 }
 
 // NewPickupGroupResponse builds a PickupGroupResponse.
@@ -217,7 +250,8 @@ func NewPickupGroupResponse(g *pickup.PickupGroup, orders []*pickup.PickupOrder)
 		Capacity:        g.Capacity,
 		LocationID:      g.LocationID,
 		Sport:           sportsHttp.SportTag{ID: g.SportID, Code: g.SportCode, Name: g.SportName},
-		SkillLevel:      skillHttp.SkillLevelTag{Level: g.SkillLevel, Label: g.SkillLevelLabel},
+		MinSkillLevel:   skillHttp.SkillLevelTag{Level: g.MinSkillLevel, Label: g.MinSkillLevelLabel},
+		MaxSkillLevel:   maxSkillLevelTag(g),
 		Status:          string(g.Status),
 		Enable:          g.Enable,
 		CurrentEnrolled: g.CurrentEnrolled,

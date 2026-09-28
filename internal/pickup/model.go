@@ -8,25 +8,26 @@ import (
 )
 
 var (
-	ErrGroupNotFound         = apperror.New(http.StatusNotFound, "pickup group not found")
-	ErrOrderNotFound         = apperror.New(http.StatusNotFound, "pickup order not found")
-	ErrGroupFullyBooked      = apperror.New(http.StatusConflict, "group is fully booked")
-	ErrCapacityBelowEnrolled = apperror.New(http.StatusConflict, "capacity cannot be set below the current number of enrolled participants")
-	ErrAlreadyEnrolled       = apperror.New(http.StatusConflict, "already enrolled in this group")
-	ErrRejectedFromGroup     = apperror.New(http.StatusConflict, "you have been rejected from this group and cannot re-enroll")
-	ErrInvalidStatus         = apperror.New(http.StatusBadRequest, "invalid status")
-	ErrInvalidTimeRange      = apperror.New(http.StatusBadRequest, "start time must be before end time")
-	ErrPermissionDenied      = apperror.New(http.StatusForbidden, "permission denied")
-	ErrGroupNotActive        = apperror.New(http.StatusBadRequest, "pickup group is not active")
-	ErrSportNotFound         = apperror.New(http.StatusNotFound, "sport not found")
-	ErrSportInactive         = apperror.New(http.StatusBadRequest, "sport is not active")
-	ErrSkillLevelNotFound    = apperror.New(http.StatusBadRequest, "skill level is not defined for the selected sport")
-	ErrSkillLevelInactive    = apperror.New(http.StatusBadRequest, "skill level is not active")
-	ErrInvalidPartySize      = apperror.New(http.StatusBadRequest, "party size must be between 2 and 50")
-	ErrPartyMembersMismatch  = apperror.New(http.StatusBadRequest, "members must contain exactly party_size entries")
-	ErrDistanceNeedsOrigin   = apperror.New(http.StatusBadRequest, "latitude and longitude are required to sort by distance")
-	ErrFollowedNeedsAuth     = apperror.New(http.StatusUnauthorized, "authentication is required to filter by followed hosts")
-	ErrTimeConflict          = apperror.New(http.StatusConflict, "time_conflict")
+	ErrGroupNotFound          = apperror.New(http.StatusNotFound, "pickup group not found")
+	ErrOrderNotFound          = apperror.New(http.StatusNotFound, "pickup order not found")
+	ErrGroupFullyBooked       = apperror.New(http.StatusConflict, "group is fully booked")
+	ErrCapacityBelowEnrolled  = apperror.New(http.StatusConflict, "capacity cannot be set below the current number of enrolled participants")
+	ErrAlreadyEnrolled        = apperror.New(http.StatusConflict, "already enrolled in this group")
+	ErrRejectedFromGroup      = apperror.New(http.StatusConflict, "you have been rejected from this group and cannot re-enroll")
+	ErrInvalidStatus          = apperror.New(http.StatusBadRequest, "invalid status")
+	ErrInvalidTimeRange       = apperror.New(http.StatusBadRequest, "start time must be before end time")
+	ErrPermissionDenied       = apperror.New(http.StatusForbidden, "permission denied")
+	ErrGroupNotActive         = apperror.New(http.StatusBadRequest, "pickup group is not active")
+	ErrSportNotFound          = apperror.New(http.StatusNotFound, "sport not found")
+	ErrSportInactive          = apperror.New(http.StatusBadRequest, "sport is not active")
+	ErrSkillLevelNotFound     = apperror.New(http.StatusBadRequest, "skill level is not defined for the selected sport")
+	ErrSkillLevelInactive     = apperror.New(http.StatusBadRequest, "skill level is not active")
+	ErrInvalidSkillLevelRange = apperror.New(http.StatusBadRequest, "max_skill_level must not be less than min_skill_level")
+	ErrInvalidPartySize       = apperror.New(http.StatusBadRequest, "party size must be between 2 and 50")
+	ErrPartyMembersMismatch   = apperror.New(http.StatusBadRequest, "members must contain exactly party_size entries")
+	ErrDistanceNeedsOrigin    = apperror.New(http.StatusBadRequest, "latitude and longitude are required to sort by distance")
+	ErrFollowedNeedsAuth      = apperror.New(http.StatusUnauthorized, "authentication is required to filter by followed hosts")
+	ErrTimeConflict           = apperror.New(http.StatusConflict, "time_conflict")
 )
 
 type GroupStatus string
@@ -81,17 +82,21 @@ func (s OrderStatus) IsValid() bool {
 const EnrolledStatusFree = "free"
 
 type PickupGroup struct {
-	ID              string
-	HostID          string
-	Title           string
-	Description     *string
-	StartTime       time.Time
-	EndTime         time.Time
-	Fee             int
-	Capacity        int
-	LocationID      string
-	SportID         string
-	SkillLevel      int // Integer level; its label comes from the sport's skill_levels mapping
+	ID          string
+	HostID      string
+	Title       string
+	Description *string
+	StartTime   time.Time
+	EndTime     time.Time
+	Fee         int
+	Capacity    int
+	LocationID  string
+	SportID     string
+	// MinSkillLevel and MaxSkillLevel bound the group's accepted skill range on
+	// the sport's integer scale. MaxSkillLevel is nil when the range is
+	// unbounded above.
+	MinSkillLevel   int
+	MaxSkillLevel   *int
 	Status          GroupStatus
 	Enable          bool
 	CurrentEnrolled int
@@ -99,12 +104,13 @@ type PickupGroup struct {
 	UpdatedAt       time.Time
 
 	// Fields resolved via JOIN for display; not stored on pickup_groups.
-	SportCode       string
-	SportName       string
-	SkillLevelLabel string
-	HostUsername    string
-	HostDisplayName *string
-	HostPhone       *string
+	SportCode          string
+	SportName          string
+	MinSkillLevelLabel string
+	MaxSkillLevelLabel *string
+	HostUsername       string
+	HostDisplayName    *string
+	HostPhone          *string
 
 	// EnrolledStatus is the requesting viewer's order status for this group.
 	// It is only populated by list queries that receive a viewer id; it is the
@@ -143,10 +149,14 @@ type OrderMember struct {
 }
 
 type GroupFilter struct {
-	Status     string
-	SportID    string
-	SkillLevel *int
-	HostID     string
+	Status  string
+	SportID string
+	// MinSkillLevel / MaxSkillLevel bound a query range; a group matches when its
+	// own [MinSkillLevel, MaxSkillLevel] range overlaps this one (nil on either
+	// side, on the filter or the group, means unbounded on that side).
+	MinSkillLevel *int
+	MaxSkillLevel *int
+	HostID        string
 	// FeeMin / FeeMax bound the per-person fee (inclusive) when set.
 	FeeMin *int
 	FeeMax *int

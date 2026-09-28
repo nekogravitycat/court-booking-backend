@@ -10,8 +10,9 @@ pickupGroups:
       開始時間、費用，以及 enrolled_status。
       帶座標時另含 distance_km。
 
-      **篩選與排序**：sport_id、skill_level (整數)、fee_min / fee_max (價位)、followed_only (只看追蹤的教練)；
-      sort_by 可選 start_time / created_at / skill_level / distance。
+      **篩選與排序**：sport_id、min_skill_level / max_skill_level (程度範圍)、fee_min / fee_max (價位)、
+      followed_only (只看追蹤的教練)；
+      sort_by 可選 start_time / created_at / min_skill_level / max_skill_level / distance。
 
       **選擇性登入**：帶有有效 Bearer Token 時，enrolled_status 會反映該使用者對每個
       臨打團的訂單狀態；未登入則一律為 free。
@@ -28,13 +29,20 @@ pickupGroups:
         schema:
           type: string
           format: uuid
-      - name: skill_level
+      - name: min_skill_level
         in: query
         required: false
         schema:
           type: integer
           minimum: 1
-        description: "精確篩選程度 (整數)"
+        description: "篩選下限：只列出程度範圍與 [min_skill_level, max_skill_level] 有重疊的臨打團。"
+      - name: max_skill_level
+        in: query
+        required: false
+        schema:
+          type: integer
+          minimum: 1
+        description: "篩選上限，可與 min_skill_level 搭配使用；不可小於 min_skill_level (400)。"
       - name: fee_min
         in: query
         required: false
@@ -75,7 +83,7 @@ pickupGroups:
         required: false
         schema:
           type: string
-          enum: [start_time, created_at, skill_level, distance]
+          enum: [start_time, created_at, min_skill_level, max_skill_level, distance]
           default: start_time
         description: |
           排序欄位。distance 依「使用者座標到場地」的球面距離排序，必須同時提供 latitude 與 longitude (否則 400)。
@@ -397,13 +405,20 @@ hostPickupGroups:
         schema:
           type: string
           format: uuid
-      - name: skill_level
+      - name: min_skill_level
         in: query
         required: false
         schema:
           type: integer
           minimum: 1
-        description: "精確篩選程度 (整數)"
+        description: "篩選下限：只列出程度範圍與 [min_skill_level, max_skill_level] 有重疊的臨打團。"
+      - name: max_skill_level
+        in: query
+        required: false
+        schema:
+          type: integer
+          minimum: 1
+        description: "篩選上限，可與 min_skill_level 搭配使用；不可小於 min_skill_level (400)。"
       - name: fee_min
         in: query
         required: false
@@ -444,7 +459,7 @@ hostPickupGroups:
         required: false
         schema:
           type: string
-          enum: [start_time, created_at, skill_level, distance]
+          enum: [start_time, created_at, min_skill_level, max_skill_level, distance]
           default: start_time
         description: |
           排序欄位。distance 依「使用者座標到場地」的球面距離排序，必須同時提供 latitude 與 longitude (否則 400)。

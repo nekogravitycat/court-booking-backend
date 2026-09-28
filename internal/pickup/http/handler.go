@@ -59,17 +59,18 @@ func (h *Handler) CreateGroup(c *gin.Context) {
 	}
 
 	req := pickup.CreateGroupRequest{
-		HostID:      userID,
-		Title:       body.Title,
-		Description: body.Description,
-		StartTime:   body.StartTime,
-		EndTime:     body.EndTime,
-		Fee:         body.Fee,
-		Capacity:    body.Capacity,
-		LocationID:  body.LocationID,
-		SportID:     body.SportID,
-		SkillLevel:  body.SkillLevel,
-		Enable:      enable,
+		HostID:        userID,
+		Title:         body.Title,
+		Description:   body.Description,
+		StartTime:     body.StartTime,
+		EndTime:       body.EndTime,
+		Fee:           body.Fee,
+		Capacity:      body.Capacity,
+		LocationID:    body.LocationID,
+		SportID:       body.SportID,
+		MinSkillLevel: body.MinSkillLevel,
+		MaxSkillLevel: body.MaxSkillLevel,
+		Enable:        enable,
 	}
 
 	group, err := h.service.CreateGroup(c.Request.Context(), req)
@@ -98,7 +99,8 @@ func (h *Handler) ListGroups(c *gin.Context) {
 
 	filter := pickup.GroupFilter{
 		SportID:             req.SportID,
-		SkillLevel:          req.SkillLevel,
+		MinSkillLevel:       req.MinSkillLevel,
+		MaxSkillLevel:       req.MaxSkillLevel,
 		FeeMin:              req.FeeMin,
 		FeeMax:              req.FeeMax,
 		FollowedOnly:        req.FollowedOnly,
@@ -149,20 +151,21 @@ func (h *Handler) ListGroupsByHost(c *gin.Context) {
 	sortOrder := strings.ToUpper(req.SortOrder)
 
 	filter := pickup.GroupFilter{
-		Status:       req.Status,
-		SportID:      req.SportID,
-		SkillLevel:   req.SkillLevel,
-		FeeMin:       req.FeeMin,
-		FeeMax:       req.FeeMax,
-		FollowedOnly: req.FollowedOnly,
-		Latitude:     req.Latitude,
-		Longitude:    req.Longitude,
-		HostID:       uri.HostID,
-		ViewerUserID: auth.GetUserID(c),
-		Page:         req.Page,
-		PageSize:     req.PageSize,
-		SortBy:       req.SortBy,
-		SortOrder:    sortOrder,
+		Status:        req.Status,
+		SportID:       req.SportID,
+		MinSkillLevel: req.MinSkillLevel,
+		MaxSkillLevel: req.MaxSkillLevel,
+		FeeMin:        req.FeeMin,
+		FeeMax:        req.FeeMax,
+		FollowedOnly:  req.FollowedOnly,
+		Latitude:      req.Latitude,
+		Longitude:     req.Longitude,
+		HostID:        uri.HostID,
+		ViewerUserID:  auth.GetUserID(c),
+		Page:          req.Page,
+		PageSize:      req.PageSize,
+		SortBy:        req.SortBy,
+		SortOrder:     sortOrder,
 	}
 
 	groups, total, err := h.service.ListGroups(c.Request.Context(), filter)
@@ -250,17 +253,18 @@ func (h *Handler) UpdateGroup(c *gin.Context) {
 	}
 
 	req := pickup.UpdateGroupRequest{
-		Title:       body.Title,
-		Description: body.Description,
-		StartTime:   body.StartTime,
-		EndTime:     body.EndTime,
-		Fee:         body.Fee,
-		Capacity:    body.Capacity,
-		LocationID:  body.LocationID,
-		SportID:     body.SportID,
-		SkillLevel:  body.SkillLevel,
-		Status:      body.Status,
-		Enable:      body.Enable,
+		Title:         body.Title,
+		Description:   body.Description,
+		StartTime:     body.StartTime,
+		EndTime:       body.EndTime,
+		Fee:           body.Fee,
+		Capacity:      body.Capacity,
+		LocationID:    body.LocationID,
+		SportID:       body.SportID,
+		MinSkillLevel: body.MinSkillLevel,
+		MaxSkillLevel: body.MaxSkillLevel,
+		Status:        body.Status,
+		Enable:        body.Enable,
 	}
 
 	group, err := h.service.UpdateGroup(c.Request.Context(), uri.ID, req)

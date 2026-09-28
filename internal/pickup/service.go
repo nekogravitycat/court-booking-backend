@@ -22,17 +22,18 @@ const (
 )
 
 type CreateGroupRequest struct {
-	HostID      string
-	Title       string
-	Description *string
-	StartTime   time.Time
-	EndTime     time.Time
-	Fee         int
-	Capacity    int
-	LocationID  string
-	SportID     string
-	SkillLevel  int
-	Enable      bool
+	HostID        string
+	Title         string
+	Description   *string
+	StartTime     time.Time
+	EndTime       time.Time
+	Fee           int
+	Capacity      int
+	LocationID    string
+	SportID       string
+	MinSkillLevel int
+	MaxSkillLevel *int
+	Enable        bool
 }
 
 // CreateOrderRequest enrolls a single user. SkillLevel is the enrollee's
@@ -62,17 +63,18 @@ type UpdateOrderRequest struct {
 }
 
 type UpdateGroupRequest struct {
-	Title       *string
-	Description *string
-	StartTime   *time.Time
-	EndTime     *time.Time
-	Fee         *int
-	Capacity    *int
-	LocationID  *string
-	SportID     *string
-	SkillLevel  *int
-	Status      *string
-	Enable      *bool
+	Title         *string
+	Description   *string
+	StartTime     *time.Time
+	EndTime       *time.Time
+	Fee           *int
+	Capacity      *int
+	LocationID    *string
+	SportID       *string
+	MinSkillLevel *int
+	MaxSkillLevel *int
+	Status        *string
+	Enable        *bool
 }
 
 type Service interface {
@@ -146,13 +148,29 @@ func (s *service) validateSkillLevel(ctx context.Context, sportID string, level 
 	return nil
 }
 
-// validateSportAndSkill verifies the sport is usable and the level belongs to
-// its scale.
-func (s *service) validateSportAndSkill(ctx context.Context, sportID string, level int) error {
+// validateSkillLevelRange verifies that minLevel and maxLevel (when set) are
+// each defined and active on the sport's scale, and that maxLevel is not below
+// minLevel.
+func (s *service) validateSkillLevelRange(ctx context.Context, sportID string, minLevel int, maxLevel *int) error {
+	if err := s.validateSkillLevel(ctx, sportID, minLevel); err != nil {
+		return err
+	}
+	if maxLevel == nil {
+		return nil
+	}
+	if *maxLevel < minLevel {
+		return ErrInvalidSkillLevelRange
+	}
+	return s.validateSkillLevel(ctx, sportID, *maxLevel)
+}
+
+// validateSportAndSkillRange verifies the sport is usable and the min/max
+// skill-level range belongs to its scale.
+func (s *service) validateSportAndSkillRange(ctx context.Context, sportID string, minLevel int, maxLevel *int) error {
 	if err := s.validateSport(ctx, sportID); err != nil {
 		return err
 	}
-	return s.validateSkillLevel(ctx, sportID, level)
+	return s.validateSkillLevelRange(ctx, sportID, minLevel, maxLevel)
 }
 
 // notify delivers notifications on a best-effort basis: the operation that
@@ -171,23 +189,24 @@ func (s *service) CreateGroup(ctx context.Context, req CreateGroupRequest) (*Pic
 		return nil, ErrInvalidTimeRange
 	}
 
-	if err := s.validateSportAndSkill(ctx, req.SportID, req.SkillLevel); err != nil {
+	if err := s.validateSportAndSkillRange(ctx, req.SportID, req.MinSkillLevel, req.MaxSkillLevel); err != nil {
 		return nil, err
 	}
 
 	group := &PickupGroup{
-		HostID:      req.HostID,
-		Title:       req.Title,
-		Description: req.Description,
-		StartTime:   req.StartTime,
-		EndTime:     req.EndTime,
-		Fee:         req.Fee,
-		Capacity:    req.Capacity,
-		LocationID:  req.LocationID,
-		SportID:     req.SportID,
-		SkillLevel:  req.SkillLevel,
-		Status:      GroupStatusActive,
-		Enable:      req.Enable,
+		HostID:        req.HostID,
+		Title:         req.Title,
+		Description:   req.Description,
+		StartTime:     req.StartTime,
+		EndTime:       req.EndTime,
+		Fee:           req.Fee,
+		Capacity:      req.Capacity,
+		LocationID:    req.LocationID,
+		SportID:       req.SportID,
+		MinSkillLevel: req.MinSkillLevel,
+		MaxSkillLevel: req.MaxSkillLevel,
+		Status:        GroupStatusActive,
+		Enable:        req.Enable,
 	}
 
 	if err := s.repo.CreateGroup(ctx, group); err != nil {
@@ -247,19 +266,23 @@ func (s *service) UpdateGroup(ctx context.Context, id string, req UpdateGroupReq
 		group.LocationID = *req.LocationID
 	}
 
-	// Re-validate the sport / skill-level pair whenever either changes, so the
-	// level stays defined on the group's sport scale.
+	// Re-validate the sport / skill-level range whenever any of them changes, so
+	// the range stays defined on the group's sport scale.
 	sportOrSkillChanged := false
 	if req.SportID != nil {
 		group.SportID = *req.SportID
 		sportOrSkillChanged = true
 	}
-	if req.SkillLevel != nil {
-		group.SkillLevel = *req.SkillLevel
+	if req.MinSkillLevel != nil {
+		group.MinSkillLevel = *req.MinSkillLevel
+		sportOrSkillChanged = true
+	}
+	if req.MaxSkillLevel != nil {
+		group.MaxSkillLevel = req.MaxSkillLevel
 		sportOrSkillChanged = true
 	}
 	if sportOrSkillChanged {
-		if err := s.validateSportAndSkill(ctx, group.SportID, group.SkillLevel); err != nil {
+		if err := s.validateSportAndSkillRange(ctx, group.SportID, group.MinSkillLevel, group.MaxSkillLevel); err != nil {
 			return nil, err
 		}
 	}

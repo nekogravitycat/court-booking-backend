@@ -46,8 +46,13 @@ PickupGroupResponse:
       format: uuid
     sport:
       $ref: "./sport.yml#/SportTag"
-    skill_level:
+    min_skill_level:
       $ref: "./skilllevel.yml#/SkillLevelTag"
+    max_skill_level:
+      allOf:
+        - $ref: "./skilllevel.yml#/SkillLevelTag"
+      nullable: true
+      description: "程度上限；null 表示不設上限。"
     status:
       type: string
       enum: [active, cancelled, completed]
@@ -73,7 +78,8 @@ PickupGroupResponse:
     - capacity
     - location_id
     - sport
-    - skill_level
+    - min_skill_level
+    - max_skill_level
     - status
     - enable
     - current_enrolled
@@ -113,8 +119,13 @@ PickupGroupBrief:
       type: string
     sport:
       $ref: "./sport.yml#/SportTag"
-    skill_level:
+    min_skill_level:
       $ref: "./skilllevel.yml#/SkillLevelTag"
+    max_skill_level:
+      allOf:
+        - $ref: "./skilllevel.yml#/SkillLevelTag"
+      nullable: true
+      description: "程度上限；null 表示不設上限。"
     start_time:
       type: string
       format: date-time
@@ -138,7 +149,8 @@ PickupGroupBrief:
     - location_id
     - title
     - sport
-    - skill_level
+    - min_skill_level
+    - max_skill_level
     - start_time
     - fee
     - enrolled_status
@@ -171,10 +183,15 @@ CreatePickupGroupRequest:
       type: string
       format: uuid
       description: "球類 ID (關聯至 Sport)"
-    skill_level:
+    min_skill_level:
       type: integer
       minimum: 1
-      description: "程度整數。必須是所選 sport_id 對照表 (GET /skill-levels) 已定義且啟用的程度。"
+      description: "程度下限，必填。必須是所選 sport_id 對照表 (GET /skill-levels) 已定義且啟用的程度。"
+    max_skill_level:
+      type: integer
+      minimum: 1
+      nullable: true
+      description: "程度上限，可省略 (不設上限)。若提供，須為對照表已定義且啟用的程度，且不可小於 min_skill_level (400)。"
     enable:
       type: boolean
       default: true
@@ -187,7 +204,7 @@ CreatePickupGroupRequest:
     - capacity
     - location_id
     - sport_id
-    - skill_level
+    - min_skill_level
 
 UpdatePickupGroupRequest:
   type: object
@@ -215,10 +232,15 @@ UpdatePickupGroupRequest:
     sport_id:
       type: string
       format: uuid
-    skill_level:
+    min_skill_level:
       type: integer
       minimum: 1
-      description: "若變更 sport_id 或 skill_level，程度仍須在該球類對照表中已定義且啟用。"
+      description: "程度下限；一旦設定不可清空為 null。若變更 sport_id、min_skill_level 或 max_skill_level，程度範圍仍須在該球類對照表中已定義且啟用，且 max_skill_level 不可小於 min_skill_level。"
+    max_skill_level:
+      type: integer
+      minimum: 1
+      nullable: true
+      description: "程度上限，可省略保持不變；一旦設定則暫不支援再次清空為 null。"
     status:
       type: string
       enum: [active, cancelled, completed]
