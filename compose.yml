@@ -42,13 +42,14 @@ services:
         condition: service_healthy
 
   swagger-ui:
-    image: docker.swagger.io/swaggerapi/swagger-ui
+    image: court-booking-swagger
+    build:
+      context: .
+      dockerfile: Dockerfile.swagger
     container_name: court-booking-swagger
     restart: always
     environment:
       - SWAGGER_JSON=/docs/openapi.yml
-    volumes:
-      - ./docs:/docs
 
   cloudflared:
     image: cloudflare/cloudflared:latest

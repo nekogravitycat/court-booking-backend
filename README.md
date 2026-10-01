@@ -225,6 +225,8 @@ Password: <POSTGRES_PASSWORD>
 2.  **原始檔案**：
     位於 `docs/openapi.yml`。
 
+    原始文件維持拆分 YAML，Swagger 映像在 `Dockerfile.swagger` 建置階段使用固定版本的 Redocly CLI 合併成單一 OpenAPI 文件，避免瀏覽器逐一下載外部 `$ref`。部署照常執行 `git pull` 與 `docker compose up -d --build`，不需要額外執行合併指令；合併失敗會使 Swagger 映像建置失敗。首次建置需要下載 Node、Redocly CLI 與 Swagger UI 映像，執行階段只包含 Swagger UI 與合併後的文件。
+
 3.  **權限系統說明**：
     開發者可參考 `docs/role_system.md`，內含詳細的角色權限設計說明。
 

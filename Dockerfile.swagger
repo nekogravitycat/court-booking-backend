@@ -1,0 +1,13 @@
+FROM node:22-alpine AS bundler
+
+# Pin the bundler version and cache installation separately from documentation.
+RUN npm install --global @redocly/cli@2.25.1
+WORKDIR /spec
+COPY docs/ ./docs/
+
+# Resolve external references at build time; failure stops the image build.
+RUN redocly bundle docs/openapi.yml --output /spec/openapi.yml
+
+FROM docker.swagger.io/swaggerapi/swagger-ui
+COPY --from=bundler /spec/openapi.yml /docs/openapi.yml
+ENV SWAGGER_JSON=/docs/openapi.yml
