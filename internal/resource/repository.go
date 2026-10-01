@@ -32,8 +32,8 @@ func NewPgxRepository(pool *pgxpool.Pool) Repository {
 func (r *pgxRepository) Create(ctx context.Context, res *Resource) error {
 	psql := squirrel.StatementBuilder.PlaceholderFormat(squirrel.Dollar)
 	query, args, err := psql.Insert("public.resources").
-		Columns("resource_type", "location_id", "name", "price", "cover").
-		Values(res.ResourceType, res.LocationID, res.Name, res.Price, res.Cover).
+		Columns("resource_type", "sport_id", "location_id", "name", "price", "cover").
+		Values(res.ResourceType, res.SportID, res.LocationID, res.Name, res.Price, res.Cover).
 		Suffix("RETURNING id, created_at").
 		ToSql()
 	if err != nil {
@@ -43,15 +43,26 @@ func (r *pgxRepository) Create(ctx context.Context, res *Resource) error {
 	err = r.pool.QueryRow(ctx, query, args...).
 		Scan(&res.ID, &res.CreatedAt)
 	if err != nil {
+		if isSportFKViolation(err) {
+			return ErrInvalidSport
+		}
 		return fmt.Errorf("create resource failed: %w", err)
 	}
 	return nil
 }
 
+// isSportFKViolation reports whether err is a foreign-key violation on resources.sport_id.
+func isSportFKViolation(err error) bool {
+	var pgErr *pgconn.PgError
+	return errors.As(err, &pgErr) &&
+		pgErr.Code == pgerrcode.ForeignKeyViolation &&
+		pgErr.ConstraintName == "resources_sport_id_fkey"
+}
+
 func (r *pgxRepository) GetByID(ctx context.Context, id string) (*Resource, error) {
 	psql := squirrel.StatementBuilder.PlaceholderFormat(squirrel.Dollar)
 	query, args, err := psql.Select(
-		"r.id", "r.resource_type", "r.location_id", "l.name", "r.name", "r.price", "r.cover", "r.created_at",
+		"r.id", "r.resource_type", "r.sport_id", "r.location_id", "l.name", "r.name", "r.price", "r.cover", "r.created_at",
 	).
 		From("public.resources r").
 		Join("public.locations l ON r.location_id = l.id").
@@ -64,7 +75,7 @@ func (r *pgxRepository) GetByID(ctx context.Context, id string) (*Resource, erro
 	row := r.pool.QueryRow(ctx, query, args...)
 
 	var res Resource
-	if err := row.Scan(&res.ID, &res.ResourceType, &res.LocationID, &res.LocationName, &res.Name, &res.Price, &res.Cover, &res.CreatedAt); err != nil {
+	if err := row.Scan(&res.ID, &res.ResourceType, &res.SportID, &res.LocationID, &res.LocationName, &res.Name, &res.Price, &res.Cover, &res.CreatedAt); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, ErrNotFound
 		}
@@ -76,7 +87,7 @@ func (r *pgxRepository) GetByID(ctx context.Context, id string) (*Resource, erro
 func (r *pgxRepository) List(ctx context.Context, filter Filter) ([]*Resource, int, error) {
 	psql := squirrel.StatementBuilder.PlaceholderFormat(squirrel.Dollar)
 	query := psql.Select(
-		"r.id", "r.resource_type", "r.location_id", "l.name", "r.name", "r.price", "r.cover", "r.created_at",
+		"r.id", "r.resource_type", "r.sport_id", "r.location_id", "l.name", "r.name", "r.price", "r.cover", "r.created_at",
 		"count(*) OVER() as total_count",
 	).
 		From("public.resources r").
@@ -133,7 +144,7 @@ func (r *pgxRepository) List(ctx context.Context, filter Filter) ([]*Resource, i
 	for rows.Next() {
 		var res Resource
 		if err := rows.Scan(
-			&res.ID, &res.ResourceType, &res.LocationID, &res.LocationName,
+			&res.ID, &res.ResourceType, &res.SportID, &res.LocationID, &res.LocationName,
 			&res.Name, &res.Price, &res.Cover, &res.CreatedAt, &total,
 		); err != nil {
 			return nil, 0, fmt.Errorf("scan resource failed: %w", err)
@@ -159,6 +170,7 @@ func (r *pgxRepository) Update(ctx context.Context, res *Resource) error {
 	query, args, err := psql.Update("public.resources").
 		Set("name", res.Name).
 		Set("price", res.Price).
+		Set("sport_id", res.SportID).
 		Set("cover", res.Cover).
 		Where(squirrel.Eq{"id": res.ID}).
 		ToSql()
@@ -168,6 +180,9 @@ func (r *pgxRepository) Update(ctx context.Context, res *Resource) error {
 
 	ct, err := r.pool.Exec(ctx, query, args...)
 	if err != nil {
+		if isSportFKViolation(err) {
+			return ErrInvalidSport
+		}
 		return fmt.Errorf("update resource failed: %w", err)
 	}
 	if ct.RowsAffected() == 0 {

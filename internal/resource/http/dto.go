@@ -28,6 +28,7 @@ type ResourceResponse struct {
 	Name           string              `json:"name"`
 	Price          int                 `json:"price"`
 	ResourceType   string              `json:"resource_type"`
+	SportID        *string             `json:"sport_id"`
 	Location       locHttp.LocationTag `json:"location"`
 	Cover          *string             `json:"cover"`           // URL to cover image
 	CoverThumbnail *string             `json:"cover_thumbnail"` // URL to cover thumbnail
@@ -57,6 +58,7 @@ func NewResponse(r *resource.Resource) ResourceResponse {
 		Name:           r.Name,
 		Price:          r.Price,
 		ResourceType:   r.ResourceType,
+		SportID:        r.SportID,
 		Location:       locHttp.LocationTag{ID: r.LocationID, Name: r.LocationName},
 		Cover:          coverURL,
 		CoverThumbnail: coverThumbnailURL,
@@ -65,10 +67,11 @@ func NewResponse(r *resource.Resource) ResourceResponse {
 }
 
 type CreateRequest struct {
-	Name         string `json:"name" binding:"required,min=1,max=100"`
-	Price        int    `json:"price" binding:"min=0,max=1000000"`
-	LocationID   string `json:"location_id" binding:"required,uuid"`
-	ResourceType string `json:"resource_type" binding:"required,oneof=badminton tennis basketball table_tennis volleyball football classroom other"`
+	Name         string  `json:"name" binding:"required,min=1,max=100"`
+	Price        int     `json:"price" binding:"min=0,max=1000000"`
+	LocationID   string  `json:"location_id" binding:"required,uuid"`
+	ResourceType string  `json:"resource_type" binding:"required,oneof=badminton tennis basketball table_tennis volleyball football classroom other"`
+	SportID      *string `json:"sport_id" binding:"omitempty,uuid"`
 }
 
 // Validate performs custom validation for CreateRequest.
@@ -77,8 +80,9 @@ func (r *CreateRequest) Validate() error {
 }
 
 type UpdateRequest struct {
-	Name  *string `json:"name" binding:"omitempty,min=1,max=100"`
-	Price *int    `json:"price" binding:"omitempty,min=0,max=1000000"`
+	Name    *string `json:"name" binding:"omitempty,min=1,max=100"`
+	Price   *int    `json:"price" binding:"omitempty,min=0,max=1000000"`
+	SportID *string `json:"sport_id" binding:"omitempty,uuid"`
 }
 
 // Validate performs custom validation for UpdateRequest.

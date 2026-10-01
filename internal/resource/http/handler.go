@@ -124,6 +124,7 @@ func (h *Handler) Create(c *gin.Context) {
 		Price:        body.Price,
 		LocationID:   body.LocationID,
 		ResourceType: body.ResourceType,
+		SportID:      body.SportID,
 	}
 
 	res, err := h.service.Create(c.Request.Context(), req)
@@ -200,8 +201,9 @@ func (h *Handler) Update(c *gin.Context) {
 	}
 
 	req := resource.UpdateRequest{
-		Name:  body.Name,
-		Price: body.Price,
+		Name:    body.Name,
+		Price:   body.Price,
+		SportID: body.SportID,
 	}
 
 	res, err := h.service.Update(c.Request.Context(), uri.ID, req)

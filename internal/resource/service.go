@@ -15,11 +15,13 @@ type CreateRequest struct {
 	Price        int
 	LocationID   string
 	ResourceType string
+	SportID      *string
 }
 
 type UpdateRequest struct {
-	Name  *string
-	Price *int
+	Name    *string
+	Price   *int
+	SportID *string
 }
 
 type Service interface {
@@ -83,6 +85,7 @@ func (s *service) Create(ctx context.Context, req CreateRequest) (*Resource, err
 		Price:        req.Price,
 		LocationID:   req.LocationID,
 		ResourceType: req.ResourceType,
+		SportID:      req.SportID,
 	}
 
 	if err := s.repo.Create(ctx, res); err != nil {
@@ -116,6 +119,14 @@ func (s *service) Update(ctx context.Context, id string, req UpdateRequest) (*Re
 			return nil, apperror.New(http.StatusBadRequest, "price cannot be negative")
 		}
 		res.Price = *req.Price
+	}
+	if req.SportID != nil {
+		// An empty string clears the sport; otherwise it sets/replaces it.
+		if *req.SportID == "" {
+			res.SportID = nil
+		} else {
+			res.SportID = req.SportID
+		}
 	}
 
 	if err := s.repo.Update(ctx, res); err != nil {

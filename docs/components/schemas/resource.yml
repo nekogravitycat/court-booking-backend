@@ -23,6 +23,10 @@ ResourceResponse:
       description: Hourly rate or booking fee
     resource_type:
       $ref: "#/ResourceType"
+    sport_id:
+      type: string
+      format: uuid
+      nullable: true
     cover:
       type: string
       format: uri
@@ -57,6 +61,9 @@ CreateResourceRequest:
       format: uuid
     resource_type:
       $ref: "#/ResourceType"
+    sport_id:
+      type: string
+      format: uuid
   required:
     - name
     - location_id
@@ -70,6 +77,11 @@ UpdateResourceRequest:
     price:
       type: integer
       minimum: 0
+    sport_id:
+      type: string
+      format: uuid
+      nullable: true
+      description: Omit or null keeps the current value; an empty string clears it.
 
 ResourceTag:
   type: object

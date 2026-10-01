@@ -36,6 +36,7 @@ func (r *ListBookingsRequest) Validate() error {
 type BookingResponse struct {
 	ID            string                  `json:"id"`
 	Resource      resHttp.ResourceTag     `json:"resource"`
+	SportID       *string                 `json:"sport_id"`
 	User          userHttp.UserTag        `json:"user"`
 	Location      locHttp.LocationTag     `json:"location"`
 	Organization  orgHttp.OrganizationTag `json:"organization"`
@@ -51,6 +52,7 @@ func NewBookingResponse(b *booking.Booking) BookingResponse {
 	return BookingResponse{
 		ID:            b.ID,
 		Resource:      resHttp.ResourceTag{ID: b.ResourceID, Name: b.ResourceName},
+		SportID:       b.SportID,
 		User:          userHttp.UserTag{ID: b.UserID, Name: b.UserName},
 		Location:      locHttp.LocationTag{ID: b.LocationID, Name: b.LocationName},
 		Organization:  orgHttp.OrganizationTag{ID: b.OrganizationID, Name: b.OrganizationName},

@@ -72,6 +72,7 @@ type Booking struct {
 	ID               string
 	ResourceID       string
 	ResourceName     string
+	SportID          *string // Sport of the booked resource, nil if unset
 	UserID           string
 	UserName         string
 	LocationID       string

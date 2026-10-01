@@ -13,6 +13,7 @@ var (
 	ErrEmptyName           = apperror.New(http.StatusBadRequest, "name cannot be empty")
 	ErrInvalidLocation     = apperror.New(http.StatusBadRequest, "invalid location_id")
 	ErrInvalidResourceType = apperror.New(http.StatusBadRequest, "invalid resource_type")
+	ErrInvalidSport        = apperror.New(http.StatusBadRequest, "invalid sport_id")
 )
 
 // ValidResourceTypes defines the allowed resource type enum values
@@ -31,6 +32,7 @@ var ValidResourceTypes = []string{
 type Resource struct {
 	ID           string
 	ResourceType string
+	SportID      *string // Optional sport this resource is used for
 	LocationID   string
 	LocationName string
 	Name         string

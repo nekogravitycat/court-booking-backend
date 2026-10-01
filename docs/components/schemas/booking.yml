@@ -6,6 +6,11 @@ BookingResponse:
       format: uuid
     resource:
       $ref: "./resource.yml#/ResourceTag"
+    sport_id:
+      type: string
+      format: uuid
+      nullable: true
+      description: Sport of the booked resource; null if the resource has no sport set
     user:
       $ref: "./user.yml#/UserTag"
     location:

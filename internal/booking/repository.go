@@ -67,7 +67,7 @@ func mapOverlapError(err error) error {
 func (r *pgxRepository) GetByID(ctx context.Context, id string) (*Booking, error) {
 	psql := squirrel.StatementBuilder.PlaceholderFormat(squirrel.Dollar)
 	query, args, err := psql.Select(
-		"b.id", "b.resource_id", "r.name", "b.user_id", "u.display_name",
+		"b.id", "b.resource_id", "r.name", "r.sport_id", "b.user_id", "u.display_name",
 		"l.id", "l.name", "o.id", "o.name",
 		"b.start_time", "b.end_time", "b.status", "b.payment_status", "b.created_at", "b.updated_at",
 	).
@@ -86,7 +86,7 @@ func (r *pgxRepository) GetByID(ctx context.Context, id string) (*Booking, error
 
 	var b Booking
 	if err := row.Scan(
-		&b.ID, &b.ResourceID, &b.ResourceName, &b.UserID, &b.UserName,
+		&b.ID, &b.ResourceID, &b.ResourceName, &b.SportID, &b.UserID, &b.UserName,
 		&b.LocationID, &b.LocationName, &b.OrganizationID, &b.OrganizationName,
 		&b.StartTime, &b.EndTime, &b.Status, &b.PaymentStatus, &b.CreatedAt, &b.UpdatedAt,
 	); err != nil {
@@ -101,7 +101,7 @@ func (r *pgxRepository) GetByID(ctx context.Context, id string) (*Booking, error
 func (r *pgxRepository) List(ctx context.Context, filter Filter) ([]*Booking, int, error) {
 	psql := squirrel.StatementBuilder.PlaceholderFormat(squirrel.Dollar)
 	query := psql.Select(
-		"b.id", "b.resource_id", "r.name", "b.user_id", "u.display_name",
+		"b.id", "b.resource_id", "r.name", "r.sport_id", "b.user_id", "u.display_name",
 		"l.id", "l.name", "o.id", "o.name",
 		"b.start_time", "b.end_time", "b.status", "b.payment_status", "b.created_at", "b.updated_at",
 		"count(*) OVER() as total_count",
@@ -173,7 +173,7 @@ func (r *pgxRepository) List(ctx context.Context, filter Filter) ([]*Booking, in
 	for rows.Next() {
 		var b Booking
 		if err := rows.Scan(
-			&b.ID, &b.ResourceID, &b.ResourceName, &b.UserID, &b.UserName,
+			&b.ID, &b.ResourceID, &b.ResourceName, &b.SportID, &b.UserID, &b.UserName,
 			&b.LocationID, &b.LocationName, &b.OrganizationID, &b.OrganizationName,
 			&b.StartTime, &b.EndTime, &b.Status, &b.PaymentStatus, &b.CreatedAt, &b.UpdatedAt, &total,
 		); err != nil {
