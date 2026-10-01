@@ -8,6 +8,9 @@ import (
 )
 
 var (
+	ErrSkillLevelNotSet     = apperror.New(http.StatusBadRequest, "skill level not set for this sport; set it via PUT /me/skill-levels/{sport_id}")
+	ErrInvalidSkillLevel    = apperror.New(http.StatusBadRequest, "skill level must be defined and active for this sport")
+	ErrSportInactive        = apperror.New(http.StatusBadRequest, "sport is inactive")
 	ErrNotFound             = apperror.New(http.StatusNotFound, "user not found")
 	ErrEmailAlreadyUsed     = apperror.New(http.StatusConflict, "email already used")
 	ErrInvalidCredentials   = apperror.New(http.StatusUnauthorized, "invalid email or password")
@@ -24,6 +27,16 @@ var (
 	ErrInvalidGender        = apperror.New(http.StatusBadRequest, "gender must be one of male, female, other")
 	ErrInvalidBirthDate     = apperror.New(http.StatusBadRequest, "birth_date must be a past date on or after 1900-01-01")
 )
+
+// SportSkillLevel is an account's self-reported level, separate from host ratings.
+type SportSkillLevel struct {
+	SportID    string
+	SportName  string
+	SkillLevel int
+	Label      string
+	IsActive   bool
+	UpdatedAt  time.Time
+}
 
 // User represents a user in the system.
 type User struct {

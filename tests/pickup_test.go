@@ -33,10 +33,9 @@ func getSportSkill(t *testing.T, sportCode, skillLabel string) (sportID string, 
 	return sportID, level
 }
 
-// enrollBody is the enrollment body used by tests that do not care about the
-// self-reported level.
-func enrollBody() pickupHttp.CreateOrderBody {
-	return pickupHttp.CreateOrderBody{SkillLevel: 1}
+// enrollBody keeps older call sites concise; enrollment needs no request body.
+func enrollBody() any {
+	return nil
 }
 
 func TestPickupGroupCRUD(t *testing.T) {

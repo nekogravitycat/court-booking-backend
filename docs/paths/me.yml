@@ -1,3 +1,107 @@
+skillLevels:
+  get:
+    tags: [Me]
+    summary: "取得自己的各運動自評程度"
+    description: "一次回傳所有已設定的運動（單頁）。包含停用項目；is_active 為運動與程度均啟用時才為 true。與主辦人評分 /me/skill-ratings 分開。"
+    operationId: listMySkillLevels
+    security:
+      - bearerAuth: []
+    responses:
+      "200":
+        description: Account skill levels
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [items, page, page_size, total]
+              properties:
+                items:
+                  type: array
+                  items:
+                    $ref: "../components/schemas/user.yml#/SportSkillLevelResponse"
+                page:
+                  type: integer
+                  example: 1
+                page_size:
+                  type: integer
+                total:
+                  type: integer
+      "401":
+        description: Unauthorized
+
+sportSkillLevel:
+  parameters:
+    - name: sport_id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+  get:
+    tags: [Me]
+    summary: "取得自己的指定運動自評程度"
+    operationId: getMySportSkillLevel
+    security:
+      - bearerAuth: []
+    responses:
+      "200":
+        description: Account skill level
+        content:
+          application/json:
+            schema:
+              $ref: "../components/schemas/user.yml#/SportSkillLevelResponse"
+      "400":
+        description: UUID 格式錯誤或尚未設定該運動程度
+      "401":
+        description: Unauthorized
+  put:
+    tags: [Me]
+    summary: "設定或取代自己的指定運動自評程度"
+    description: "每個運動各一筆。運動須存在且啟用，skill_level 須為該運動已定義且啟用的程度。只修改本人資料，不影響既有訂單快照或主辦人評分。"
+    operationId: setMySportSkillLevel
+    security:
+      - bearerAuth: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [skill_level]
+            properties:
+              skill_level:
+                type: integer
+                minimum: 1
+                maximum: 100
+                example: 2
+    responses:
+      "200":
+        description: Account skill level saved
+        content:
+          application/json:
+            schema:
+              $ref: "../components/schemas/user.yml#/SportSkillLevelResponse"
+      "400":
+        description: UUID、程度無效或運動停用
+      "401":
+        description: Unauthorized
+      "404":
+        description: 運動不存在
+  delete:
+    tags: [Me]
+    summary: "清除自己的指定運動自評程度"
+    description: "冪等操作。既有訂單快照不變；再次報名該運動前須重新設定程度。"
+    operationId: deleteMySportSkillLevel
+    security:
+      - bearerAuth: []
+    responses:
+      "204":
+        description: Cleared (including when already absent)
+      "400":
+        description: UUID 格式錯誤
+      "401":
+        description: Unauthorized
+
 me:
   get:
     tags:

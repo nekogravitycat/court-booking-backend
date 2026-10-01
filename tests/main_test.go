@@ -154,6 +154,14 @@ func createTestUser(t *testing.T, email, password string, isAdmin bool) *user.Us
 	err = repo.Create(context.Background(), u)
 	require.NoError(t, err, "Failed to create test user in DB")
 
+	// Most integration fixtures represent accounts ready to enroll. Tests for
+	// missing declarations explicitly remove these defaults.
+	_, err = testPool.Exec(context.Background(), `INSERT INTO public.user_skill_levels (user_id, sport_id, skill_level)
+		SELECT $1, sl.sport_id, sl.level FROM public.skill_levels sl
+		JOIN public.sports sp ON sp.id = sl.sport_id
+		WHERE sl.level = 1 AND sl.is_active AND sp.is_active`, u.ID)
+	require.NoError(t, err)
+
 	savedUser, err := repo.GetByEmail(context.Background(), email)
 	require.NoError(t, err, "Failed to fetch created user")
 

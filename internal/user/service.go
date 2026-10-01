@@ -10,6 +10,8 @@ import (
 
 	"github.com/nekogravitycat/court-booking-backend/internal/auth"
 	"github.com/nekogravitycat/court-booking-backend/internal/file"
+	"github.com/nekogravitycat/court-booking-backend/internal/skilllevel"
+	"github.com/nekogravitycat/court-booking-backend/internal/sports"
 )
 
 // usernamePattern enforces a Twitter-style handle: 4-15 characters of lowercase
@@ -38,6 +40,10 @@ type UpdateUserRequest struct {
 
 // Service defines business logic related to users.
 type Service interface {
+	GetSkillLevel(ctx context.Context, userID, sportID string) (*SportSkillLevel, error)
+	ListSkillLevels(ctx context.Context, userID string) ([]*SportSkillLevel, error)
+	SetSkillLevel(ctx context.Context, userID, sportID string, level int) (*SportSkillLevel, error)
+	DeleteSkillLevel(ctx context.Context, userID, sportID string) error
 	Register(ctx context.Context, req RegisterRequest) (*User, error)
 	Login(ctx context.Context, email, password string) (*User, error)
 	GetByID(ctx context.Context, id string) (*User, error)
@@ -64,10 +70,12 @@ type HostFavoriteCleaner interface {
 }
 
 type service struct {
-	repo            Repository
-	hasher          auth.PasswordHasher
-	fileService     file.Service
-	favoriteCleaner HostFavoriteCleaner
+	sportsService     sports.Service
+	skillLevelService skilllevel.Service
+	repo              Repository
+	hasher            auth.PasswordHasher
+	fileService       file.Service
+	favoriteCleaner   HostFavoriteCleaner
 
 	minPasswordLength int
 	maxPasswordLength int
@@ -81,12 +89,14 @@ type service struct {
 // NewService creates a new user Service.
 // favoriteCleaner may be nil (e.g. in tests that don't exercise favorites);
 // account deletion simply skips favorite cleanup in that case.
-func NewService(repo Repository, hasher auth.PasswordHasher, fileService file.Service, favoriteCleaner HostFavoriteCleaner) Service {
+func NewService(repo Repository, hasher auth.PasswordHasher, fileService file.Service, favoriteCleaner HostFavoriteCleaner, sportsService sports.Service, skillLevelService skilllevel.Service) Service {
 	// Precompute a dummy hash at the configured cost so login timing for
 	// unknown accounts matches the real bcrypt comparison cost.
 	dummyHash, _ := hasher.Hash("dummy-password-for-constant-time-login")
 
 	return &service{
+		sportsService:     sportsService,
+		skillLevelService: skillLevelService,
 		repo:              repo,
 		hasher:            hasher,
 		fileService:       fileService,

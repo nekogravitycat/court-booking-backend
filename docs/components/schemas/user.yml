@@ -1,3 +1,25 @@
+SportSkillLevelResponse:
+  type: object
+  required: [sport_id, sport_name, skill_level, label, is_active, updated_at]
+  properties:
+    sport_id:
+      type: string
+      format: uuid
+    sport_name:
+      type: string
+    skill_level:
+      type: integer
+      minimum: 1
+      maximum: 100
+    label:
+      type: string
+    is_active:
+      type: boolean
+      description: "運動與程度皆啟用"
+    updated_at:
+      type: string
+      format: date-time
+
 UserResponse:
   type: object
   properties:

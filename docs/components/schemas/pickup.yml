@@ -266,7 +266,7 @@ PickupOrderResponse:
       nullable: true
     skill_level:
       type: integer
-      description: "報名者自填的程度 (整數)。多人報名時為揪團主 (members 第一筆) 的程度。"
+      description: "報名時從帳號設定取得的程度快照 (整數)。多人報名時為揪團主 (members 第一筆) 的帳號程度。後續修改帳號不影響快照。"
     party_size:
       type: integer
       description: "此訂單佔用的名額數；單人報名為 1"
@@ -274,7 +274,9 @@ PickupOrderResponse:
       type: array
       description: "多人報名的每個座位 (含揪團主)；單人報名時省略此欄位"
       items:
-        $ref: "#/PartyMember"
+        allOf:
+          - $ref: "#/PartyMember"
+          - required: [skill_level]
     status:
       type: string
       enum: [pending, confirmed, cancelled, cancel_request, rejected]
@@ -303,18 +305,11 @@ PickupOrderResponse:
 
 CreatePickupOrderRequest:
   type: object
-  description: "單人報名。群組 ID 取自路徑、使用者取自 Token；只需自填程度。"
-  properties:
-    skill_level:
-      type: integer
-      minimum: 1
-      description: "報名者自填的程度整數，須為該球類對照表已定義且啟用的程度 (否則 400)。"
-  required:
-    - skill_level
+  description: "單人報名不需 body。程度取自帳號設定；舊客戶端提供的 skill_level 會被忽略。"
 
 PartyMember:
   type: object
-  description: "多人報名的一個座位。匿名，無帳號。"
+  description: "多人報名的一個座位。第一筆為本人，skill_level 可省略且會由帳號設定覆蓋；其他同行者匿名，必須提供 skill_level。"
   properties:
     gender:
       type: string
@@ -324,7 +319,6 @@ PartyMember:
       minimum: 1
   required:
     - gender
-    - skill_level
 
 CreatePartyOrderRequest:
   type: object

@@ -16,6 +16,10 @@ func RegisterRoutes(g *gin.RouterGroup, h *UserHandler, authMiddleware, adminMid
 	// === Authenticated Routes ===
 	g.GET("/me", authMiddleware, h.Me)         // Get current user profile
 	g.PATCH("/me", authMiddleware, h.UpdateMe) // Update own profile
+	g.GET("/me/skill-levels", authMiddleware, h.ListSkillLevels)
+	g.GET("/me/skill-levels/:sport_id", authMiddleware, h.GetSkillLevel)
+	g.PUT("/me/skill-levels/:sport_id", authMiddleware, h.SetSkillLevel)
+	g.DELETE("/me/skill-levels/:sport_id", authMiddleware, h.DeleteSkillLevel)
 
 	// === Avatar Routes (Self or System Admin; enforced in the handler) ===
 	avatarGroup := g.Group("/users")

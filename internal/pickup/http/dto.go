@@ -272,16 +272,11 @@ func NewPickupGroupResponse(g *pickup.PickupGroup, orders []*pickup.PickupOrder)
 
 // --- Enrollment (single / party) ---
 
-// CreateOrderBody is the body of POST /pickup-groups/{id}/orders. SkillLevel is
-// the enrollee's self-reported level on the group's sport scale.
-type CreateOrderBody struct {
-	SkillLevel int `json:"skill_level" binding:"required,min=1,max=100"`
-}
-
-// OrderMemberBody is one seat of a party enrollment.
+// OrderMemberBody is one seat of a party enrollment. The organizer's level is
+// optional and replaced by the account declaration; companions require a level.
 type OrderMemberBody struct {
 	Gender     string `json:"gender" binding:"required,oneof=male female other"`
-	SkillLevel int    `json:"skill_level" binding:"required,min=1,max=100"`
+	SkillLevel int    `json:"skill_level" binding:"omitempty,min=1,max=100"`
 }
 
 // CreatePartyOrderBody is the body of POST /pickup-groups/{id}/party-orders.

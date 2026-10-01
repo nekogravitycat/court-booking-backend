@@ -114,12 +114,12 @@ pickupGroups:
   post:
     tags:
       - Pickup Groups
-    summary: "建立新的臨打團 (僅限球團主辦人)"
+    summary: "建立新的臨打團 (登入使用者)"
     description: |
       建立新的臨打團。host_id 直接由 JWT Token 解析得出。
 
       **權限 Access Control**:
-      - **Pickup Host Required**: 僅具有 pickup host 身分 (或系統管理員) 的使用者可建立。
+      - **Login Required**: 任何已登入且啟用的使用者可建立，不需 pickup host 身分。
     security:
       - bearerAuth: []
     requestBody:
@@ -171,7 +171,7 @@ pickupGroupDetail:
       更新臨打團資訊（含變更臨打團狀態）。
 
       **權限 Access Control**:
-      - **Pickup Host (own group)**: 球團主辦人可更新自己主辦的臨打團。
+      - **Group Creator (own group)**: 創建者可更新自己的臨打團，不需 pickup host 身分。
       - **System Admin**: 系統管理員可更新任意臨打團。
     security:
       - bearerAuth: []
@@ -262,7 +262,9 @@ pickupGroupOrders:
       同時會檢查該使用者是否已報名其他時段重疊的臨打團，若有衝突則回傳 409
       並帶有 "error": "time_conflict"。
 
-      報名時須自填 skill_level (整數，必須是該球類對照表已定義且啟用的程度)。
+      不需 request body。程度從帳號的該運動設定讀取並保存為訂單快照。
+      尚未設定時回傳 400，須先 PUT /me/skill-levels/{sport_id}；運動或程度停用也會回傳 400。
+      舊客戶端傳入的 skill_level 會被忽略。修改帳號程度不會影響既有訂單。
       一張單人訂單佔 1 個名額；若要一次替多人報名請用 POST /pickup-groups/{id}/party-orders。
 
       **權限 Access Control**:
@@ -276,12 +278,6 @@ pickupGroupOrders:
         schema:
           type: string
           format: uuid
-    requestBody:
-      required: true
-      content:
-        application/json:
-          schema:
-            $ref: "../components/schemas/pickup.yml#/CreatePickupOrderRequest"
     responses:
       "201":
         description: Created
@@ -289,6 +285,8 @@ pickupGroupOrders:
           application/json:
             schema:
               $ref: "../components/schemas/pickup.yml#/PickupOrderResponse"
+      "400":
+        description: 尚未設定該運動程度，或運動/程度已停用
       "409":
         description: |
           group is fully booked, user already enrolled, or the user already has
@@ -520,6 +518,8 @@ pickupGroupPartyOrders:
       否則 409 (group is fully booked)。
 
       - members 為每一個座位 (**含揪團主本人，放在第一筆**)，長度必須等於 party_size。
+      - 本人的 skill_level 可省略，伺服器會從帳號設定讀取並覆蓋第一筆；尚未設定回傳 400。
+      - 其他同行者仍須提供該運動已定義且啟用的 skill_level。全部程度保存為報名快照。
       - 成員不需要帳號，僅記錄性別與程度，會併入報名統計；**不適用未來的評分系統**。
       - organizer_name 會存成訂單的 booker_name。
       - 其餘規則同單人報名：同一使用者對同一團只能有一張訂單 (409)、時段衝突回 409 time_conflict、

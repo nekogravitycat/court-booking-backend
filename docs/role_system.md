@@ -186,7 +186,7 @@ flowchart TD
     LOC -.->|"pickup_groups.location_id<br/>唯一交會點"| PG
 
     U1["一般使用者"] -->|"建立"| BOOK
-    U2["Pickup Host"] -->|"建立"| PG
+    U2["登入使用者"] -->|"建立"| PG
     U3["一般使用者"] -->|"報名"| PO
 
     SPORT["sports / skill_levels<br/>System Admin 維護的字典表"] -.->|"FK"| PG
@@ -351,12 +351,12 @@ flowchart TD
 
 ### 6.6 臨打團（pickup）
 
-| 端點 | Guest | 一般使用者 | 報名本人 | Pickup Host（自己的團） | System Admin |
+| 端點 | Guest | 一般使用者 | 報名本人 | 團的創建者（不需 Pickup Host 角色） | System Admin |
 | --- | :-: | :-: | :-: | :-: | :-: |
 | `GET /v1/pickup-groups`（公開列表） | ✔ | ✔ | ✔ | ✔ | ✔ |
 | `GET /v1/hosts/:host_id/pickup-groups` | ✔ | ✔ | ✔ | ✔ | ✔ |
 | `GET /v1/pickup-groups/:id` | — | ✔ | ✔ | ✔ | ✔ |
-| `POST /v1/pickup-groups` | — | — | — | ✔ | ✔ |
+| `POST /v1/pickup-groups` | — | ✔ | ✔ | ✔ | ✔ |
 | `PATCH /v1/pickup-groups/:id` | — | — | — | ✔（限自己的團） | ✔ |
 | `DELETE /v1/pickup-groups/:id` | — | — | — | — | ✔ |
 | `POST /:id/orders`（報名） | — | ✔ | — | ✔ | ✔ |
@@ -367,6 +367,10 @@ flowchart TD
 | `DELETE /v1/pickup-orders/:id` | — | — | — | — | ✔ |
 
 兩個公開列表端點套用 `AuthOptional` middleware：未登入也能瀏覽，但**帶了有效 token 時會額外回傳個人化的 `enrolled_status`**（見 [pickup/http/route.go](../internal/pickup/http/route.go)）。
+
+所有登入且啟用的使用者皆可創團，且可管理自己創建的團；不需也不會自動取得 Pickup Host 全域角色。
+報名前須先透過 `PUT /v1/me/skill-levels/:sport_id` 設定該運動的程度。
+單人報名不需 body，伺服器保存帳號程度快照；多人報名的第一位亦使用帳號程度，匿名同行者仍自行填程度。
 
 **團主移除參加者的方式**是把訂單改為 `rejected`（migration 000005 新增的狀態），而不是刪除。保留該列可讓 `UNIQUE (pickup_group_id, user_id)` 約束繼續擋住被拒絕者重複報名；硬刪除保留給 System Admin。
 
@@ -457,7 +461,7 @@ sequenceDiagram
 
 ### 8.4 組織對自家場地的臨打團沒有管轄權
 
-`pickup_groups.location_id` 指向 `locations`，但臨打團的所有權限判斷只看「是否為該團 host」或「是否為 System Admin」。這代表任何一位 Pickup Host 可以在**任何組織的任何場地**開團，該場地的 Owner 既無法審核，也看不到，更無法取消。
+`pickup_groups.location_id` 指向 `locations`，但臨打團的管理權限只看「是否為該團創建者」或「是否為 System Admin」。這代表任何一位登入使用者可以在**任何組織的任何場地**開團，該場地的 Owner 既無法審核，也看不到，更無法取消。
 
 **問題**：臨打團與場地之間的關係，是否只是「地點標註」而不涉及實際場地佔用？如果臨打團實際上會佔用場地時段，是否應該要求關聯到一筆 `booking`，或至少讓場地所屬組織具備審核/停用的權限？
 

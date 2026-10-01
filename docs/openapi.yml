@@ -295,6 +295,12 @@ paths:
   /me:
     $ref: "./paths/me.yml#/me"
 
+  /me/skill-levels:
+    $ref: "./paths/me.yml#/skillLevels"
+
+  /me/skill-levels/{sport_id}:
+    $ref: "./paths/me.yml#/sportSkillLevel"
+
   /me/skill-ratings:
     $ref: "./paths/skill_ratings.yml#/mySkillRatings"
 

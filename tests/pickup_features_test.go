@@ -43,12 +43,16 @@ func createGroup(t *testing.T, hostToken, locationID, sportID string, level, cap
 	return resp
 }
 
-// enroll enrolls the caller in a group with the given self-reported level and
-// returns the created order.
+// enroll configures the caller's account level and enrolls without a body.
 func enroll(t *testing.T, token, groupID string, level int) pickupHttp.PickupOrderResponse {
 	t.Helper()
+	var sportID string
+	require.NoError(t, testPool.QueryRow(context.Background(),
+		"SELECT sport_id FROM public.pickup_groups WHERE id = $1", groupID).Scan(&sportID))
+	wSet := executeRequest("PUT", "/v1/me/skill-levels/"+sportID, userHttp.SetSkillLevelBody{SkillLevel: level}, token)
+	require.Equal(t, http.StatusOK, wSet.Code, wSet.Body.String())
 	w := executeRequest("POST", fmt.Sprintf("/v1/pickup-groups/%s/orders", groupID),
-		pickupHttp.CreateOrderBody{SkillLevel: level}, token)
+		nil, token)
 	require.Equal(t, http.StatusCreated, w.Code, w.Body.String())
 
 	var resp pickupHttp.PickupOrderResponse
@@ -478,11 +482,13 @@ func TestPartyEnrollmentAndParticipantStats(t *testing.T) {
 	})
 
 	t.Run("single enrollment requires a defined skill level", func(t *testing.T) {
+		wDelete := executeRequest("DELETE", "/v1/me/skill-levels/"+sportID, nil, lateToken)
+		require.Equal(t, http.StatusNoContent, wDelete.Code)
 		wNone := executeRequest("POST", fmt.Sprintf("/v1/pickup-groups/%s/orders", group.ID), nil, lateToken)
 		assert.Equal(t, http.StatusBadRequest, wNone.Code)
 
 		wBad := executeRequest("POST", fmt.Sprintf("/v1/pickup-groups/%s/orders", group.ID),
-			pickupHttp.CreateOrderBody{SkillLevel: 99}, lateToken)
+			map[string]int{"skill_level": 99}, lateToken)
 		assert.Equal(t, http.StatusBadRequest, wBad.Code)
 	})
 

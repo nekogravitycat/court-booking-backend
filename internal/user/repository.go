@@ -17,6 +17,10 @@ import (
 
 // Repository defines methods for accessing user data from storage.
 type Repository interface {
+	GetSkillLevel(ctx context.Context, userID, sportID string) (*SportSkillLevel, error)
+	ListSkillLevels(ctx context.Context, userID string) ([]*SportSkillLevel, error)
+	SetSkillLevel(ctx context.Context, userID, sportID string, level int) (*SportSkillLevel, error)
+	DeleteSkillLevel(ctx context.Context, userID, sportID string) error
 	GetByEmail(ctx context.Context, email string) (*User, error)
 	GetByID(ctx context.Context, id string) (*User, error)
 	Create(ctx context.Context, u *User) error

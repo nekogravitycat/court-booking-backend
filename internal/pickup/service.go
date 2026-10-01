@@ -36,14 +36,12 @@ type CreateGroupRequest struct {
 	Enable        bool
 }
 
-// CreateOrderRequest enrolls a single user. SkillLevel is the enrollee's
-// self-reported level on the group's sport scale.
+// CreateOrderRequest enrolls a single user using their account skill level.
 type CreateOrderRequest struct {
 	PickupGroupID string
 	UserID        string
 	BookerName    string
 	BookerPhone   string
-	SkillLevel    int
 }
 
 // CreatePartyOrderRequest enrolls several people under one order. Members holds
@@ -366,7 +364,8 @@ func (s *service) CreateOrder(ctx context.Context, req CreateOrderRequest) (*Pic
 	if err != nil {
 		return nil, err
 	}
-	if err := s.validateSkillLevel(ctx, group.SportID, req.SkillLevel); err != nil {
+	level, err := s.enrollmentSkillLevel(ctx, req.UserID, group.SportID)
+	if err != nil {
 		return nil, err
 	}
 
@@ -377,7 +376,7 @@ func (s *service) CreateOrder(ctx context.Context, req CreateOrderRequest) (*Pic
 		BookerPhone:   req.BookerPhone,
 		Status:        OrderStatusPending,
 		PaymentStatus: PaymentStatusPending,
-		SkillLevel:    req.SkillLevel,
+		SkillLevel:    level,
 		PartySize:     1,
 	}
 
@@ -403,6 +402,13 @@ func (s *service) CreatePartyOrder(ctx context.Context, req CreatePartyOrderRequ
 	}
 
 	// Validate every member; each distinct level is looked up only once.
+	level, err := s.enrollmentSkillLevel(ctx, req.UserID, group.SportID)
+	if err != nil {
+		return nil, err
+	}
+	// Copy before overriding the organizer so the caller's slice is untouched.
+	req.Members = append([]OrderMember(nil), req.Members...)
+	req.Members[0].SkillLevel = level
 	checkedLevels := make(map[int]struct{})
 	for _, m := range req.Members {
 		if !user.IsValidGender(m.Gender) {
@@ -435,6 +441,22 @@ func (s *service) CreatePartyOrder(ctx context.Context, req CreatePartyOrderRequ
 
 	s.notifyHostOfEnrollment(ctx, group, order)
 	return order, nil
+}
+
+// enrollmentSkillLevel captures the account declaration at enrollment time.
+// Inactive scales cannot be used even when the account was configured earlier.
+func (s *service) enrollmentSkillLevel(ctx context.Context, userID, sportID string) (int, error) {
+	if err := s.validateSport(ctx, sportID); err != nil {
+		return 0, err
+	}
+	level, err := s.userService.GetSkillLevel(ctx, userID, sportID)
+	if err != nil {
+		return 0, err
+	}
+	if err := s.validateSkillLevel(ctx, sportID, level.SkillLevel); err != nil {
+		return 0, err
+	}
+	return level.SkillLevel, nil
 }
 
 // notifyHostOfEnrollment tells the host that someone enrolled.

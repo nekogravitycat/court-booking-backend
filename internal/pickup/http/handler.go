@@ -42,17 +42,6 @@ func (h *Handler) CreateGroup(c *gin.Context) {
 		return
 	}
 
-	// Only pickup hosts (or system admins) may create pickup groups.
-	u, err := h.userService.GetByID(c.Request.Context(), userID)
-	if err != nil {
-		response.Error(c, err)
-		return
-	}
-	if !u.IsSystemAdmin && !u.IsPickupHost {
-		c.JSON(http.StatusForbidden, gin.H{"error": "only pickup hosts can create pickup groups"})
-		return
-	}
-
 	enable := true
 	if body.Enable != nil {
 		enable = *body.Enable
@@ -232,7 +221,7 @@ func (h *Handler) UpdateGroup(c *gin.Context) {
 		return
 	}
 
-	// System admins may update any group; a pickup host may update only their
+	// System admins may update any group; its creator may update only their
 	// own groups.
 	if !u.IsSystemAdmin {
 		group, err := h.service.GetGroupByID(c.Request.Context(), uri.ID)
@@ -240,7 +229,7 @@ func (h *Handler) UpdateGroup(c *gin.Context) {
 			response.Error(c, err)
 			return
 		}
-		if !u.IsPickupHost || group.HostID != userID {
+		if group.HostID != userID {
 			c.JSON(http.StatusForbidden, gin.H{"error": "only the pickup host or a system admin can update this pickup group"})
 			return
 		}
@@ -315,12 +304,6 @@ func (h *Handler) CreateOrder(c *gin.Context) {
 		return
 	}
 
-	var body CreateOrderBody
-	if err := c.ShouldBindJSON(&body); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request body", "details": err.Error()})
-		return
-	}
-
 	userID := auth.GetUserID(c)
 	if userID == "" {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
@@ -347,7 +330,6 @@ func (h *Handler) CreateOrder(c *gin.Context) {
 		UserID:        userID,
 		BookerName:    bookerName,
 		BookerPhone:   bookerPhone,
-		SkillLevel:    body.SkillLevel,
 	}
 
 	order, err := h.service.CreateOrder(c.Request.Context(), req)

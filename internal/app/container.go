@@ -57,9 +57,15 @@ func NewContainer(cfg Config) *Container {
 	// service for favorite cleanup on account deletion).
 	favoriteRepo := favorite.NewPgxRepository(cfg.DBPool)
 
+	// Sport catalogs are also used to validate account skill levels.
+	sportsRepo := sports.NewPgxRepository(cfg.DBPool)
+	sportsService := sports.NewService(sportsRepo)
+	skillLevelRepo := skilllevel.NewPgxRepository(cfg.DBPool)
+	skillLevelService := skilllevel.NewService(skillLevelRepo)
+
 	// User Module
 	userRepo := user.NewPgxRepository(cfg.DBPool)
-	userService := user.NewService(userRepo, passwordHasher, fileService, favoriteRepo)
+	userService := user.NewService(userRepo, passwordHasher, fileService, favoriteRepo, sportsService, skillLevelService)
 
 	// Favorite Service (depends on user service to validate pickup hosts)
 	favoriteService := favorite.NewService(favoriteRepo, userService)
@@ -81,12 +87,6 @@ func NewContainer(cfg Config) *Container {
 	// Announcement Module
 	annRepo := announcement.NewPgxRepository(cfg.DBPool)
 	annService := announcement.NewService(annRepo)
-
-	// Sports & Skill-Level lookup modules
-	sportsRepo := sports.NewPgxRepository(cfg.DBPool)
-	sportsService := sports.NewService(sportsRepo)
-	skillLevelRepo := skilllevel.NewPgxRepository(cfg.DBPool)
-	skillLevelService := skilllevel.NewService(skillLevelRepo)
 
 	// Pickup Module
 	pickupRepo := pickup.NewPgxRepository(cfg.DBPool)
