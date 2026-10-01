@@ -1,6 +1,6 @@
-# CLAUDE.md
+# AGENTS.md
 
-Project guidance for Claude Code. This file is loaded every session — keep it concise and point to authoritative docs rather than duplicating them.
+Project guidance for AI agents. This file is loaded every session — keep it concise and point to authoritative docs rather than duplicating them.
 
 ## What this is
 
