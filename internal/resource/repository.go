@@ -10,6 +10,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/nekogravitycat/court-booking-backend/internal/pkg/pagination"
 )
 
 type Repository interface {
@@ -140,6 +141,16 @@ func (r *pgxRepository) List(ctx context.Context, filter Filter) ([]*Resource, i
 		result = append(result, &res)
 	}
 
+	if err := rows.Err(); err != nil {
+		return nil, 0, err
+	}
+	rows.Close()
+	if total == 0 {
+		total, err = pagination.Count(ctx, r.pool, query)
+		if err != nil {
+			return nil, 0, err
+		}
+	}
 	return result, total, nil
 }
 
@@ -179,7 +190,7 @@ func (r *pgxRepository) Delete(ctx context.Context, id string) error {
 		// A booking referencing this resource (ON DELETE RESTRICT) surfaces as a
 		// foreign-key violation; report it as a 409 conflict instead of a 500.
 		var pgErr *pgconn.PgError
-		if errors.As(err, &pgErr) && pgErr.Code == pgerrcode.ForeignKeyViolation {
+		if errors.As(err, &pgErr) && (pgErr.Code == pgerrcode.ForeignKeyViolation || pgErr.Code == pgerrcode.RestrictViolation) {
 			return ErrResourceInUse
 		}
 		return fmt.Errorf("delete resource failed: %w", err)

@@ -8,26 +8,30 @@ import (
 )
 
 var (
-	ErrGroupNotFound          = apperror.New(http.StatusNotFound, "pickup group not found")
-	ErrOrderNotFound          = apperror.New(http.StatusNotFound, "pickup order not found")
-	ErrGroupFullyBooked       = apperror.New(http.StatusConflict, "group is fully booked")
-	ErrCapacityBelowEnrolled  = apperror.New(http.StatusConflict, "capacity cannot be set below the current number of enrolled participants")
-	ErrAlreadyEnrolled        = apperror.New(http.StatusConflict, "already enrolled in this group")
-	ErrRejectedFromGroup      = apperror.New(http.StatusConflict, "you have been rejected from this group and cannot re-enroll")
-	ErrInvalidStatus          = apperror.New(http.StatusBadRequest, "invalid status")
-	ErrInvalidTimeRange       = apperror.New(http.StatusBadRequest, "start time must be before end time")
-	ErrPermissionDenied       = apperror.New(http.StatusForbidden, "permission denied")
-	ErrGroupNotActive         = apperror.New(http.StatusBadRequest, "pickup group is not active")
-	ErrSportNotFound          = apperror.New(http.StatusNotFound, "sport not found")
-	ErrSportInactive          = apperror.New(http.StatusBadRequest, "sport is not active")
-	ErrSkillLevelNotFound     = apperror.New(http.StatusBadRequest, "skill level is not defined for the selected sport")
-	ErrSkillLevelInactive     = apperror.New(http.StatusBadRequest, "skill level is not active")
-	ErrInvalidSkillLevelRange = apperror.New(http.StatusBadRequest, "max_skill_level must not be less than min_skill_level")
-	ErrInvalidPartySize       = apperror.New(http.StatusBadRequest, "party size must be between 2 and 50")
-	ErrPartyMembersMismatch   = apperror.New(http.StatusBadRequest, "members must contain exactly party_size entries")
-	ErrDistanceNeedsOrigin    = apperror.New(http.StatusBadRequest, "latitude and longitude are required to sort by distance")
-	ErrFollowedNeedsAuth      = apperror.New(http.StatusUnauthorized, "authentication is required to filter by followed hosts")
-	ErrTimeConflict           = apperror.New(http.StatusConflict, "time_conflict")
+	ErrGroupInUse                 = apperror.New(http.StatusConflict, "pickup group has orders or ratings")
+	ErrCancellationRequiresReview = apperror.New(http.StatusForbidden, "cancellation of confirmed, paid, or cancellation-requested orders requires reviewer approval")
+	ErrSportChanged               = apperror.New(http.StatusConflict, "group sport changed; retry enrollment")
+	ErrSportHasParticipants       = apperror.New(http.StatusConflict, "sport cannot change after enrollment or rating")
+	ErrGroupNotFound              = apperror.New(http.StatusNotFound, "pickup group not found")
+	ErrOrderNotFound              = apperror.New(http.StatusNotFound, "pickup order not found")
+	ErrGroupFullyBooked           = apperror.New(http.StatusConflict, "group is fully booked")
+	ErrCapacityBelowEnrolled      = apperror.New(http.StatusConflict, "capacity cannot be set below the current number of enrolled participants")
+	ErrAlreadyEnrolled            = apperror.New(http.StatusConflict, "already enrolled in this group")
+	ErrRejectedFromGroup          = apperror.New(http.StatusConflict, "you have been rejected from this group and cannot re-enroll")
+	ErrInvalidStatus              = apperror.New(http.StatusBadRequest, "invalid status")
+	ErrInvalidTimeRange           = apperror.New(http.StatusBadRequest, "start time must be before end time")
+	ErrPermissionDenied           = apperror.New(http.StatusForbidden, "permission denied")
+	ErrGroupNotActive             = apperror.New(http.StatusBadRequest, "pickup group is not active")
+	ErrSportNotFound              = apperror.New(http.StatusNotFound, "sport not found")
+	ErrSportInactive              = apperror.New(http.StatusBadRequest, "sport is not active")
+	ErrSkillLevelNotFound         = apperror.New(http.StatusBadRequest, "skill level is not defined for the selected sport")
+	ErrSkillLevelInactive         = apperror.New(http.StatusBadRequest, "skill level is not active")
+	ErrInvalidSkillLevelRange     = apperror.New(http.StatusBadRequest, "max_skill_level must not be less than min_skill_level")
+	ErrInvalidPartySize           = apperror.New(http.StatusBadRequest, "party size must be between 2 and 50")
+	ErrPartyMembersMismatch       = apperror.New(http.StatusBadRequest, "members must contain exactly party_size entries")
+	ErrDistanceNeedsOrigin        = apperror.New(http.StatusBadRequest, "latitude and longitude are required to sort by distance")
+	ErrFollowedNeedsAuth          = apperror.New(http.StatusUnauthorized, "authentication is required to filter by followed hosts")
+	ErrTimeConflict               = apperror.New(http.StatusConflict, "time_conflict")
 )
 
 type GroupStatus string
@@ -123,13 +127,14 @@ type PickupGroup struct {
 }
 
 type PickupOrder struct {
-	ID            string
-	PickupGroupID string
-	UserID        string
-	BookerName    string
-	BookerPhone   string
-	Status        OrderStatus
-	PaymentStatus PaymentStatus
+	EnrollmentSportID string `json:"-"`
+	ID                string
+	PickupGroupID     string
+	UserID            string
+	BookerName        string
+	BookerPhone       string
+	Status            OrderStatus
+	PaymentStatus     PaymentStatus
 	// SkillLevel is the enrollee's self-reported level (for a party order, the
 	// organizer's; each member carries their own).
 	SkillLevel int

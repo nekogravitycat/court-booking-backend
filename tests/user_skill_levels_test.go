@@ -100,7 +100,10 @@ func TestAccountSkillLevelsAndUserHostedGroups(t *testing.T) {
 		require.Len(t, orders, 1)
 		assert.Equal(t, 2, orders[0].SkillLevel)
 		setOrderStatus(t, hostToken, order.ID, "confirmed")
-		setOrderStatus(t, playerToken, order.ID, "cancelled")
+		setOrderStatus(t, playerToken, order.ID, "cancel_request")
+		cancelled := "cancelled"
+		require.Equal(t, http.StatusForbidden, executeRequest("PATCH", "/v1/pickup-orders/"+order.ID, pickupHttp.UpdateOrderBody{Status: &cancelled}, playerToken).Code)
+		setOrderStatus(t, hostToken, order.ID, "cancelled")
 		w = executeRequest("POST", orderPath, nil, playerToken)
 		require.Equal(t, http.StatusCreated, w.Code, w.Body.String())
 		var reenrolled pickupHttp.PickupOrderResponse

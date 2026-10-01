@@ -203,13 +203,13 @@ func (s *service) Upload(ctx context.Context, input UploadInput) (*File, error) 
 
 	if err := s.repo.Create(ctx, f); err != nil {
 		// Cleanup storage if db fails
-		// Log error if storage delete fails but don't fail upload
-		if err = s.storage.Delete(ctx, storagePath); err != nil {
-			log.Printf("failed to delete file: %v", err)
+		// Cleanup errors must not overwrite the database error.
+		if cleanupErr := s.storage.Delete(ctx, storagePath); cleanupErr != nil {
+			log.Printf("failed to delete file: %v", cleanupErr)
 		}
 		if thumbnailPath != nil {
-			if err = s.storage.Delete(ctx, *thumbnailPath); err != nil {
-				log.Printf("failed to delete thumbnail: %v", err)
+			if cleanupErr := s.storage.Delete(ctx, *thumbnailPath); cleanupErr != nil {
+				log.Printf("failed to delete thumbnail: %v", cleanupErr)
 			}
 		}
 		return nil, err

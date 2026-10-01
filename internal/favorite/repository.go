@@ -85,6 +85,9 @@ func (r *pgxRepository) ListFavorites(ctx context.Context, userID string) ([]*Fa
 		}
 		favorites = append(favorites, &f)
 	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
 	return favorites, nil
 }
 

@@ -241,13 +241,20 @@ func TestPickupOrderAndCapacity(t *testing.T) {
 		assert.Equal(t, http.StatusForbidden, w.Code)
 	})
 
-	t.Run("Update Order: Success by Booker & Capacity Freed", func(t *testing.T) {
+	t.Run("Update Order: Booker Requests Cancellation and Host Frees Capacity", func(t *testing.T) {
 		path := fmt.Sprintf("/v1/pickup-orders/%s", order1ID)
 		status := "cancelled"
 		payload := pickupHttp.UpdateOrderBody{
 			Status: &status,
 		}
-		w := executeRequest("PATCH", path, payload, user1Token) // User1 cancels their own order
+		w := executeRequest("PATCH", path, payload, user1Token)
+		assert.Equal(t, http.StatusForbidden, w.Code)
+		requestStatus := "cancel_request"
+		w = executeRequest("PATCH", path, pickupHttp.UpdateOrderBody{Status: &requestStatus}, user1Token)
+		assert.Equal(t, http.StatusOK, w.Code)
+		assert.Equal(t, http.StatusForbidden, executeRequest("PATCH", path, payload, user1Token).Code)
+		assert.Equal(t, http.StatusConflict, executeRequest("POST", fmt.Sprintf("/v1/pickup-groups/%s/orders", groupID), enrollBody(), user3Token).Code)
+		w = executeRequest("PATCH", path, payload, hostToken)
 		assert.Equal(t, http.StatusOK, w.Code)
 
 		// Check capacity is freed, user3 should be able to join now
@@ -457,7 +464,7 @@ func TestPickupGroupAdminActions(t *testing.T) {
 		path := fmt.Sprintf("/v1/pickup-groups/%s", newGroupID)
 		wDel := executeRequest("DELETE", path, nil, adminToken)
 		// Should fail due to RESTRICT constraint
-		assert.Equal(t, http.StatusInternalServerError, wDel.Code)
+		assert.Equal(t, http.StatusConflict, wDel.Code)
 	})
 }
 

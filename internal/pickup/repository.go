@@ -12,9 +12,12 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/nekogravitycat/court-booking-backend/internal/pkg/pagination"
 )
 
 type Repository interface {
+	WithGroupLock(ctx context.Context, id string, fn func(Repository) error) error
+	WithOrderLock(ctx context.Context, id string, fn func(Repository) error) error
 	CreateGroup(ctx context.Context, group *PickupGroup) error
 	GetGroupByID(ctx context.Context, id string) (*PickupGroup, error)
 	ListGroups(ctx context.Context, filter GroupFilter) ([]*PickupGroup, int, error)
@@ -47,11 +50,74 @@ type Repository interface {
 }
 
 type pgxRepository struct {
-	pool *pgxpool.Pool
+	pool interface {
+		Begin(context.Context) (pgx.Tx, error)
+		Query(context.Context, string, ...any) (pgx.Rows, error)
+		QueryRow(context.Context, string, ...any) pgx.Row
+		Exec(context.Context, string, ...any) (pgconn.CommandTag, error)
+	}
 }
 
 func NewPgxRepository(pool *pgxpool.Pool) Repository {
 	return &pgxRepository{pool: pool}
+}
+
+// Enrollment transactions take the shared schedule lock, then user, group,
+// and order locks. Group edits take the exclusive schedule lock before reading
+// participants, so time changes cannot race enrollment in another group.
+const scheduleLockID int64 = 724916832
+
+func (r *pgxRepository) WithGroupLock(ctx context.Context, id string, fn func(Repository) error) error {
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback(ctx)
+	if _, err := tx.Exec(ctx, "SELECT pg_advisory_xact_lock($1)", scheduleLockID); err != nil {
+		return err
+	}
+	var lockedID string
+	if err := tx.QueryRow(ctx, "SELECT id FROM public.pickup_groups WHERE id = $1 FOR UPDATE", id).Scan(&lockedID); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return ErrGroupNotFound
+		}
+		return err
+	}
+	if err := fn(&pgxRepository{pool: tx}); err != nil {
+		return err
+	}
+	return tx.Commit(ctx)
+}
+
+func (r *pgxRepository) WithOrderLock(ctx context.Context, id string, fn func(Repository) error) error {
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback(ctx)
+	if _, err := tx.Exec(ctx, "SELECT pg_advisory_xact_lock_shared($1)", scheduleLockID); err != nil {
+		return err
+	}
+	var userID, groupID string
+	if err := tx.QueryRow(ctx, "SELECT user_id, pickup_group_id FROM public.pickup_orders WHERE id = $1", id).Scan(&userID, &groupID); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return ErrOrderNotFound
+		}
+		return err
+	}
+	if _, err := tx.Exec(ctx, "SELECT id FROM public.users WHERE id = $1 FOR UPDATE", userID); err != nil {
+		return err
+	}
+	if _, err := tx.Exec(ctx, "SELECT id FROM public.pickup_groups WHERE id = $1 FOR UPDATE", groupID); err != nil {
+		return err
+	}
+	if _, err := tx.Exec(ctx, "SELECT id FROM public.pickup_orders WHERE id = $1 FOR UPDATE", id); err != nil {
+		return err
+	}
+	if err := fn(&pgxRepository{pool: tx}); err != nil {
+		return err
+	}
+	return tx.Commit(ctx)
 }
 
 // groupSelectColumns are the columns returned by the group read queries, in the
@@ -243,10 +309,52 @@ func (r *pgxRepository) ListGroups(ctx context.Context, filter GroupFilter) ([]*
 		groups = append(groups, &g)
 	}
 
+	if err := rows.Err(); err != nil {
+		return nil, 0, err
+	}
+	rows.Close()
+	if total == 0 {
+		total, err = pagination.Count(ctx, r.pool, query)
+		if err != nil {
+			return nil, 0, err
+		}
+	}
 	return groups, total, nil
 }
 
 func (r *pgxRepository) UpdateGroup(ctx context.Context, g *PickupGroup) error {
+	var enrolled int
+	if err := r.pool.QueryRow(ctx, "SELECT COALESCE(SUM(party_size), 0) FROM public.pickup_orders WHERE pickup_group_id = $1 AND status NOT IN ('cancelled', 'rejected')", g.ID).Scan(&enrolled); err != nil {
+		return err
+	}
+	if g.Capacity < enrolled {
+		return ErrCapacityBelowEnrolled
+	}
+	var sportChanged, hasHistory bool
+	if err := r.pool.QueryRow(ctx, `SELECT sport_id <> $2::uuid,
+ EXISTS(SELECT 1 FROM public.pickup_orders WHERE pickup_group_id = $1) OR EXISTS(SELECT 1 FROM public.skill_ratings WHERE pickup_group_id = $1)
+ FROM public.pickup_groups WHERE id = $1`, g.ID, g.SportID).Scan(&sportChanged, &hasHistory); err != nil {
+		return err
+	}
+	if sportChanged && hasHistory {
+		return ErrSportHasParticipants
+	}
+	if g.Status != GroupStatusCancelled {
+		var conflict bool
+		if err := r.pool.QueryRow(ctx, `SELECT EXISTS (
+   SELECT 1 FROM public.pickup_orders own_order
+   JOIN public.pickup_orders other_order ON other_order.user_id = own_order.user_id AND other_order.pickup_group_id <> $1
+   JOIN public.pickup_groups other_group ON other_group.id = other_order.pickup_group_id
+   WHERE own_order.pickup_group_id = $1 AND own_order.status NOT IN ('cancelled', 'rejected')
+   AND other_order.status NOT IN ('cancelled', 'rejected') AND other_group.status <> 'cancelled'
+   AND other_group.start_time < $3 AND other_group.end_time > $2
+  )`, g.ID, g.StartTime, g.EndTime).Scan(&conflict); err != nil {
+			return err
+		}
+		if conflict {
+			return ErrTimeConflict
+		}
+	}
 	psql := squirrel.StatementBuilder.PlaceholderFormat(squirrel.Dollar)
 	query, args, err := psql.Update("public.pickup_groups").
 		Set("title", g.Title).
@@ -289,6 +397,10 @@ func (r *pgxRepository) DeleteGroup(ctx context.Context, id string) error {
 
 	result, err := r.pool.Exec(ctx, query, args...)
 	if err != nil {
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && (pgErr.Code == pgerrcode.ForeignKeyViolation || pgErr.Code == pgerrcode.RestrictViolation) {
+			return ErrGroupInUse
+		}
 		return fmt.Errorf("delete pickup group failed: %w", err)
 	}
 
@@ -308,24 +420,34 @@ func (r *pgxRepository) CreateOrder(ctx context.Context, order *PickupOrder) err
 	}
 	defer tx.Rollback(ctx) //nolint:errcheck
 
+	if _, err := tx.Exec(ctx, "SELECT pg_advisory_xact_lock_shared($1)", scheduleLockID); err != nil {
+		return err
+	}
+	if _, err := tx.Exec(ctx, "SELECT id FROM public.users WHERE id = $1 FOR UPDATE", order.UserID); err != nil {
+		return err
+	}
 	// Lock the pickup group row to serialize concurrent enrollment attempts.
 	var capacity int
-	var status string
+	var status, sportID string
+	var enabled bool
 	var startTime, endTime time.Time
 	if err := tx.QueryRow(ctx,
-		"SELECT capacity, status::TEXT, start_time, end_time FROM public.pickup_groups WHERE id = $1 FOR UPDATE",
+		"SELECT capacity, status::TEXT, start_time, end_time, enable, sport_id FROM public.pickup_groups WHERE id = $1 FOR UPDATE",
 		order.PickupGroupID,
-	).Scan(&capacity, &status, &startTime, &endTime); err != nil {
+	).Scan(&capacity, &status, &startTime, &endTime, &enabled, &sportID); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return ErrGroupNotFound
 		}
 		return fmt.Errorf("lock pickup group failed: %w", err)
 	}
 
-	if status != string(GroupStatusActive) {
+	if status != string(GroupStatusActive) || !enabled || !endTime.After(time.Now()) {
 		return ErrGroupNotActive
 	}
 
+	if order.EnrollmentSportID != "" && order.EnrollmentSportID != sportID {
+		return ErrSportChanged
+	}
 	// Reject enrollment if the user already holds an occupying order (in any
 	// other group) whose time range overlaps this group's.
 	var timeConflict bool
@@ -336,6 +458,7 @@ func (r *pgxRepository) CreateOrder(ctx context.Context, order *PickupOrder) err
 			WHERE po.user_id = $1
 				AND po.pickup_group_id <> $2
 				AND po.status NOT IN ('cancelled', 'rejected')
+                AND pg2.status <> 'cancelled'
 				AND pg2.start_time < $3
 				AND pg2.end_time > $4
 		)`,
@@ -634,16 +757,33 @@ func (r *pgxRepository) UpdateOrderWithCapacityCheck(ctx context.Context, o *Pic
 	defer tx.Rollback(ctx) //nolint:errcheck
 
 	var capacity int
+	var enabled bool
+	var status string
+	var startTime, endTime time.Time
 	if err := tx.QueryRow(ctx,
-		"SELECT capacity FROM public.pickup_groups WHERE id = $1 FOR UPDATE",
+		"SELECT capacity, enable, status::text, start_time, end_time FROM public.pickup_groups WHERE id = $1 FOR UPDATE",
 		o.PickupGroupID,
-	).Scan(&capacity); err != nil {
+	).Scan(&capacity, &enabled, &status, &startTime, &endTime); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return ErrGroupNotFound
 		}
 		return fmt.Errorf("lock pickup group failed: %w", err)
 	}
 
+	if status != string(GroupStatusActive) || !enabled || !endTime.After(time.Now()) {
+		return ErrGroupNotActive
+	}
+	var conflict bool
+	if err := tx.QueryRow(ctx, `SELECT EXISTS (
+  SELECT 1 FROM public.pickup_orders po JOIN public.pickup_groups pg ON pg.id = po.pickup_group_id
+  WHERE po.user_id = $1 AND po.pickup_group_id <> $2 AND po.status NOT IN ('cancelled', 'rejected')
+  AND pg.status <> 'cancelled' AND pg.start_time < $3 AND pg.end_time > $4
+ )`, o.UserID, o.PickupGroupID, endTime, startTime).Scan(&conflict); err != nil {
+		return err
+	}
+	if conflict {
+		return ErrTimeConflict
+	}
 	// Count occupying orders other than this one; this order is about to become
 	// occupying, so it must fit within the remaining capacity.
 	var currentEnrolled int

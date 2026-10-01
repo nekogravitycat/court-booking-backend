@@ -99,6 +99,9 @@ func (s *service) Create(ctx context.Context, req CreateRequest) (*Booking, erro
 	if err != nil {
 		return nil, err
 	}
+	if err := s.orgService.CheckOperation(ctx, loc.OrganizationID, req.UserID); err != nil {
+		return nil, err
+	}
 	if err := validateBookingWindow(loc, req.StartTime, req.EndTime); err != nil {
 		return nil, err
 	}
@@ -142,6 +145,14 @@ func (s *service) Update(ctx context.Context, id string, req UpdateRequest, upda
 		return nil, err
 	}
 
+	res, err := s.resService.GetByID(ctx, b.ResourceID)
+	if err != nil {
+		return nil, err
+	}
+	if err := s.locService.CheckOperation(ctx, res.LocationID, updaterUserID); err != nil {
+		return nil, err
+	}
+
 	// Permission Check Logic:
 	// 1. System Admin -> Allowed
 	// 2. Owner of Booking -> Allowed (with restrictions on Status)
@@ -150,8 +161,8 @@ func (s *service) Update(ctx context.Context, id string, req UpdateRequest, upda
 	isBookingOwner := b.UserID == updaterUserID
 	isOrgMgr := false
 
-	if !isSysAdmin && !isBookingOwner {
-		// Lazy check: only query DB if not already authorized
+	if !isSysAdmin {
+		// Management privileges also apply to a manager's own booking.
 		var err error
 		isOrgMgr, err = s.isOrgManager(ctx, b.ResourceID, updaterUserID)
 		if err != nil {
@@ -251,6 +262,14 @@ func (s *service) Update(ctx context.Context, id string, req UpdateRequest, upda
 func (s *service) Delete(ctx context.Context, id string, deleterUserID string, isSysAdmin bool) error {
 	b, err := s.repo.GetByID(ctx, id)
 	if err != nil {
+		return err
+	}
+
+	res, err := s.resService.GetByID(ctx, b.ResourceID)
+	if err != nil {
+		return err
+	}
+	if err := s.locService.CheckOperation(ctx, res.LocationID, deleterUserID); err != nil {
 		return err
 	}
 

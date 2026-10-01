@@ -8,13 +8,17 @@ import (
 )
 
 var (
-	ErrUserAlreadyMember = apperror.New(http.StatusConflict, "user is already a member of this organization")
-	ErrUserNotFound      = apperror.New(http.StatusNotFound, "user not found")
-	ErrUserNotMember     = apperror.New(http.StatusNotFound, "user is not a member of the organization")
-	ErrOrgNotFound       = apperror.New(http.StatusNotFound, "organization not found")
-	ErrNameRequired      = apperror.New(http.StatusBadRequest, "organization name is required")
-	ErrUserIDRequired    = apperror.New(http.StatusBadRequest, "user_id is required")
-	ErrInvalidRole       = apperror.New(http.StatusBadRequest, "invalid role")
+	ErrOrgInactive          = apperror.New(http.StatusForbidden, "organization is inactive")
+	ErrOwnerRoleConflict    = apperror.New(http.StatusConflict, "user is already the owner of this organization")
+	ErrLocationRoleConflict = apperror.New(http.StatusConflict, "user is already a location manager in this organization")
+	ErrMemberRequired       = apperror.New(http.StatusBadRequest, "user must be a member of the organization first")
+	ErrUserAlreadyMember    = apperror.New(http.StatusConflict, "user is already a member of this organization")
+	ErrUserNotFound         = apperror.New(http.StatusNotFound, "user not found")
+	ErrUserNotMember        = apperror.New(http.StatusNotFound, "user is not a member of the organization")
+	ErrOrgNotFound          = apperror.New(http.StatusNotFound, "organization not found")
+	ErrNameRequired         = apperror.New(http.StatusBadRequest, "organization name is required")
+	ErrUserIDRequired       = apperror.New(http.StatusBadRequest, "user_id is required")
+	ErrInvalidRole          = apperror.New(http.StatusBadRequest, "invalid role")
 )
 
 // Organization represents a venue owner or brand entity.

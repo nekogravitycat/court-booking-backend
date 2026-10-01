@@ -362,7 +362,7 @@ flowchart TD
 | `POST /:id/orders`（報名） | — | ✔ | — | ✔ | ✔ |
 | `GET /:id/orders`（看報名名單） | — | — | — | ✔（限自己的團） | ✔ |
 | `GET /v1/pickup-orders`（我的報名） | — | ✔（只有自己的） | ✔ | ✔ | ✔ |
-| `PATCH /v1/pickup-orders/:id` 改 `status` | — | — | **僅 `cancelled` / `cancel_request`** | ✔ 任意（含 `rejected`） | ✔ |
+| `PATCH /v1/pickup-orders/:id` 改 `status` | — | — | **僅 `cancelled` / `cancel_request` (paid/confirmed/cancel_request require reviewer approval)** | ✔ 任意（含 `rejected`） | ✔ |
 | `PATCH` 改 `payment_status` | — | — | — | ✔ | ✔ |
 | `DELETE /v1/pickup-orders/:id` | — | — | — | — | ✔ |
 
@@ -494,3 +494,12 @@ sequenceDiagram
 | 臨打團訂單權限 | [internal/pickup/service.go](../internal/pickup/service.go) `UpdateOrder` |
 | 路由與 middleware 掛載總表 | [internal/api/router.go](../internal/api/router.go) |
 | 首位管理員 bootstrap | [set_admin.sh](../set_admin.sh) |
+
+
+## Inactive organizations
+
+Historical reads remain available. Creating bookings and managing an inactive
+organization or its locations/resources is forbidden for non-system administrators.
+System administrators may manage or restore inactive organizations. Ownership
+transfers remove the new owner's existing organization membership/manager roles
+atomically and reject an existing location-manager role.

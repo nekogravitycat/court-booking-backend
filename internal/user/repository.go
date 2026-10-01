@@ -13,6 +13,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/nekogravitycat/court-booking-backend/internal/pkg/pagination"
 )
 
 // Repository defines methods for accessing user data from storage.
@@ -26,7 +27,8 @@ type Repository interface {
 	Create(ctx context.Context, u *User) error
 	UpdateLastLogin(ctx context.Context, id string, t time.Time) error
 	List(ctx context.Context, filter UserFilter) ([]*User, int, error)
-	Update(ctx context.Context, u *User) error
+	Update(ctx context.Context, id string, req UpdateUserRequest) error
+	UpdateAvatar(ctx context.Context, id string, avatar *string) error
 	Delete(ctx context.Context, id string) error
 
 	// Pickup host role management
@@ -273,9 +275,12 @@ func (r *pgxUserRepository) List(ctx context.Context, filter UserFilter) ([]*Use
 	}
 
 	// Sorting
-	orderBy := "created_at"
-	if filter.SortBy != "" {
-		orderBy = filter.SortBy
+	orderBy := "u.created_at"
+	switch filter.SortBy {
+	case "name":
+		orderBy = "u.display_name"
+	case "email":
+		orderBy = "u.email"
 	}
 
 	orderDir := "DESC"
@@ -283,7 +288,7 @@ func (r *pgxUserRepository) List(ctx context.Context, filter UserFilter) ([]*Use
 		orderDir = filter.SortOrder
 	}
 
-	queryBuilder = queryBuilder.OrderBy(orderBy + " " + orderDir)
+	queryBuilder = queryBuilder.OrderBy(orderBy+" "+orderDir, "u.id ASC")
 
 	// Pagination
 	if filter.Page < 1 {
@@ -348,34 +353,71 @@ func (r *pgxUserRepository) List(ctx context.Context, filter UserFilter) ([]*Use
 		users = append(users, &u)
 	}
 
+	if err := rows.Err(); err != nil {
+		return nil, 0, err
+	}
+	rows.Close()
+	if total == 0 {
+		total, err = pagination.Count(ctx, r.pool, queryBuilder)
+		if err != nil {
+			return nil, 0, err
+		}
+	}
 	return users, total, nil
 }
 
-func (r *pgxUserRepository) Update(ctx context.Context, u *User) error {
-	psql := squirrel.StatementBuilder.PlaceholderFormat(squirrel.Dollar)
-	query, args, err := psql.Update("public.users").
-		Set("display_name", u.DisplayName).
-		Set("phone", u.Phone).
-		Set("gender", u.Gender).
-		Set("birth_date", u.BirthDate).
-		Set("avatar", u.Avatar).
-		Set("is_active", u.IsActive).
-		Set("is_system_admin", u.IsSystemAdmin).
-		Where(squirrel.Eq{"id": u.ID}).
-		ToSql()
-	if err != nil {
-		return fmt.Errorf("build update user query failed: %w", err)
+func (r *pgxUserRepository) Update(ctx context.Context, id string, req UpdateUserRequest) error {
+	query := squirrel.StatementBuilder.PlaceholderFormat(squirrel.Dollar).Update("public.users").Where(squirrel.Eq{"id": id})
+	changed := false
+	if req.DisplayName != nil {
+		query = query.Set("display_name", req.DisplayName)
+		changed = true
 	}
-
-	ct, err := r.pool.Exec(ctx, query, args...)
+	if req.Phone != nil {
+		query = query.Set("phone", req.Phone)
+		changed = true
+	}
+	if req.Gender != nil {
+		query = query.Set("gender", req.Gender)
+		changed = true
+	}
+	if req.BirthDate != nil {
+		query = query.Set("birth_date", req.BirthDate)
+		changed = true
+	}
+	if req.IsActive != nil {
+		query = query.Set("is_active", *req.IsActive)
+		changed = true
+	}
+	if req.IsSystemAdmin != nil {
+		query = query.Set("is_system_admin", *req.IsSystemAdmin)
+		changed = true
+	}
+	if !changed {
+		return nil
+	}
+	sql, args, err := query.ToSql()
+	if err != nil {
+		return err
+	}
+	ct, err := r.pool.Exec(ctx, sql, args...)
 	if err != nil {
 		return fmt.Errorf("update user failed: %w", err)
 	}
-
 	if ct.RowsAffected() == 0 {
 		return ErrNotFound
 	}
+	return nil
+}
 
+func (r *pgxUserRepository) UpdateAvatar(ctx context.Context, id string, avatar *string) error {
+	ct, err := r.pool.Exec(ctx, "UPDATE public.users SET avatar = $2 WHERE id = $1", id, avatar)
+	if err != nil {
+		return fmt.Errorf("update avatar failed: %w", err)
+	}
+	if ct.RowsAffected() == 0 {
+		return ErrNotFound
+	}
 	return nil
 }
 

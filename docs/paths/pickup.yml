@@ -143,6 +143,7 @@ pickupGroupDetail:
     summary: "取得單一臨打團詳細資訊"
     description: |
       包含 current_enrolled，並選擇性夾帶該團的所有訂單明細。
+      include_orders=true requires the group creator or a system administrator; other callers receive 403.
       current_enrolled 為已佔用名額數 (多人報名的訂單依 party_size 計算)。
       
       **權限 Access Control**:
@@ -156,6 +157,12 @@ pickupGroupDetail:
         schema:
           type: string
           format: uuid
+      - name: include_orders
+        in: query
+        schema:
+          type: boolean
+          default: false
+        description: Requires the group creator or a system administrator when true.
     responses:
       "200":
         description: Success
@@ -163,12 +170,17 @@ pickupGroupDetail:
           application/json:
             schema:
               $ref: "../components/schemas/pickup.yml#/PickupGroupDetailResponse"
+      "403":
+        description: Only the group creator or a system administrator may include orders.
   patch:
     tags:
       - Pickup Groups
     summary: "更新臨打團資訊 (主辦人本人或系統管理員)"
     description: |
       更新臨打團資訊（含變更臨打團狀態）。
+      Changing sport_id after any enrollment or rating returns 409.
+      Capacity reductions, time changes, and reactivations are checked atomically.
+      Time changes or reactivations that conflict with an existing participant's other groups return 409 and leave the group unchanged.
 
       **權限 Access Control**:
       - **Group Creator (own group)**: 創建者可更新自己的臨打團，不需 pickup host 身分。
@@ -195,6 +207,8 @@ pickupGroupDetail:
           application/json:
             schema:
               $ref: "../components/schemas/pickup.yml#/PickupGroupResponse"
+      "409":
+        description: Capacity, sport history, or participant schedule conflict; no changes applied.
   delete:
     tags:
       - Pickup Groups
@@ -223,6 +237,8 @@ pickupGroupDetail:
             schema:
               $ref: "../components/schemas/common.yml#/ErrorResponse"
 
+      "409":
+        description: The group has related orders or ratings.
 pickupGroupOrders:
   get:
     tags:
@@ -257,6 +273,8 @@ pickupGroupOrders:
     summary: "新增報名訂單（加入臨打團）"
     description: |
       加入臨打團。user_id 由 JWT Token 解析得出。
+      Disabled, cancelled, completed, or ended groups reject enrollment. Enrollment after the start remains allowed until the end.
+      Cancelled groups do not block enrollment in overlapping groups; restoring an order rechecks both capacity and time conflicts.
       會檢查目前已佔用名額 (各有效訂單 party_size 加總) 加上本次名額是否超過 capacity。
       確保同一使用者不可重複報名同一臨打團。
       同時會檢查該使用者是否已報名其他時段重疊的臨打團，若有衝突則回傳 409
@@ -309,6 +327,7 @@ pickupOrderDetail:
 
       **權限 Access Control**:
       - **Booker (本人)**: 只能將自己的訂單 status 改為 cancelled 或 cancel_request，且不可變更 payment_status。
+        Paid or confirmed orders require cancel_request; directly setting cancelled returns 403. A host or system administrator must approve cancellation. A booker cannot change cancel_request to cancelled themselves.
       - **Group Host / System Admin**: 可設定任意 status 與 payment_status（審核用途）。設定 status=rejected 即拒絕報名者：訂單保留、釋放名額，且該使用者無法再次報名。
     security:
       - bearerAuth: []

@@ -242,7 +242,7 @@ func (s *service) List(ctx context.Context, filter UserFilter) ([]*User, int, er
 
 func (s *service) Update(ctx context.Context, id string, req UpdateUserRequest, actingUserID string) (*User, error) {
 	// 1. Check if user exists
-	u, err := s.repo.GetByID(ctx, id)
+	_, err := s.repo.GetByID(ctx, id)
 	if err != nil {
 		return nil, err
 	}
@@ -253,35 +253,16 @@ func (s *service) Update(ctx context.Context, id string, req UpdateUserRequest, 
 		return nil, ErrCannotRevokeOwnAdmin
 	}
 
-	// 2. Apply updates if provided
-	if req.DisplayName != nil {
-		u.DisplayName = req.DisplayName
-	}
-	if req.Phone != nil {
-		u.Phone = req.Phone
-	}
-	if req.Gender != nil {
-		if !IsValidGender(*req.Gender) {
-			return nil, ErrInvalidGender
-		}
-		u.Gender = req.Gender
-	}
-	if req.BirthDate != nil {
-		u.BirthDate = req.BirthDate
-	}
-	if req.IsActive != nil {
-		u.IsActive = *req.IsActive
-	}
-	if req.IsSystemAdmin != nil {
-		u.IsSystemAdmin = *req.IsSystemAdmin
+	if req.Gender != nil && !IsValidGender(*req.Gender) {
+		return nil, ErrInvalidGender
 	}
 
 	// 3. Save changes
-	if err := s.repo.Update(ctx, u); err != nil {
+	if err := s.repo.Update(ctx, id, req); err != nil {
 		return nil, err
 	}
 
-	return u, nil
+	return s.repo.GetByID(ctx, id)
 }
 
 func (s *service) Delete(ctx context.Context, id string) error {
@@ -289,11 +270,6 @@ func (s *service) Delete(ctx context.Context, id string) error {
 	u, err := s.repo.GetByID(ctx, id)
 	if err != nil {
 		return err
-	}
-
-	// Clean up avatar file if exists
-	if u.Avatar != nil && *u.Avatar != "" {
-		_ = s.fileService.Delete(ctx, *u.Avatar)
 	}
 
 	// Remove this user from everyone else's favorites. Account deletion is a
@@ -305,7 +281,15 @@ func (s *service) Delete(ctx context.Context, id string) error {
 		}
 	}
 
-	return s.repo.Delete(ctx, id)
+	if err := s.repo.Delete(ctx, id); err != nil {
+		return err
+	}
+	// Clean up avatar file if exists
+	if u.Avatar != nil && *u.Avatar != "" {
+		_ = s.fileService.Delete(ctx, *u.Avatar)
+	}
+
+	return nil
 }
 
 // ------------------------
@@ -347,7 +331,7 @@ func (s *service) UpdateAvatar(ctx context.Context, id string, fileID string) er
 	// stored do we delete the old file. Deleting first would leave an orphaned
 	// file or a dangling reference if the update failed.
 	u.Avatar = &fileID
-	if err := s.repo.Update(ctx, u); err != nil {
+	if err := s.repo.UpdateAvatar(ctx, id, u.Avatar); err != nil {
 		return err
 	}
 
@@ -369,7 +353,7 @@ func (s *service) RemoveAvatar(ctx context.Context, id string) error {
 	// Clear the reference first, then delete the file. This keeps the database
 	// consistent even if the storage delete fails (best effort).
 	u.Avatar = nil
-	if err := s.repo.Update(ctx, u); err != nil {
+	if err := s.repo.UpdateAvatar(ctx, id, u.Avatar); err != nil {
 		return err
 	}
 

@@ -130,12 +130,16 @@ func (s *service) Delete(ctx context.Context, id string) error {
 		return err
 	}
 
-	// Clean up cover file if exists
+	if err := s.repo.Delete(ctx, id); err != nil {
+		return err
+	}
+
+	// Clean up cover file after the resource was deleted.
 	if res.Cover != nil && *res.Cover != "" {
 		_ = s.fileService.Delete(ctx, *res.Cover)
 	}
 
-	return s.repo.Delete(ctx, id)
+	return nil
 }
 
 func (s *service) UpdateCover(ctx context.Context, id string, fileID string) error {

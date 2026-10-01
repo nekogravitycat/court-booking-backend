@@ -10,6 +10,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/nekogravitycat/court-booking-backend/internal/pkg/pagination"
 	"github.com/nekogravitycat/court-booking-backend/internal/user"
 )
 
@@ -19,7 +20,8 @@ type Repository interface {
 	Create(ctx context.Context, org *Organization) error
 	GetByID(ctx context.Context, id string) (*Organization, error)
 	List(ctx context.Context, filter OrganizationFilter) ([]*Organization, int, error)
-	Update(ctx context.Context, org *Organization) error
+	UpdateCover(ctx context.Context, id string, cover *string) error
+	UpdateDetails(ctx context.Context, id string, req UpdateOrganizationRequest) error
 	Delete(ctx context.Context, id string) error
 	// Organization Manager methods
 	AddOrganizationManager(ctx context.Context, orgID string, userID string) error
@@ -89,7 +91,7 @@ func (r *pgxRepository) List(ctx context.Context, filter OrganizationFilter) ([]
 	// Base query with window function for total count
 	psql := squirrel.StatementBuilder.PlaceholderFormat(squirrel.Dollar)
 	queryBuilder := psql.Select("id", "name", "owner_id", "cover", "created_at", "is_active", "count(*) OVER() AS total_count").
-		From("public.organizations")
+		From("public.organizations").Where(squirrel.Eq{"is_active": true})
 
 	orderBy := "id"
 	if filter.SortBy != "" {
@@ -136,16 +138,24 @@ func (r *pgxRepository) List(ctx context.Context, filter OrganizationFilter) ([]
 		orgs = append(orgs, &o)
 	}
 
+	if err := rows.Err(); err != nil {
+		return nil, 0, err
+	}
+	rows.Close()
+	if total == 0 {
+		total, err = pagination.Count(ctx, r.pool, queryBuilder)
+		if err != nil {
+			return nil, 0, err
+		}
+	}
 	return orgs, total, nil
 }
 
-func (r *pgxRepository) Update(ctx context.Context, org *Organization) error {
+func (r *pgxRepository) UpdateCover(ctx context.Context, id string, cover *string) error {
 	psql := squirrel.StatementBuilder.PlaceholderFormat(squirrel.Dollar)
 	query, args, err := psql.Update("public.organizations").
-		Set("name", org.Name).
-		Set("cover", org.Cover).
-		Set("is_active", org.IsActive).
-		Where(squirrel.Eq{"id": org.ID}).
+		Set("cover", cover).
+		Where(squirrel.Eq{"id": id}).
 		ToSql()
 	if err != nil {
 		return fmt.Errorf("build update organization query failed: %w", err)
@@ -188,6 +198,28 @@ func (r *pgxRepository) Delete(ctx context.Context, id string) error {
 // -----------------------------
 
 func (r *pgxRepository) AddOrganizationManager(ctx context.Context, orgID string, userID string) error {
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback(ctx)
+	var ownerID string
+	if err := tx.QueryRow(ctx, "SELECT owner_id FROM public.organizations WHERE id = $1 FOR UPDATE", orgID).Scan(&ownerID); err != nil {
+		return err
+	}
+	if ownerID == userID {
+		return ErrOwnerRoleConflict
+	}
+	var conflict, member bool
+	if err := tx.QueryRow(ctx, "SELECT EXISTS(SELECT 1 FROM public.location_managers WHERE organization_id = $1 AND user_id = $2), EXISTS(SELECT 1 FROM public.organization_members WHERE organization_id = $1 AND user_id = $2)", orgID, userID).Scan(&conflict, &member); err != nil {
+		return err
+	}
+	if conflict {
+		return ErrLocationRoleConflict
+	}
+	if !member {
+		return ErrMemberRequired
+	}
 	psql := squirrel.StatementBuilder.PlaceholderFormat(squirrel.Dollar)
 	query, args, err := psql.Insert("public.organization_managers").
 		Columns("organization_id", "user_id").
@@ -197,7 +229,7 @@ func (r *pgxRepository) AddOrganizationManager(ctx context.Context, orgID string
 		return fmt.Errorf("build add org manager query failed: %w", err)
 	}
 
-	_, err = r.pool.Exec(ctx, query, args...)
+	_, err = tx.Exec(ctx, query, args...)
 	if err != nil {
 		var pgErr *pgconn.PgError
 		if errors.As(err, &pgErr) {
@@ -207,7 +239,7 @@ func (r *pgxRepository) AddOrganizationManager(ctx context.Context, orgID string
 		}
 		return fmt.Errorf("AddOrganizationManager failed: %w", err)
 	}
-	return nil
+	return tx.Commit(ctx)
 }
 
 func (r *pgxRepository) RemoveOrganizationManager(ctx context.Context, orgID string, userID string) error {
@@ -326,6 +358,16 @@ func (r *pgxRepository) ListOrganizationManagers(ctx context.Context, orgID stri
 		}
 		users = append(users, &u)
 	}
+	if err := rows.Err(); err != nil {
+		return nil, 0, err
+	}
+	rows.Close()
+	if total == 0 {
+		total, err = pagination.Count(ctx, r.pool, queryBuilder)
+		if err != nil {
+			return nil, 0, err
+		}
+	}
 	return users, total, nil
 }
 
@@ -334,6 +376,18 @@ func (r *pgxRepository) ListOrganizationManagers(ctx context.Context, orgID stri
 // -----------------------------
 
 func (r *pgxRepository) AddMember(ctx context.Context, orgID string, userID string) error {
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback(ctx)
+	var ownerID string
+	if err := tx.QueryRow(ctx, "SELECT owner_id FROM public.organizations WHERE id = $1 FOR UPDATE", orgID).Scan(&ownerID); err != nil {
+		return err
+	}
+	if ownerID == userID {
+		return ErrOwnerRoleConflict
+	}
 	psql := squirrel.StatementBuilder.PlaceholderFormat(squirrel.Dollar)
 	query, args, err := psql.Insert("public.organization_members").
 		Columns("organization_id", "user_id").
@@ -344,11 +398,11 @@ func (r *pgxRepository) AddMember(ctx context.Context, orgID string, userID stri
 		return fmt.Errorf("build add member query failed: %w", err)
 	}
 
-	_, err = r.pool.Exec(ctx, query, args...)
+	_, err = tx.Exec(ctx, query, args...)
 	if err != nil {
 		return fmt.Errorf("AddMember failed: %w", err)
 	}
-	return nil
+	return tx.Commit(ctx)
 }
 
 func (r *pgxRepository) RemoveMember(ctx context.Context, orgID string, userID string) error {
@@ -453,5 +507,65 @@ func (r *pgxRepository) ListMembers(ctx context.Context, orgID string, filter Ma
 		}
 		users = append(users, &u)
 	}
+	if err := rows.Err(); err != nil {
+		return nil, 0, err
+	}
+	rows.Close()
+	if total == 0 {
+		total, err = pagination.Count(ctx, r.pool, queryBuilder)
+		if err != nil {
+			return nil, 0, err
+		}
+	}
 	return users, total, nil
+}
+
+// UpdateDetails serializes owner transfers with member and manager assignment.
+func (r *pgxRepository) UpdateDetails(ctx context.Context, id string, req UpdateOrganizationRequest) error {
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback(ctx)
+	var ownerID string
+	if err := tx.QueryRow(ctx, "SELECT owner_id FROM public.organizations WHERE id = $1 FOR UPDATE", id).Scan(&ownerID); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return ErrOrgNotFound
+		}
+		return err
+	}
+	query := squirrel.StatementBuilder.PlaceholderFormat(squirrel.Dollar).Update("public.organizations").Where(squirrel.Eq{"id": id})
+	changed := false
+	if req.Name != nil {
+		query = query.Set("name", *req.Name)
+		changed = true
+	}
+	if req.IsActive != nil {
+		query = query.Set("is_active", *req.IsActive)
+		changed = true
+	}
+	if req.OwnerID != nil {
+		var conflict bool
+		if err := tx.QueryRow(ctx, "SELECT EXISTS(SELECT 1 FROM public.location_managers WHERE organization_id = $1 AND user_id = $2)", id, *req.OwnerID).Scan(&conflict); err != nil {
+			return err
+		}
+		if conflict {
+			return ErrLocationRoleConflict
+		}
+		if _, err := tx.Exec(ctx, "DELETE FROM public.organization_members WHERE organization_id = $1 AND user_id = $2", id, *req.OwnerID); err != nil {
+			return err
+		}
+		query = query.Set("owner_id", *req.OwnerID)
+		changed = true
+	}
+	if changed {
+		sql, args, err := query.ToSql()
+		if err != nil {
+			return err
+		}
+		if _, err := tx.Exec(ctx, sql, args...); err != nil {
+			return err
+		}
+	}
+	return tx.Commit(ctx)
 }

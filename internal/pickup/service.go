@@ -82,7 +82,7 @@ type Service interface {
 	UpdateGroup(ctx context.Context, id string, req UpdateGroupRequest) (*PickupGroup, error)
 	DeleteGroup(ctx context.Context, id string) error
 
-	GetOrdersByGroupID(ctx context.Context, groupID string) ([]*PickupOrder, error)
+	GetOrdersByGroupID(ctx context.Context, groupID, requesterID string) ([]*PickupOrder, error)
 	GetOrdersByUserID(ctx context.Context, userID string) ([]*PickupOrder, error)
 
 	CreateOrder(ctx context.Context, req CreateOrderRequest) (*PickupOrder, error)
@@ -229,13 +229,35 @@ func (s *service) ListGroups(ctx context.Context, filter GroupFilter) ([]*Pickup
 }
 
 func (s *service) UpdateGroup(ctx context.Context, id string, req UpdateGroupRequest) (*PickupGroup, error) {
+	var result, previous *PickupGroup
+	err := s.repo.WithGroupLock(ctx, id, func(repo Repository) error {
+		var err error
+		previous, err = repo.GetGroupByID(ctx, id)
+		if err != nil {
+			return err
+		}
+		scoped := *s
+		scoped.repo = repo
+		scoped.notifier = nil
+		result, err = scoped.updateGroup(ctx, id, req)
+		return err
+	})
+	if err != nil {
+		return nil, err
+	}
+	if result.Status == GroupStatusCancelled && previous.Status != GroupStatusCancelled {
+		s.notifyEnrolled(ctx, result, notification.TypePickupGroupCancelled, "臨打團已取消", fmt.Sprintf("「%s」已被團主取消。", result.Title))
+	} else if result.Status == GroupStatusActive && (!result.StartTime.Equal(previous.StartTime) || !result.EndTime.Equal(previous.EndTime) || result.LocationID != previous.LocationID || previous.Status == GroupStatusCancelled) {
+		s.notifyEnrolled(ctx, result, notification.TypePickupGroupUpdated, "臨打團資訊已更新", fmt.Sprintf("「%s」的時間或地點已變更，請重新確認活動資訊。", result.Title))
+	}
+	return result, nil
+}
+
+func (s *service) updateGroup(ctx context.Context, id string, req UpdateGroupRequest) (*PickupGroup, error) {
 	group, err := s.repo.GetGroupByID(ctx, id)
 	if err != nil {
 		return nil, err
 	}
-
-	oldStatus := group.Status
-	oldStart, oldEnd, oldLocation := group.StartTime, group.EndTime, group.LocationID
 
 	if req.Title != nil {
 		group.Title = *req.Title
@@ -304,16 +326,6 @@ func (s *service) UpdateGroup(ctx context.Context, id string, req UpdateGroupReq
 		return nil, err
 	}
 
-	switch {
-	case group.Status == GroupStatusCancelled && oldStatus != GroupStatusCancelled:
-		s.notifyEnrolled(ctx, group, notification.TypePickupGroupCancelled,
-			"臨打團已取消", fmt.Sprintf("「%s」已被團主取消。", group.Title))
-	case group.Status == GroupStatusActive &&
-		(!group.StartTime.Equal(oldStart) || !group.EndTime.Equal(oldEnd) || group.LocationID != oldLocation):
-		s.notifyEnrolled(ctx, group, notification.TypePickupGroupUpdated,
-			"臨打團資訊已更新", fmt.Sprintf("「%s」的時間或地點已變更，請重新確認活動資訊。", group.Title))
-	}
-
 	return s.repo.GetGroupByID(ctx, id)
 }
 
@@ -348,9 +360,19 @@ func (s *service) DeleteGroup(ctx context.Context, id string) error {
 	return s.repo.DeleteGroup(ctx, id)
 }
 
-func (s *service) GetOrdersByGroupID(ctx context.Context, groupID string) ([]*PickupOrder, error) {
-	if _, err := s.repo.GetGroupByID(ctx, groupID); err != nil {
+func (s *service) GetOrdersByGroupID(ctx context.Context, groupID, requesterID string) ([]*PickupOrder, error) {
+	group, err := s.repo.GetGroupByID(ctx, groupID)
+	if err != nil {
 		return nil, err
+	}
+	if group.HostID != requesterID {
+		requester, err := s.userService.GetByID(ctx, requesterID)
+		if err != nil {
+			return nil, err
+		}
+		if !requester.IsSystemAdmin {
+			return nil, ErrPermissionDenied
+		}
 	}
 	return s.repo.GetOrdersByGroupID(ctx, groupID)
 }
@@ -370,14 +392,15 @@ func (s *service) CreateOrder(ctx context.Context, req CreateOrderRequest) (*Pic
 	}
 
 	order := &PickupOrder{
-		PickupGroupID: req.PickupGroupID,
-		UserID:        req.UserID,
-		BookerName:    req.BookerName,
-		BookerPhone:   req.BookerPhone,
-		Status:        OrderStatusPending,
-		PaymentStatus: PaymentStatusPending,
-		SkillLevel:    level,
-		PartySize:     1,
+		EnrollmentSportID: group.SportID,
+		PickupGroupID:     req.PickupGroupID,
+		UserID:            req.UserID,
+		BookerName:        req.BookerName,
+		BookerPhone:       req.BookerPhone,
+		Status:            OrderStatusPending,
+		PaymentStatus:     PaymentStatusPending,
+		SkillLevel:        level,
+		PartySize:         1,
 	}
 
 	if err := s.repo.CreateOrder(ctx, order); err != nil {
@@ -424,15 +447,16 @@ func (s *service) CreatePartyOrder(ctx context.Context, req CreatePartyOrderRequ
 	}
 
 	order := &PickupOrder{
-		PickupGroupID: req.PickupGroupID,
-		UserID:        req.UserID,
-		BookerName:    strings.TrimSpace(req.OrganizerName),
-		BookerPhone:   req.BookerPhone,
-		Status:        OrderStatusPending,
-		PaymentStatus: PaymentStatusPending,
-		SkillLevel:    req.Members[0].SkillLevel, // Members[0] is the organizer
-		PartySize:     req.PartySize,
-		Members:       req.Members,
+		EnrollmentSportID: group.SportID,
+		PickupGroupID:     req.PickupGroupID,
+		UserID:            req.UserID,
+		BookerName:        strings.TrimSpace(req.OrganizerName),
+		BookerPhone:       req.BookerPhone,
+		Status:            OrderStatusPending,
+		PaymentStatus:     PaymentStatusPending,
+		SkillLevel:        req.Members[0].SkillLevel, // Members[0] is the organizer
+		PartySize:         req.PartySize,
+		Members:           req.Members,
 	}
 
 	if err := s.repo.CreateOrder(ctx, order); err != nil {
@@ -485,8 +509,36 @@ func (s *service) notifyHostOfEnrollment(ctx context.Context, group *PickupGroup
 //   - The pickup group host (or a system admin) may set any status and the
 //     payment status (this covers reviewing enrollments).
 //   - The enrolling user (booker) may only move their own order to 'cancelled'
-//     or 'cancel_request', and may not touch the payment status.
+//     or 'cancel_request', and may not touch the payment status. Paid or
+//     confirmed orders require reviewer approval before cancellation.
 func (s *service) UpdateOrder(ctx context.Context, id string, req UpdateOrderRequest, updaterUserID string, isSysAdmin bool) (*PickupOrder, error) {
+	var result, previous *PickupOrder
+	var group *PickupGroup
+	err := s.repo.WithOrderLock(ctx, id, func(repo Repository) error {
+		var err error
+		previous, err = repo.GetOrderByID(ctx, id)
+		if err != nil {
+			return err
+		}
+		group, err = repo.GetGroupByID(ctx, previous.PickupGroupID)
+		if err != nil {
+			return err
+		}
+		scoped := *s
+		scoped.repo = repo
+		scoped.notifier = nil
+		result, err = scoped.updateOrder(ctx, id, req, updaterUserID, isSysAdmin)
+		return err
+	})
+	if err != nil {
+		return nil, err
+	}
+	reviewer := isSysAdmin || group.HostID == updaterUserID
+	s.notifyOrderChange(ctx, group, result, previous.Status, previous.PaymentStatus, updaterUserID, reviewer && result.UserID != updaterUserID)
+	return result, nil
+}
+
+func (s *service) updateOrder(ctx context.Context, id string, req UpdateOrderRequest, updaterUserID string, isSysAdmin bool) (*PickupOrder, error) {
 	order, err := s.repo.GetOrderByID(ctx, id)
 	if err != nil {
 		return nil, err
@@ -526,6 +578,9 @@ func (s *service) UpdateOrder(ctx context.Context, id string, req UpdateOrderReq
 		}
 		// A plain booker may only cancel or request cancellation of their order.
 		if isOwner && !isReviewer {
+			if st == OrderStatusCancelled && (oldStatus == OrderStatusConfirmed || oldStatus == OrderStatusCancelRequest || oldPaymentStatus == PaymentStatusDone) {
+				return nil, ErrCancellationRequiresReview
+			}
 			if st != OrderStatusCancelled && st != OrderStatusCancelRequest {
 				return nil, ErrPermissionDenied
 			}
@@ -544,7 +599,6 @@ func (s *service) UpdateOrder(ctx context.Context, id string, req UpdateOrderReq
 		return nil, err
 	}
 
-	s.notifyOrderChange(ctx, group, order, oldStatus, oldPaymentStatus, updaterUserID, isReviewer && !isOwner)
 	return order, nil
 }
 

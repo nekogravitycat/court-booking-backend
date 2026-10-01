@@ -232,6 +232,7 @@ UpdatePickupGroupRequest:
     sport_id:
       type: string
       format: uuid
+      description: Cannot change after any enrollment or rating.
     min_skill_level:
       type: integer
       minimum: 1
@@ -350,6 +351,7 @@ UpdatePickupOrderRequest:
     status 與 payment_status 至少需提供一個。
     - status：報名者本人僅能將自己的訂單改為 cancelled 或 cancel_request；
       group host 或系統管理員可設定任意值（審核用途），包含 rejected（拒絕報名）。
+      Paid or confirmed orders can only request cancellation; a reviewer must set cancelled.
     - rejected：僅 group host 或系統管理員可設定；被拒絕的使用者無法再次報名同一團，
       且該訂單不計入 current_enrolled。
     - payment_status：僅 group host 或系統管理員可變更。

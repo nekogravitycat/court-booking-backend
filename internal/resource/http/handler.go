@@ -105,6 +105,10 @@ func (h *Handler) Create(c *gin.Context) {
 	}
 
 	// 2. Check User Permission for that Org
+	if err := h.orgService.CheckOperation(c.Request.Context(), loc.OrganizationID, auth.GetUserID(c)); err != nil {
+		response.Error(c, err)
+		return
+	}
 	allowed, err := h.orgService.IsManagerOrAbove(c.Request.Context(), loc.OrganizationID, auth.GetUserID(c))
 	if err != nil {
 		response.Error(c, err)
@@ -170,6 +174,10 @@ func (h *Handler) Update(c *gin.Context) {
 	}
 
 	// 3. Check Permissions
+	if err := h.orgService.CheckOperation(c.Request.Context(), loc.OrganizationID, auth.GetUserID(c)); err != nil {
+		response.Error(c, err)
+		return
+	}
 	allowed, err := h.orgService.IsManagerOrAbove(c.Request.Context(), loc.OrganizationID, auth.GetUserID(c))
 	if err != nil {
 		response.Error(c, err)
@@ -225,6 +233,10 @@ func (h *Handler) Delete(c *gin.Context) {
 		return
 	}
 
+	if err := h.orgService.CheckOperation(c.Request.Context(), loc.OrganizationID, auth.GetUserID(c)); err != nil {
+		response.Error(c, err)
+		return
+	}
 	allowed, err := h.orgService.IsManagerOrAbove(c.Request.Context(), loc.OrganizationID, auth.GetUserID(c))
 	if err != nil {
 		response.Error(c, err)
@@ -260,6 +272,10 @@ func (h *Handler) UploadCover(c *gin.Context) {
 
 	// Permission check: Location manager or above
 	currentUserID := auth.GetUserID(c)
+	if err := h.locService.CheckOperation(c.Request.Context(), res.LocationID, auth.GetUserID(c)); err != nil {
+		response.Error(c, err)
+		return
+	}
 	allowed, err := h.locService.IsLocationManagerOrAbove(c.Request.Context(), res.LocationID, currentUserID)
 	if err != nil {
 		response.Error(c, err)
@@ -297,6 +313,10 @@ func (h *Handler) RemoveCover(c *gin.Context) {
 
 	// Permission check: Location manager or above
 	currentUserID := auth.GetUserID(c)
+	if err := h.locService.CheckOperation(c.Request.Context(), res.LocationID, auth.GetUserID(c)); err != nil {
+		response.Error(c, err)
+		return
+	}
 	allowed, err := h.locService.IsLocationManagerOrAbove(c.Request.Context(), res.LocationID, currentUserID)
 	if err != nil {
 		response.Error(c, err)

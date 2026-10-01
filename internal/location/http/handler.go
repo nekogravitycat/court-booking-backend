@@ -108,6 +108,10 @@ func (h *LocationHandler) Create(c *gin.Context) {
 	}
 
 	// Permission check: Organization Manager or Owner (or System Admin) can create locations.
+	if err := h.orgService.CheckOperation(c.Request.Context(), body.OrganizationID, auth.GetUserID(c)); err != nil {
+		response.Error(c, err)
+		return
+	}
 	allowed, err := h.orgService.IsManagerOrAbove(c.Request.Context(), body.OrganizationID, auth.GetUserID(c))
 	if err != nil {
 		response.Error(c, err)
@@ -173,6 +177,10 @@ func (h *LocationHandler) Update(c *gin.Context) {
 	}
 
 	// Permission check: The user must be a Manager (assigned to this location) or Owner.
+	if err := h.service.CheckOperation(c.Request.Context(), uri.ID, auth.GetUserID(c)); err != nil {
+		response.Error(c, err)
+		return
+	}
 	allowed, err := h.service.IsLocationManagerOrAbove(c.Request.Context(), uri.ID, auth.GetUserID(c))
 	if err != nil {
 		response.Error(c, err)
@@ -227,6 +235,10 @@ func (h *LocationHandler) UploadCover(c *gin.Context) {
 	}
 
 	// Permission check
+	if err := h.service.CheckOperation(c.Request.Context(), uri.ID, auth.GetUserID(c)); err != nil {
+		response.Error(c, err)
+		return
+	}
 	allowed, err := h.service.IsLocationManagerOrAbove(c.Request.Context(), uri.ID, auth.GetUserID(c))
 	if err != nil {
 		response.Error(c, err)
@@ -256,6 +268,10 @@ func (h *LocationHandler) RemoveCover(c *gin.Context) {
 	}
 
 	// Permission check
+	if err := h.service.CheckOperation(c.Request.Context(), uri.ID, auth.GetUserID(c)); err != nil {
+		response.Error(c, err)
+		return
+	}
 	allowed, err := h.service.IsLocationManagerOrAbove(c.Request.Context(), uri.ID, auth.GetUserID(c))
 	if err != nil {
 		response.Error(c, err)
@@ -285,6 +301,10 @@ func (h *LocationHandler) Delete(c *gin.Context) {
 
 	// Permission check: Only Organization Manager or Owner can delete locations.
 	// Location Managers cannot delete.
+	if err := h.service.CheckOperation(c.Request.Context(), req.ID, auth.GetUserID(c)); err != nil {
+		response.Error(c, err)
+		return
+	}
 	allowed, err := h.service.IsOrganizationManagerOrAbove(c.Request.Context(), req.ID, auth.GetUserID(c))
 	if err != nil {
 		response.Error(c, err)
@@ -322,6 +342,10 @@ func (h *LocationHandler) AddManager(c *gin.Context) {
 	}
 
 	// Permission: Owner or Org Manager can assign location managers
+	if err := h.service.CheckOperation(c.Request.Context(), uri.ID, auth.GetUserID(c)); err != nil {
+		response.Error(c, err)
+		return
+	}
 	allowed, err := h.service.IsOrganizationManagerOrAbove(c.Request.Context(), uri.ID, auth.GetUserID(c))
 	if err != nil {
 		response.Error(c, err)
@@ -353,6 +377,10 @@ func (h *LocationHandler) RemoveManager(c *gin.Context) {
 	}
 
 	// Permission: Owner or Org Admin
+	if err := h.service.CheckOperation(c.Request.Context(), uri.ID, auth.GetUserID(c)); err != nil {
+		response.Error(c, err)
+		return
+	}
 	allowed, err := h.service.IsOrganizationManagerOrAbove(c.Request.Context(), uri.ID, auth.GetUserID(c))
 	if err != nil {
 		response.Error(c, err)

@@ -56,6 +56,7 @@ type UpdateLocationRequest struct {
 }
 
 type Service interface {
+	CheckOperation(ctx context.Context, locationID, userID string) error
 	Create(ctx context.Context, req CreateLocationRequest) (*Location, error)
 	GetByID(ctx context.Context, id string) (*Location, error)
 	List(ctx context.Context, filter LocationFilter) ([]*Location, int, error)
@@ -451,4 +452,12 @@ func applyParking(loc *Location, name *string, lat, lng *float64, remove bool) e
 	}
 	loc.ParkingName, loc.ParkingLatitude, loc.ParkingLongitude = &trimmed, lat, lng
 	return nil
+}
+
+func (s *service) CheckOperation(ctx context.Context, locationID, userID string) error {
+	orgID, err := s.repo.GetOrganizationID(ctx, locationID)
+	if err != nil {
+		return err
+	}
+	return s.orgService.CheckOperation(ctx, orgID, userID)
 }

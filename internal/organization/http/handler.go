@@ -262,6 +262,10 @@ func (h *OrganizationHandler) AddManager(c *gin.Context) {
 	actorID := auth.GetUserID(c)
 	// Permission check: Must be Owner or SysAdmin to add managers.
 	// CheckIsOwner is strict owner check.
+	if err := h.service.CheckOperation(c.Request.Context(), uri.ID, auth.GetUserID(c)); err != nil {
+		response.Error(c, err)
+		return
+	}
 	isOwner, err := h.service.IsOwnerOrAbove(c.Request.Context(), uri.ID, actorID)
 	if err != nil {
 		response.Error(c, err)
@@ -290,6 +294,10 @@ func (h *OrganizationHandler) RemoveManager(c *gin.Context) {
 	}
 
 	actorID := auth.GetUserID(c)
+	if err := h.service.CheckOperation(c.Request.Context(), req.ID, auth.GetUserID(c)); err != nil {
+		response.Error(c, err)
+		return
+	}
 	isOwner, err := h.service.IsOwnerOrAbove(c.Request.Context(), req.ID, actorID)
 	if err != nil {
 		response.Error(c, err)
@@ -394,6 +402,10 @@ func (h *OrganizationHandler) AddMember(c *gin.Context) {
 
 	actorID := auth.GetUserID(c)
 	// Permission check: Must be Owner or SysAdmin to add members.
+	if err := h.service.CheckOperation(c.Request.Context(), uri.ID, auth.GetUserID(c)); err != nil {
+		response.Error(c, err)
+		return
+	}
 	isOwner, err := h.service.IsOwnerOrAbove(c.Request.Context(), uri.ID, actorID)
 	if err != nil {
 		response.Error(c, err)
@@ -423,6 +435,10 @@ func (h *OrganizationHandler) RemoveMember(c *gin.Context) {
 
 	actorID := auth.GetUserID(c)
 	// Permission check: Must be Owner or SysAdmin to remove members.
+	if err := h.service.CheckOperation(c.Request.Context(), req.ID, auth.GetUserID(c)); err != nil {
+		response.Error(c, err)
+		return
+	}
 	isOwner, err := h.service.IsOwnerOrAbove(c.Request.Context(), req.ID, actorID)
 	if err != nil {
 		response.Error(c, err)
@@ -451,6 +467,10 @@ func (h *OrganizationHandler) UploadCover(c *gin.Context) {
 
 	// Permission check: Owner or above
 	currentUserID := auth.GetUserID(c)
+	if err := h.service.CheckOperation(c.Request.Context(), uri.ID, auth.GetUserID(c)); err != nil {
+		response.Error(c, err)
+		return
+	}
 	allowed, err := h.service.IsOwnerOrAbove(c.Request.Context(), uri.ID, currentUserID)
 	if err != nil {
 		response.Error(c, err)
@@ -481,6 +501,10 @@ func (h *OrganizationHandler) RemoveCover(c *gin.Context) {
 
 	// Permission check: Owner or above
 	currentUserID := auth.GetUserID(c)
+	if err := h.service.CheckOperation(c.Request.Context(), uri.ID, auth.GetUserID(c)); err != nil {
+		response.Error(c, err)
+		return
+	}
 	allowed, err := h.service.IsOwnerOrAbove(c.Request.Context(), uri.ID, currentUserID)
 	if err != nil {
 		response.Error(c, err)

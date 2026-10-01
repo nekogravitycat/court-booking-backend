@@ -192,7 +192,7 @@ func (h *Handler) GetGroup(c *gin.Context) {
 
 	var orders []*pickup.PickupOrder
 	if query.IncludeOrders {
-		orders, err = h.service.GetOrdersByGroupID(c.Request.Context(), uri.ID)
+		orders, err = h.service.GetOrdersByGroupID(c.Request.Context(), uri.ID, auth.GetUserID(c))
 		if err != nil {
 			response.Error(c, err)
 			return
@@ -440,7 +440,7 @@ func (h *Handler) ListGroupOrders(c *gin.Context) {
 		}
 	}
 
-	orders, err := h.service.GetOrdersByGroupID(c.Request.Context(), uri.ID)
+	orders, err := h.service.GetOrdersByGroupID(c.Request.Context(), uri.ID, auth.GetUserID(c))
 	if err != nil {
 		response.Error(c, err)
 		return

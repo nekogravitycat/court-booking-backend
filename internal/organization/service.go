@@ -30,6 +30,7 @@ type UpdateMemberRequest struct {
 
 // Service defines business logic for organizations.
 type Service interface {
+	CheckOperation(ctx context.Context, orgID, userID string) error
 	// Organization methods
 	Create(ctx context.Context, name string, ownerID string) (*Organization, error)
 	GetByID(ctx context.Context, id string) (*Organization, error)
@@ -112,57 +113,24 @@ func (s *service) List(ctx context.Context, filter OrganizationFilter) ([]*Organ
 
 func (s *service) Update(ctx context.Context, id string, req UpdateOrganizationRequest) (*Organization, error) {
 	if req.Name != nil {
-		*req.Name = strings.TrimSpace(*req.Name)
-		if *req.Name == "" {
+		name := strings.TrimSpace(*req.Name)
+		if name == "" {
 			return nil, ErrNameRequired
 		}
-	}
-
-	// Check existence
-	org, err := s.repo.GetByID(ctx, id)
-	if err != nil {
-		return nil, err
-	}
-
-	// Apply updates if provided
-	if req.Name != nil {
-		newName := strings.TrimSpace(*req.Name)
-		if newName == "" {
-			return nil, ErrNameRequired
-		}
-		org.Name = newName
-	}
-	if req.IsActive != nil {
-		org.IsActive = *req.IsActive
+		req.Name = &name
 	}
 	if req.OwnerID != nil {
-		newOwnerID := *req.OwnerID
-		// Verify new owner exists
-		if _, err := s.userService.GetByID(ctx, newOwnerID); err != nil {
+		if _, err := s.userService.GetByID(ctx, *req.OwnerID); err != nil {
 			if errors.Is(err, user.ErrNotFound) {
 				return nil, ErrUserNotFound
 			}
 			return nil, err
 		}
-
-		// Mutual Exclusion Check: User cannot be both Org Owner and Location Manager
-		isLoMgr, err := s.locChecker.IsLocationManagerInOrg(ctx, id, newOwnerID)
-		if err != nil {
-			return nil, err
-		}
-		if isLoMgr {
-			return nil, apperror.New(409, "user is already a location manager in this organization; remove location manager privileges first")
-		}
-
-		org.OwnerID = newOwnerID
 	}
-
-	// Save updates
-	if err := s.repo.Update(ctx, org); err != nil {
+	if err := s.repo.UpdateDetails(ctx, id, req); err != nil {
 		return nil, err
 	}
-
-	return org, nil
+	return s.repo.GetByID(ctx, id)
 }
 
 func (s *service) Delete(ctx context.Context, id string) error {
@@ -172,12 +140,16 @@ func (s *service) Delete(ctx context.Context, id string) error {
 		return err
 	}
 
-	// Clean up cover file if exists
+	if err := s.repo.Delete(ctx, id); err != nil {
+		return err
+	}
+
+	// Clean up cover file after the organization is deactivated.
 	if org.Cover != nil && *org.Cover != "" {
 		_ = s.fileService.Delete(ctx, *org.Cover)
 	}
 
-	return s.repo.Delete(ctx, id)
+	return nil
 }
 
 func (s *service) UpdateCover(ctx context.Context, id string, fileID string) error {
@@ -191,7 +163,7 @@ func (s *service) UpdateCover(ctx context.Context, id string, fileID string) err
 	// Persist the new reference first; only delete the old file once the new
 	// reference is durably stored, to avoid orphaned files / dangling references.
 	org.Cover = &fileID
-	if err := s.repo.Update(ctx, org); err != nil {
+	if err := s.repo.UpdateCover(ctx, id, org.Cover); err != nil {
 		return err
 	}
 
@@ -212,7 +184,7 @@ func (s *service) RemoveCover(ctx context.Context, id string) error {
 	// Clear the reference first, then delete the file, keeping the database
 	// consistent even if the storage delete fails (best effort).
 	org.Cover = nil
-	if err := s.repo.Update(ctx, org); err != nil {
+	if err := s.repo.UpdateCover(ctx, id, org.Cover); err != nil {
 		return err
 	}
 
@@ -380,4 +352,24 @@ func (s *service) IsManagerOrAbove(ctx context.Context, orgID string, userID str
 		return false, err
 	}
 	return isManager, nil
+}
+
+// CheckOperation preserves historical reads while blocking new operations for
+// inactive organizations. System administrators may restore/manage them.
+func (s *service) CheckOperation(ctx context.Context, orgID, userID string) error {
+	org, err := s.repo.GetByID(ctx, orgID)
+	if err != nil {
+		return err
+	}
+	if org.IsActive {
+		return nil
+	}
+	u, err := s.userService.GetByID(ctx, userID)
+	if err != nil {
+		return err
+	}
+	if u.IsSystemAdmin {
+		return nil
+	}
+	return ErrOrgInactive
 }

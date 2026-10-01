@@ -319,8 +319,13 @@ func TestPickupListFilters(t *testing.T) {
 		require.Equal(t, http.StatusOK, code)
 		require.Len(t, resp.Items, 4)
 
-		// The near location is at the origin; the far one is ~350km away.
-		assert.Equal(t, mid.ID, resp.Items[0].ID)
+		// Both near locations are at the origin; equal distances sort by ID.
+		assert.ElementsMatch(t, []string{mid.ID, other.ID}, ids(resp)[:2])
+		expectedFirst := mid.ID
+		if other.ID < mid.ID {
+			expectedFirst = other.ID
+		}
+		assert.Equal(t, expectedFirst, resp.Items[0].ID)
 		require.NotNil(t, resp.Items[0].DistanceKm)
 		assert.InDelta(t, 0, *resp.Items[0].DistanceKm, 0.01)
 		require.NotNil(t, resp.Items[3].DistanceKm)

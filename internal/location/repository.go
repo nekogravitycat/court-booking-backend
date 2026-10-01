@@ -10,6 +10,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/nekogravitycat/court-booking-backend/internal/pkg/pagination"
 	"github.com/nekogravitycat/court-booking-backend/internal/pkg/request"
 	"github.com/nekogravitycat/court-booking-backend/internal/user"
 )
@@ -202,6 +203,16 @@ func (r *pgxRepository) List(ctx context.Context, filter LocationFilter) ([]*Loc
 		locations = append(locations, &l)
 	}
 
+	if err := rows.Err(); err != nil {
+		return nil, 0, err
+	}
+	rows.Close()
+	if total == 0 {
+		total, err = pagination.Count(ctx, r.pool, query)
+		if err != nil {
+			return nil, 0, err
+		}
+	}
 	return locations, total, nil
 }
 
@@ -255,7 +266,7 @@ func (r *pgxRepository) Delete(ctx context.Context, id string) error {
 		// referencing one of those resources (ON DELETE RESTRICT) raises a
 		// foreign-key violation. Report it as a 409 conflict instead of a 500.
 		var pgErr *pgconn.PgError
-		if errors.As(err, &pgErr) && pgErr.Code == pgerrcode.ForeignKeyViolation {
+		if errors.As(err, &pgErr) && (pgErr.Code == pgerrcode.ForeignKeyViolation || pgErr.Code == pgerrcode.RestrictViolation) {
 			return ErrLocationInUse
 		}
 		return fmt.Errorf("delete location failed: %w", err)
@@ -277,6 +288,22 @@ func (r *pgxRepository) AddLocationManager(ctx context.Context, locationID strin
 		return fmt.Errorf("get organization id for location failed: %w", err)
 	}
 
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback(ctx)
+	var ownerID string
+	if err := tx.QueryRow(ctx, "SELECT owner_id FROM public.organizations WHERE id = $1 FOR UPDATE", orgID).Scan(&ownerID); err != nil {
+		return err
+	}
+	var conflict bool
+	if err := tx.QueryRow(ctx, "SELECT EXISTS(SELECT 1 FROM public.organization_managers WHERE organization_id = $1 AND user_id = $2)", orgID, userID).Scan(&conflict); err != nil {
+		return err
+	}
+	if ownerID == userID || conflict {
+		return ErrOrganizationRoleConflict
+	}
 	psql := squirrel.StatementBuilder.PlaceholderFormat(squirrel.Dollar)
 	query, args, err := psql.Insert("public.location_managers").
 		Columns("location_id", "organization_id", "user_id").
@@ -288,11 +315,11 @@ func (r *pgxRepository) AddLocationManager(ctx context.Context, locationID strin
 		return fmt.Errorf("build add location admin query failed: %w", err)
 	}
 
-	_, err = r.pool.Exec(ctx, query, args...)
+	_, err = tx.Exec(ctx, query, args...)
 	if err != nil {
 		return fmt.Errorf("AddLocationManager failed: %w", err)
 	}
-	return nil
+	return tx.Commit(ctx)
 }
 
 func (r *pgxRepository) RemoveLocationManager(ctx context.Context, locationID string, userID string) error {
@@ -381,6 +408,16 @@ func (r *pgxRepository) ListLocationManagers(ctx context.Context, locationID str
 			return nil, 0, fmt.Errorf("scan failed: %w", err)
 		}
 		users = append(users, &u)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, 0, err
+	}
+	rows.Close()
+	if total == 0 {
+		total, err = pagination.Count(ctx, r.pool, query)
+		if err != nil {
+			return nil, 0, err
+		}
 	}
 	return users, total, nil
 }

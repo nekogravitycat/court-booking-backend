@@ -8,6 +8,7 @@ import (
 	"github.com/Masterminds/squirrel"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/nekogravitycat/court-booking-backend/internal/pkg/pagination"
 )
 
 type Repository interface {
@@ -123,6 +124,16 @@ func (r *pgxRepository) List(ctx context.Context, filter Filter) ([]*Announcemen
 		result = append(result, &a)
 	}
 
+	if err := rows.Err(); err != nil {
+		return nil, 0, err
+	}
+	rows.Close()
+	if total == 0 {
+		total, err = pagination.Count(ctx, r.pool, query)
+		if err != nil {
+			return nil, 0, err
+		}
+	}
 	return result, total, nil
 }
 
