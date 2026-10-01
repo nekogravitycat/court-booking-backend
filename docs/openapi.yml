@@ -51,8 +51,6 @@ tags:
     description: 球團主辦人身分管理 (系統管理員)
   - name: Favorites
     description: 我的最愛
-  - name: Skill Ratings
-    description: 主辦人對參加者的程度評分與使用者綜合評級
   - name: Notifications
     description: 站內通知 (個人收件匣)
   - name: System

@@ -1,7 +1,7 @@
 groupRatings:
   get:
     tags:
-      - Skill Ratings
+      - Pickup Groups
     summary: "取得該臨打團已給出的評分 (主辦人 / 系統管理員)"
     description: |
       **權限 Access Control**:
@@ -34,7 +34,7 @@ groupRatings:
 groupRatingDetail:
   put:
     tags:
-      - Skill Ratings
+      - Pickup Groups
     summary: "評定 (或改評) 參加者的程度"
     description: |
       臨打團結束後，主辦人可選擇性地為個別參加者評定程度。同一參加者在同一臨打團只有一筆評分，
@@ -98,7 +98,7 @@ groupRatingDetail:
               $ref: "../components/schemas/common.yml#/ErrorResponse"
   delete:
     tags:
-      - Skill Ratings
+      - Pickup Groups
     summary: "刪除對該參加者在此臨打團的評分"
     description: |
       **權限 Access Control**:
@@ -137,7 +137,7 @@ groupRatingDetail:
 userSkillRatings:
   get:
     tags:
-      - Skill Ratings
+      - Users
     summary: "取得某使用者的綜合程度評級"
     description: |
       回傳該使用者在各球類的綜合評級 (所有評分的算術平均)；沒被評過的使用者回傳空陣列。
@@ -172,7 +172,7 @@ userSkillRatings:
 mySkillRatings:
   get:
     tags:
-      - Skill Ratings
+      - Me
     summary: "取得我自己的綜合程度評級"
     description: |
       **權限 Access Control**:
