@@ -1,4 +1,52 @@
 notifications:
+  post:
+    tags: [Notifications]
+    summary: "系統管理員手動發送站內通知"
+    description: "僅有效系統管理員可用。一次 1-100 位不重複的有效使用者；全部成功或全部失敗。每位管理員每分鐘最多 10 次成功發送。type 固定為 admin_message，內容為純文字，前端應以文字方式呈現。"
+    security:
+      - bearerAuth: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [user_ids, title, content]
+            properties:
+              user_ids:
+                type: array
+                minItems: 1
+                maxItems: 100
+                uniqueItems: true
+                items:
+                  type: string
+                  format: uuid
+              title:
+                type: string
+                minLength: 1
+                maxLength: 100
+              content:
+                type: string
+                minLength: 1
+                maxLength: 2000
+    responses:
+      "201":
+        description: "發送成功"
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                sent:
+                  type: integer
+      "400":
+        description: "無效內容、重複收件者或收件者不存在／停用"
+      "401":
+        description: "未登入"
+      "403":
+        description: "非系統管理員"
+      "429":
+        description: "超過發送頻率限制"
   get:
     tags:
       - Notifications
@@ -17,6 +65,7 @@ notifications:
       | pickup_order_cancel_requested | 主辦人 | 報名者申請取消 |
       | pickup_group_cancelled | 已佔名額的報名者 | 臨打團被取消 |
       | pickup_group_updated | 已佔名額的報名者 | 臨打團時間或場地變更 |
+      | admin_message | 指定使用者 | 系統管理員手動發送 |
       | skill_rated | 被評分者 | 主辦人為其評定程度 |
 
       自己的操作不會通知自己。

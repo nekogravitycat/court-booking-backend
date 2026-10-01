@@ -46,3 +46,10 @@ type UnreadCountResponse struct {
 type MarkAllReadResponse struct {
 	Updated int64 `json:"updated"`
 }
+
+// SendNotificationRequest delivers plain text to selected users.
+type SendNotificationRequest struct {
+	UserIDs []string `json:"user_ids" binding:"required,min=1,max=100,unique,dive,uuid"`
+	Title   string   `json:"title" binding:"required,max=100"`
+	Content string   `json:"content" binding:"required,max=2000"`
+}

@@ -58,6 +58,12 @@ UserResponse:
       enum: [male, female, other]
       nullable: true
       description: "性別 (選填)"
+    line_id:
+      type: string
+      maxLength: 20
+      pattern: "^([a-z0-9._-]{4,20})?$"
+      nullable: true
+      description: "選填 LINE ID，4-20 個小寫英數字或 .-_；PATCH 傳空字串可清除，省略或 null 保留原值。僅本人與系統管理員可見。"
     birth_date:
       type: string
       format: date
@@ -117,6 +123,12 @@ RegisterRequest:
       type: string
       enum: [male, female, other]
       description: "選填"
+    line_id:
+      type: string
+      maxLength: 20
+      pattern: "^([a-z0-9._-]{4,20})?$"
+      nullable: true
+      description: "選填 LINE ID，4-20 個小寫英數字或 .-_；PATCH 傳空字串可清除，省略或 null 保留原值。僅本人與系統管理員可見。"
     birth_date:
       type: string
       format: date
@@ -160,6 +172,12 @@ UpdateUserRequest:
     gender:
       type: string
       enum: [male, female, other]
+    line_id:
+      type: string
+      maxLength: 20
+      pattern: "^([a-z0-9._-]{4,20})?$"
+      nullable: true
+      description: "選填 LINE ID，4-20 個小寫英數字或 .-_；PATCH 傳空字串可清除，省略或 null 保留原值。僅本人與系統管理員可見。"
     birth_date:
       type: string
       format: date
@@ -182,6 +200,12 @@ UpdateMeRequest:
     gender:
       type: string
       enum: [male, female, other]
+    line_id:
+      type: string
+      maxLength: 20
+      pattern: "^([a-z0-9._-]{4,20})?$"
+      nullable: true
+      description: "選填 LINE ID，4-20 個小寫英數字或 .-_；PATCH 傳空字串可清除，省略或 null 保留原值。僅本人與系統管理員可見。"
     birth_date:
       type: string
       format: date

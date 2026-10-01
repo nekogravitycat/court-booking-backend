@@ -9,6 +9,7 @@ NotificationResponse:
       type: string
       description: "穩定的機器碼，前端可據此決定圖示或導向"
       enum:
+        - admin_message
         - pickup_order_created
         - pickup_order_confirmed
         - pickup_order_rejected

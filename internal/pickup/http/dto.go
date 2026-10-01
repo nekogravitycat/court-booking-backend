@@ -62,14 +62,15 @@ type HostGroupsURI struct {
 }
 
 type CreateGroupBody struct {
-	Title       string    `json:"title" binding:"required,min=1,max=100"`
-	Description *string   `json:"description" binding:"omitempty,max=100"`
-	StartTime   time.Time `json:"start_time" binding:"required"`
-	EndTime     time.Time `json:"end_time" binding:"required"`
-	Fee         int       `json:"fee" binding:"min=0,max=100000"`
-	Capacity    int       `json:"capacity" binding:"required,min=1,max=200"`
-	LocationID  string    `json:"location_id" binding:"required,uuid"`
-	SportID     string    `json:"sport_id" binding:"required,uuid"`
+	Title                string    `json:"title" binding:"required,min=1,max=100"`
+	Description          *string   `json:"description" binding:"omitempty,max=100"`
+	StartTime            time.Time `json:"start_time" binding:"required"`
+	RegistrationDeadline time.Time `json:"registration_deadline" binding:"required"`
+	EndTime              time.Time `json:"end_time" binding:"required"`
+	Fee                  int       `json:"fee" binding:"min=0,max=100000"`
+	Capacity             int       `json:"capacity" binding:"required,min=1,max=200"`
+	LocationID           string    `json:"location_id" binding:"required,uuid"`
+	SportID              string    `json:"sport_id" binding:"required,uuid"`
 	// MinSkillLevel is required; MaxSkillLevel is optional (nil leaves the
 	// range unbounded above).
 	MinSkillLevel int   `json:"min_skill_level" binding:"required,min=1,max=100"`
@@ -93,14 +94,15 @@ type UpdateOrderBody struct {
 }
 
 type UpdateGroupBody struct {
-	Title       *string    `json:"title" binding:"omitempty,min=1,max=100"`
-	Description *string    `json:"description" binding:"omitempty,max=100"`
-	StartTime   *time.Time `json:"start_time"`
-	EndTime     *time.Time `json:"end_time"`
-	Fee         *int       `json:"fee" binding:"omitempty,min=0,max=100000"`
-	Capacity    *int       `json:"capacity" binding:"omitempty,min=1,max=200"`
-	LocationID  *string    `json:"location_id" binding:"omitempty,uuid"`
-	SportID     *string    `json:"sport_id" binding:"omitempty,uuid"`
+	Title                *string    `json:"title" binding:"omitempty,min=1,max=100"`
+	Description          *string    `json:"description" binding:"omitempty,max=100"`
+	StartTime            *time.Time `json:"start_time"`
+	RegistrationDeadline *time.Time `json:"registration_deadline"`
+	EndTime              *time.Time `json:"end_time"`
+	Fee                  *int       `json:"fee" binding:"omitempty,min=0,max=100000"`
+	Capacity             *int       `json:"capacity" binding:"omitempty,min=1,max=200"`
+	LocationID           *string    `json:"location_id" binding:"omitempty,uuid"`
+	SportID              *string    `json:"sport_id" binding:"omitempty,uuid"`
 	// MinSkillLevel may not be cleared (the group always has a lower bound).
 	// MaxSkillLevel may be raised, lowered, or set (but not cleared back to
 	// null once set, same as the other optional fields on this endpoint).
@@ -162,17 +164,18 @@ type PickupHostTag struct {
 // endpoints (GET /pickup-groups and GET /hosts/{host_id}/pickup-groups).
 // The host phone is intentionally omitted from the public shape.
 type PickupGroupBrief struct {
-	ID              string                   `json:"id"`
-	HostID          string                   `json:"host_id"`
-	HostUsername    string                   `json:"host_username"`
-	HostDisplayName *string                  `json:"host_display_name"`
-	LocationID      string                   `json:"location_id"`
-	Title           string                   `json:"title"`
-	Sport           sportsHttp.SportTag      `json:"sport"`
-	MinSkillLevel   skillHttp.SkillLevelTag  `json:"min_skill_level"`
-	MaxSkillLevel   *skillHttp.SkillLevelTag `json:"max_skill_level"`
-	StartTime       time.Time                `json:"start_time"`
-	Fee             int                      `json:"fee"`
+	ID                   string                   `json:"id"`
+	HostID               string                   `json:"host_id"`
+	HostUsername         string                   `json:"host_username"`
+	HostDisplayName      *string                  `json:"host_display_name"`
+	LocationID           string                   `json:"location_id"`
+	Title                string                   `json:"title"`
+	Sport                sportsHttp.SportTag      `json:"sport"`
+	MinSkillLevel        skillHttp.SkillLevelTag  `json:"min_skill_level"`
+	MaxSkillLevel        *skillHttp.SkillLevelTag `json:"max_skill_level"`
+	StartTime            time.Time                `json:"start_time"`
+	RegistrationDeadline time.Time                `json:"registration_deadline"`
+	Fee                  int                      `json:"fee"`
 	// EnrolledStatus is the requesting user's status for this group: "free" when
 	// not enrolled (or unauthenticated), otherwise their order status.
 	EnrolledStatus string `json:"enrolled_status"`
@@ -199,64 +202,67 @@ func NewPickupGroupBrief(g *pickup.PickupGroup) PickupGroupBrief {
 		enrolled = pickup.EnrolledStatusFree
 	}
 	return PickupGroupBrief{
-		ID:              g.ID,
-		HostID:          g.HostID,
-		HostUsername:    g.HostUsername,
-		HostDisplayName: g.HostDisplayName,
-		LocationID:      g.LocationID,
-		Title:           g.Title,
-		Sport:           sportsHttp.SportTag{ID: g.SportID, Code: g.SportCode, Name: g.SportName},
-		MinSkillLevel:   skillHttp.SkillLevelTag{Level: g.MinSkillLevel, Label: g.MinSkillLevelLabel},
-		MaxSkillLevel:   maxSkillLevelTag(g),
-		StartTime:       g.StartTime.UTC(),
-		Fee:             g.Fee,
-		EnrolledStatus:  enrolled,
-		DistanceKm:      g.DistanceKm,
+		ID:                   g.ID,
+		HostID:               g.HostID,
+		HostUsername:         g.HostUsername,
+		HostDisplayName:      g.HostDisplayName,
+		LocationID:           g.LocationID,
+		Title:                g.Title,
+		Sport:                sportsHttp.SportTag{ID: g.SportID, Code: g.SportCode, Name: g.SportName},
+		MinSkillLevel:        skillHttp.SkillLevelTag{Level: g.MinSkillLevel, Label: g.MinSkillLevelLabel},
+		MaxSkillLevel:        maxSkillLevelTag(g),
+		StartTime:            g.StartTime.UTC(),
+		RegistrationDeadline: g.RegistrationDeadline.UTC(),
+		Fee:                  g.Fee,
+		EnrolledStatus:       enrolled,
+		DistanceKm:           g.DistanceKm,
 	}
 }
 
 type PickupGroupResponse struct {
-	ID              string                   `json:"id"`
-	Host            PickupHostTag            `json:"host"`
-	Title           string                   `json:"title"`
-	Description     *string                  `json:"description"`
-	StartTime       time.Time                `json:"start_time"`
-	EndTime         time.Time                `json:"end_time"`
-	Fee             int                      `json:"fee"`
-	Capacity        int                      `json:"capacity"`
-	LocationID      string                   `json:"location_id"`
-	Sport           sportsHttp.SportTag      `json:"sport"`
-	MinSkillLevel   skillHttp.SkillLevelTag  `json:"min_skill_level"`
-	MaxSkillLevel   *skillHttp.SkillLevelTag `json:"max_skill_level"`
-	Status          string                   `json:"status"`
-	Enable          bool                     `json:"enable"`
-	CurrentEnrolled int                      `json:"current_enrolled"`
-	CreatedAt       time.Time                `json:"created_at"`
-	UpdatedAt       time.Time                `json:"updated_at"`
-	Orders          *[]PickupOrderResponse   `json:"orders,omitempty"`
+	ID                   string                   `json:"id"`
+	Host                 PickupHostTag            `json:"host"`
+	Title                string                   `json:"title"`
+	Description          *string                  `json:"description"`
+	StartTime            time.Time                `json:"start_time"`
+	RegistrationDeadline time.Time                `json:"registration_deadline"`
+	EndTime              time.Time                `json:"end_time"`
+	Fee                  int                      `json:"fee"`
+	Capacity             int                      `json:"capacity"`
+	LocationID           string                   `json:"location_id"`
+	Sport                sportsHttp.SportTag      `json:"sport"`
+	MinSkillLevel        skillHttp.SkillLevelTag  `json:"min_skill_level"`
+	MaxSkillLevel        *skillHttp.SkillLevelTag `json:"max_skill_level"`
+	Status               string                   `json:"status"`
+	Enable               bool                     `json:"enable"`
+	CurrentEnrolled      int                      `json:"current_enrolled"`
+	CreatedAt            time.Time                `json:"created_at"`
+	UpdatedAt            time.Time                `json:"updated_at"`
+	Orders               *[]PickupOrderResponse   `json:"orders,omitempty"`
 }
 
 // NewPickupGroupResponse builds a PickupGroupResponse.
 // Pass a non-nil orders slice to include order details; nil omits the field entirely.
 func NewPickupGroupResponse(g *pickup.PickupGroup, orders []*pickup.PickupOrder) PickupGroupResponse {
 	resp := PickupGroupResponse{
-		ID:              g.ID,
-		Host:            PickupHostTag{ID: g.HostID, Username: g.HostUsername, DisplayName: g.HostDisplayName, Phone: g.HostPhone},
-		Title:           g.Title,
-		Description:     g.Description,
-		StartTime:       g.StartTime.UTC(),
-		EndTime:         g.EndTime.UTC(),
-		Fee:             g.Fee,
-		Capacity:        g.Capacity,
-		LocationID:      g.LocationID,
-		Sport:           sportsHttp.SportTag{ID: g.SportID, Code: g.SportCode, Name: g.SportName},
-		MinSkillLevel:   skillHttp.SkillLevelTag{Level: g.MinSkillLevel, Label: g.MinSkillLevelLabel},
-		MaxSkillLevel:   maxSkillLevelTag(g),
-		Status:          string(g.Status),
-		Enable:          g.Enable,
-		CurrentEnrolled: g.CurrentEnrolled,
-		CreatedAt:       g.CreatedAt.UTC(),
-		UpdatedAt:       g.UpdatedAt.UTC(),
+		ID:                   g.ID,
+		Host:                 PickupHostTag{ID: g.HostID, Username: g.HostUsername, DisplayName: g.HostDisplayName, Phone: g.HostPhone},
+		Title:                g.Title,
+		Description:          g.Description,
+		StartTime:            g.StartTime.UTC(),
+		RegistrationDeadline: g.RegistrationDeadline.UTC(),
+		EndTime:              g.EndTime.UTC(),
+		Fee:                  g.Fee,
+		Capacity:             g.Capacity,
+		LocationID:           g.LocationID,
+		Sport:                sportsHttp.SportTag{ID: g.SportID, Code: g.SportCode, Name: g.SportName},
+		MinSkillLevel:        skillHttp.SkillLevelTag{Level: g.MinSkillLevel, Label: g.MinSkillLevelLabel},
+		MaxSkillLevel:        maxSkillLevelTag(g),
+		Status:               string(g.Status),
+		Enable:               g.Enable,
+		CurrentEnrolled:      g.CurrentEnrolled,
+		CreatedAt:            g.CreatedAt.UTC(),
+		UpdatedAt:            g.UpdatedAt.UTC(),
 	}
 
 	if orders != nil {

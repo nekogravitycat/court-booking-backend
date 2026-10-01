@@ -62,6 +62,7 @@ func (h *UserHandler) Register(c *gin.Context) {
 		DisplayName: req.DisplayName,
 		Gender:      req.Gender,
 		BirthDate:   birthDate,
+		LineID:      req.LineID,
 	})
 	if err != nil {
 		response.Error(c, err)
@@ -254,6 +255,7 @@ func (h *UserHandler) Update(c *gin.Context) {
 		Phone:         body.Phone,
 		Gender:        body.Gender,
 		BirthDate:     birthDate,
+		LineID:        body.LineID,
 		IsActive:      body.IsActive,
 		IsSystemAdmin: body.IsSystemAdmin,
 	}
@@ -461,6 +463,7 @@ func (h *UserHandler) UpdateMe(c *gin.Context) {
 		Phone:       body.Phone,
 		Gender:      body.Gender,
 		BirthDate:   birthDate,
+		LineID:      body.LineID,
 	}, userID)
 	if err != nil {
 		response.Error(c, err)

@@ -22,18 +22,19 @@ const (
 )
 
 type CreateGroupRequest struct {
-	HostID        string
-	Title         string
-	Description   *string
-	StartTime     time.Time
-	EndTime       time.Time
-	Fee           int
-	Capacity      int
-	LocationID    string
-	SportID       string
-	MinSkillLevel int
-	MaxSkillLevel *int
-	Enable        bool
+	HostID               string
+	Title                string
+	Description          *string
+	StartTime            time.Time
+	RegistrationDeadline time.Time
+	EndTime              time.Time
+	Fee                  int
+	Capacity             int
+	LocationID           string
+	SportID              string
+	MinSkillLevel        int
+	MaxSkillLevel        *int
+	Enable               bool
 }
 
 // CreateOrderRequest enrolls a single user using their account skill level.
@@ -61,18 +62,19 @@ type UpdateOrderRequest struct {
 }
 
 type UpdateGroupRequest struct {
-	Title         *string
-	Description   *string
-	StartTime     *time.Time
-	EndTime       *time.Time
-	Fee           *int
-	Capacity      *int
-	LocationID    *string
-	SportID       *string
-	MinSkillLevel *int
-	MaxSkillLevel *int
-	Status        *string
-	Enable        *bool
+	Title                *string
+	Description          *string
+	StartTime            *time.Time
+	RegistrationDeadline *time.Time
+	EndTime              *time.Time
+	Fee                  *int
+	Capacity             *int
+	LocationID           *string
+	SportID              *string
+	MinSkillLevel        *int
+	MaxSkillLevel        *int
+	Status               *string
+	Enable               *bool
 }
 
 type Service interface {
@@ -183,6 +185,9 @@ func (s *service) notify(ctx context.Context, ns ...*notification.Notification) 
 }
 
 func (s *service) CreateGroup(ctx context.Context, req CreateGroupRequest) (*PickupGroup, error) {
+	if req.RegistrationDeadline.Before(time.Now()) || req.RegistrationDeadline.After(req.StartTime) {
+		return nil, ErrInvalidRegistrationDeadline
+	}
 	if !req.EndTime.After(req.StartTime) {
 		return nil, ErrInvalidTimeRange
 	}
@@ -192,19 +197,20 @@ func (s *service) CreateGroup(ctx context.Context, req CreateGroupRequest) (*Pic
 	}
 
 	group := &PickupGroup{
-		HostID:        req.HostID,
-		Title:         req.Title,
-		Description:   req.Description,
-		StartTime:     req.StartTime,
-		EndTime:       req.EndTime,
-		Fee:           req.Fee,
-		Capacity:      req.Capacity,
-		LocationID:    req.LocationID,
-		SportID:       req.SportID,
-		MinSkillLevel: req.MinSkillLevel,
-		MaxSkillLevel: req.MaxSkillLevel,
-		Status:        GroupStatusActive,
-		Enable:        req.Enable,
+		HostID:               req.HostID,
+		Title:                req.Title,
+		Description:          req.Description,
+		StartTime:            req.StartTime,
+		RegistrationDeadline: req.RegistrationDeadline,
+		EndTime:              req.EndTime,
+		Fee:                  req.Fee,
+		Capacity:             req.Capacity,
+		LocationID:           req.LocationID,
+		SportID:              req.SportID,
+		MinSkillLevel:        req.MinSkillLevel,
+		MaxSkillLevel:        req.MaxSkillLevel,
+		Status:               GroupStatusActive,
+		Enable:               req.Enable,
 	}
 
 	if err := s.repo.CreateGroup(ctx, group); err != nil {
@@ -267,6 +273,12 @@ func (s *service) updateGroup(ctx context.Context, id string, req UpdateGroupReq
 	}
 	if req.StartTime != nil {
 		group.StartTime = *req.StartTime
+	}
+	if req.RegistrationDeadline != nil {
+		group.RegistrationDeadline = *req.RegistrationDeadline
+	}
+	if group.RegistrationDeadline.After(group.StartTime) || ((req.RegistrationDeadline != nil || req.StartTime != nil) && group.RegistrationDeadline.Before(time.Now())) {
+		return nil, ErrInvalidRegistrationDeadline
 	}
 	if req.EndTime != nil {
 		group.EndTime = *req.EndTime

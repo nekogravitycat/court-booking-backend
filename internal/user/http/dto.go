@@ -32,7 +32,8 @@ type UserResponse struct {
 	DisplayName     *string                     `json:"display_name"`
 	Phone           *string                     `json:"phone"`
 	Gender          *string                     `json:"gender"`
-	BirthDate       *string                     `json:"birth_date"`       // YYYY-MM-DD
+	BirthDate       *string                     `json:"birth_date"` // YYYY-MM-DD
+	LineID          *string                     `json:"line_id"`
 	Age             *int                        `json:"age"`              // Derived from birth_date
 	Avatar          *string                     `json:"avatar"`           // URL to avatar image
 	AvatarThumbnail *string                     `json:"avatar_thumbnail"` // URL to avatar thumbnail
@@ -103,6 +104,7 @@ func NewUserResponse(u *user.User) UserResponse {
 		Username:        u.Username,
 		DisplayName:     u.DisplayName,
 		Phone:           u.Phone,
+		LineID:          u.LineID,
 		Gender:          u.Gender,
 		BirthDate:       birthDate,
 		Age:             age,
@@ -125,6 +127,7 @@ type RegisterRequest struct {
 	DisplayName string  `json:"display_name" binding:"required,max=50"`
 	Gender      *string `json:"gender" binding:"omitempty,oneof=male female other"`
 	BirthDate   *string `json:"birth_date" binding:"omitempty,datetime=2006-01-02"`
+	LineID      *string `json:"line_id" binding:"omitempty,max=20"`
 }
 
 // Validate performs custom validation for RegisterRequest.
@@ -150,6 +153,7 @@ type UpdateUserRequest struct {
 	Phone         *string `json:"phone" binding:"omitempty,tw_phone"`
 	Gender        *string `json:"gender" binding:"omitempty,oneof=male female other"`
 	BirthDate     *string `json:"birth_date" binding:"omitempty,datetime=2006-01-02"`
+	LineID        *string `json:"line_id" binding:"omitempty,max=20"`
 	IsActive      *bool   `json:"is_active"`
 	IsSystemAdmin *bool   `json:"is_system_admin"`
 }
@@ -183,4 +187,5 @@ type UpdateMeRequest struct {
 	Phone       *string `json:"phone" binding:"omitempty,tw_phone"`
 	Gender      *string `json:"gender" binding:"omitempty,oneof=male female other"`
 	BirthDate   *string `json:"birth_date" binding:"omitempty,datetime=2006-01-02"`
+	LineID      *string `json:"line_id" binding:"omitempty,max=20"`
 }

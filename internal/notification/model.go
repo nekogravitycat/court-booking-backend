@@ -8,12 +8,17 @@ import (
 )
 
 var (
-	ErrNotFound = apperror.New(http.StatusNotFound, "notification not found")
+	ErrManualSendForbidden       = apperror.New(http.StatusForbidden, "active system administrator required")
+	ErrInvalidManualNotification = apperror.New(http.StatusBadRequest, "provide 1-100 unique user IDs, a title of 1-100 characters, and content of 1-2000 characters")
+	ErrInvalidRecipients         = apperror.New(http.StatusBadRequest, "all recipients must be active users")
+	ErrSendRateLimited           = apperror.New(http.StatusTooManyRequests, "manual notification limit exceeded; try again later")
+	ErrNotFound                  = apperror.New(http.StatusNotFound, "notification not found")
 )
 
 // Notification types. The type is a stable machine key the client can use to
 // pick an icon or deep link; title and content are ready-to-display text.
 const (
+	TypeAdminMessage               = "admin_message"
 	TypePickupOrderCreated         = "pickup_order_created"           // To the host: someone enrolled
 	TypePickupOrderConfirmed       = "pickup_order_confirmed"         // To the booker: host confirmed
 	TypePickupOrderRejected        = "pickup_order_rejected"          // To the booker: host rejected

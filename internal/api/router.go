@@ -149,7 +149,7 @@ func NewRouter(cfg Config) *gin.Engine {
 		pickupHttp.RegisterRoutes(v1, pickupHandler, authMiddleware, optionalAuthMiddleware)
 		favoriteHttp.RegisterRoutes(v1, favoriteHandler, authMiddleware)
 		skillRatingHttp.RegisterRoutes(v1, skillRatingHandler, authMiddleware)
-		notificationHttp.RegisterRoutes(v1, notificationHandler, authMiddleware)
+		notificationHttp.RegisterRoutes(v1, notificationHandler, authMiddleware, sysAdminMiddleware)
 	}
 
 	return r

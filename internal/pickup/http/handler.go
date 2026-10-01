@@ -48,18 +48,19 @@ func (h *Handler) CreateGroup(c *gin.Context) {
 	}
 
 	req := pickup.CreateGroupRequest{
-		HostID:        userID,
-		Title:         body.Title,
-		Description:   body.Description,
-		StartTime:     body.StartTime,
-		EndTime:       body.EndTime,
-		Fee:           body.Fee,
-		Capacity:      body.Capacity,
-		LocationID:    body.LocationID,
-		SportID:       body.SportID,
-		MinSkillLevel: body.MinSkillLevel,
-		MaxSkillLevel: body.MaxSkillLevel,
-		Enable:        enable,
+		HostID:               userID,
+		Title:                body.Title,
+		Description:          body.Description,
+		StartTime:            body.StartTime,
+		RegistrationDeadline: body.RegistrationDeadline,
+		EndTime:              body.EndTime,
+		Fee:                  body.Fee,
+		Capacity:             body.Capacity,
+		LocationID:           body.LocationID,
+		SportID:              body.SportID,
+		MinSkillLevel:        body.MinSkillLevel,
+		MaxSkillLevel:        body.MaxSkillLevel,
+		Enable:               enable,
 	}
 
 	group, err := h.service.CreateGroup(c.Request.Context(), req)
@@ -242,18 +243,19 @@ func (h *Handler) UpdateGroup(c *gin.Context) {
 	}
 
 	req := pickup.UpdateGroupRequest{
-		Title:         body.Title,
-		Description:   body.Description,
-		StartTime:     body.StartTime,
-		EndTime:       body.EndTime,
-		Fee:           body.Fee,
-		Capacity:      body.Capacity,
-		LocationID:    body.LocationID,
-		SportID:       body.SportID,
-		MinSkillLevel: body.MinSkillLevel,
-		MaxSkillLevel: body.MaxSkillLevel,
-		Status:        body.Status,
-		Enable:        body.Enable,
+		Title:                body.Title,
+		Description:          body.Description,
+		StartTime:            body.StartTime,
+		RegistrationDeadline: body.RegistrationDeadline,
+		EndTime:              body.EndTime,
+		Fee:                  body.Fee,
+		Capacity:             body.Capacity,
+		LocationID:           body.LocationID,
+		SportID:              body.SportID,
+		MinSkillLevel:        body.MinSkillLevel,
+		MaxSkillLevel:        body.MaxSkillLevel,
+		Status:               body.Status,
+		Enable:               body.Enable,
 	}
 
 	group, err := h.service.UpdateGroup(c.Request.Context(), uri.ID, req)

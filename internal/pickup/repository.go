@@ -124,7 +124,7 @@ func (r *pgxRepository) WithOrderLock(ctx context.Context, id string, fn func(Re
 // order the scanners below expect. Host, sport, and skill-level display fields
 // are resolved via JOIN rather than snapshotted on pickup_groups.
 var groupSelectColumns = []string{
-	"pg.id", "pg.host_id", "pg.title", "pg.description", "pg.start_time", "pg.end_time", "pg.fee",
+	"pg.id", "pg.host_id", "pg.title", "pg.description", "pg.start_time", "pg.registration_deadline", "pg.end_time", "pg.fee",
 	"pg.capacity", "pg.location_id", "pg.sport_id", "s.code", "s.name",
 	"pg.min_skill_level", "COALESCE(sl_min.label, '')", "pg.max_skill_level", "sl_max.label",
 	"u.username", "u.display_name", "u.phone",
@@ -150,7 +150,7 @@ func groupJoins(b squirrel.SelectBuilder) squirrel.SelectBuilder {
 // scan targets (e.g. enrolled_status, total_count) are appended by callers.
 func scanGroupInto(g *PickupGroup, extra ...any) []any {
 	targets := []any{
-		&g.ID, &g.HostID, &g.Title, &g.Description, &g.StartTime, &g.EndTime, &g.Fee,
+		&g.ID, &g.HostID, &g.Title, &g.Description, &g.StartTime, &g.RegistrationDeadline, &g.EndTime, &g.Fee,
 		&g.Capacity, &g.LocationID, &g.SportID, &g.SportCode, &g.SportName,
 		&g.MinSkillLevel, &g.MinSkillLevelLabel, &g.MaxSkillLevel, &g.MaxSkillLevelLabel,
 		&g.HostUsername, &g.HostDisplayName, &g.HostPhone,
@@ -162,9 +162,9 @@ func scanGroupInto(g *PickupGroup, extra ...any) []any {
 func (r *pgxRepository) CreateGroup(ctx context.Context, g *PickupGroup) error {
 	psql := squirrel.StatementBuilder.PlaceholderFormat(squirrel.Dollar)
 	query, args, err := psql.Insert("public.pickup_groups").
-		Columns("host_id", "title", "description", "start_time", "end_time",
+		Columns("host_id", "title", "description", "start_time", "registration_deadline", "end_time",
 			"fee", "capacity", "location_id", "sport_id", "min_skill_level", "max_skill_level", "status", "enable").
-		Values(g.HostID, g.Title, g.Description, g.StartTime, g.EndTime,
+		Values(g.HostID, g.Title, g.Description, g.StartTime, g.RegistrationDeadline, g.EndTime,
 			g.Fee, g.Capacity, g.LocationID, g.SportID, g.MinSkillLevel, g.MaxSkillLevel, g.Status, g.Enable).
 		Suffix("RETURNING id, created_at, updated_at").
 		ToSql()
@@ -360,6 +360,7 @@ func (r *pgxRepository) UpdateGroup(ctx context.Context, g *PickupGroup) error {
 		Set("title", g.Title).
 		Set("description", g.Description).
 		Set("start_time", g.StartTime).
+		Set("registration_deadline", g.RegistrationDeadline).
 		Set("end_time", g.EndTime).
 		Set("fee", g.Fee).
 		Set("capacity", g.Capacity).
@@ -430,11 +431,11 @@ func (r *pgxRepository) CreateOrder(ctx context.Context, order *PickupOrder) err
 	var capacity int
 	var status, sportID string
 	var enabled bool
-	var startTime, endTime time.Time
+	var startTime, endTime, deadline time.Time
 	if err := tx.QueryRow(ctx,
-		"SELECT capacity, status::TEXT, start_time, end_time, enable, sport_id FROM public.pickup_groups WHERE id = $1 FOR UPDATE",
+		"SELECT capacity, status::TEXT, start_time, end_time, registration_deadline, enable, sport_id FROM public.pickup_groups WHERE id = $1 FOR UPDATE",
 		order.PickupGroupID,
-	).Scan(&capacity, &status, &startTime, &endTime, &enabled, &sportID); err != nil {
+	).Scan(&capacity, &status, &startTime, &endTime, &deadline, &enabled, &sportID); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return ErrGroupNotFound
 		}
@@ -443,6 +444,9 @@ func (r *pgxRepository) CreateOrder(ctx context.Context, order *PickupOrder) err
 
 	if status != string(GroupStatusActive) || !enabled || !endTime.After(time.Now()) {
 		return ErrGroupNotActive
+	}
+	if !deadline.After(time.Now()) {
+		return ErrRegistrationClosed
 	}
 
 	if order.EnrollmentSportID != "" && order.EnrollmentSportID != sportID {
@@ -759,11 +763,11 @@ func (r *pgxRepository) UpdateOrderWithCapacityCheck(ctx context.Context, o *Pic
 	var capacity int
 	var enabled bool
 	var status string
-	var startTime, endTime time.Time
+	var startTime, endTime, deadline time.Time
 	if err := tx.QueryRow(ctx,
-		"SELECT capacity, enable, status::text, start_time, end_time FROM public.pickup_groups WHERE id = $1 FOR UPDATE",
+		"SELECT capacity, enable, status::text, start_time, end_time, registration_deadline FROM public.pickup_groups WHERE id = $1 FOR UPDATE",
 		o.PickupGroupID,
-	).Scan(&capacity, &enabled, &status, &startTime, &endTime); err != nil {
+	).Scan(&capacity, &enabled, &status, &startTime, &endTime, &deadline); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return ErrGroupNotFound
 		}
@@ -772,6 +776,9 @@ func (r *pgxRepository) UpdateOrderWithCapacityCheck(ctx context.Context, o *Pic
 
 	if status != string(GroupStatusActive) || !enabled || !endTime.After(time.Now()) {
 		return ErrGroupNotActive
+	}
+	if !deadline.After(time.Now()) {
+		return ErrRegistrationClosed
 	}
 	var conflict bool
 	if err := tx.QueryRow(ctx, `SELECT EXISTS (

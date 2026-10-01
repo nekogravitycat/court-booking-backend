@@ -27,6 +27,7 @@ type RegisterRequest struct {
 	DisplayName string
 	Gender      *string
 	BirthDate   *time.Time
+	LineID      *string
 }
 
 type UpdateUserRequest struct {
@@ -34,6 +35,7 @@ type UpdateUserRequest struct {
 	Phone         *string
 	Gender        *string
 	BirthDate     *time.Time
+	LineID        *string
 	IsActive      *bool
 	IsSystemAdmin *bool
 }
@@ -110,6 +112,9 @@ func NewService(repo Repository, hasher auth.PasswordHasher, fileService file.Se
 }
 
 func (s *service) Register(ctx context.Context, req RegisterRequest) (*User, error) {
+	if req.LineID != nil && *req.LineID == "" {
+		req.LineID = nil
+	}
 	email, username, password, displayName := req.Email, req.Username, req.Password, req.DisplayName
 	cleanEmail := normalizeEmail(email)
 	if cleanEmail == "" {
@@ -148,6 +153,9 @@ func (s *service) Register(ctx context.Context, req RegisterRequest) (*User, err
 		return nil, fmt.Errorf("failed to hash password: %w", err)
 	}
 
+	if req.LineID != nil && *req.LineID != "" && !IsValidLineID(*req.LineID) {
+		return nil, ErrInvalidLineID
+	}
 	if req.Gender != nil && !IsValidGender(*req.Gender) {
 		return nil, ErrInvalidGender
 	}
@@ -165,6 +173,7 @@ func (s *service) Register(ctx context.Context, req RegisterRequest) (*User, err
 		DisplayName:  displayNamePtr,
 		Gender:       req.Gender,
 		BirthDate:    req.BirthDate,
+		LineID:       req.LineID,
 		IsActive:     true,
 	}
 
@@ -253,6 +262,9 @@ func (s *service) Update(ctx context.Context, id string, req UpdateUserRequest, 
 		return nil, ErrCannotRevokeOwnAdmin
 	}
 
+	if req.LineID != nil && *req.LineID != "" && !IsValidLineID(*req.LineID) {
+		return nil, ErrInvalidLineID
+	}
 	if req.Gender != nil && !IsValidGender(*req.Gender) {
 		return nil, ErrInvalidGender
 	}

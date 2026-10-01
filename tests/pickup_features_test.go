@@ -26,15 +26,16 @@ func createGroup(t *testing.T, hostToken, locationID, sportID string, level, cap
 	t.Helper()
 	maxLevel := level
 	w := executeRequest("POST", "/v1/pickup-groups", pickupHttp.CreateGroupBody{
-		Title:         fmt.Sprintf("Group L%d F%d", level, fee),
-		StartTime:     start,
-		EndTime:       end,
-		Fee:           fee,
-		Capacity:      capacity,
-		LocationID:    locationID,
-		SportID:       sportID,
-		MinSkillLevel: level,
-		MaxSkillLevel: &maxLevel,
+		Title:                fmt.Sprintf("Group L%d F%d", level, fee),
+		StartTime:            start,
+		RegistrationDeadline: start,
+		EndTime:              end,
+		Fee:                  fee,
+		Capacity:             capacity,
+		LocationID:           locationID,
+		SportID:              sportID,
+		MinSkillLevel:        level,
+		MaxSkillLevel:        &maxLevel,
 	}, hostToken)
 	require.Equal(t, http.StatusCreated, w.Code, w.Body.String())
 
@@ -624,10 +625,10 @@ func TestSkillRatings(t *testing.T) {
 
 	// Move both groups into the past (non-overlapping) and mark them completed.
 	_, err := testPool.Exec(context.Background(),
-		`UPDATE public.pickup_groups SET start_time = now() - interval '6 hours', end_time = now() - interval '5 hours', status = 'completed' WHERE id = $1`, g1.ID)
+		`UPDATE public.pickup_groups SET registration_deadline = now() - interval '6 hours', start_time = now() - interval '6 hours', end_time = now() - interval '5 hours', status = 'completed' WHERE id = $1`, g1.ID)
 	require.NoError(t, err)
 	_, err = testPool.Exec(context.Background(),
-		`UPDATE public.pickup_groups SET start_time = now() - interval '4 hours', end_time = now() - interval '3 hours', status = 'completed' WHERE id = $1`, g2.ID)
+		`UPDATE public.pickup_groups SET registration_deadline = now() - interval '4 hours', start_time = now() - interval '4 hours', end_time = now() - interval '3 hours', status = 'completed' WHERE id = $1`, g2.ID)
 	require.NoError(t, err)
 
 	t.Run("only the host or an admin may rate", func(t *testing.T) {

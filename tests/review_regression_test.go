@@ -54,8 +54,10 @@ func TestReviewRegressions(t *testing.T) {
 	})
 
 	t.Run("ended group rejects enrollment", func(t *testing.T) {
-		start := time.Now().Add(-48 * time.Hour)
+		start := time.Now().Add(48 * time.Hour)
 		group := createGroup(t, hostToken, locationID, sportID, level, 10, 0, start, start.Add(time.Hour))
+		_, err := testPool.Exec(context.Background(), "UPDATE public.pickup_groups SET registration_deadline = now() - interval '48 hours', start_time = now() - interval '48 hours', end_time = now() - interval '47 hours' WHERE id = $1", group.ID)
+		require.NoError(t, err)
 		w := executeRequest("POST", "/v1/pickup-groups/"+group.ID+"/orders", nil, bookerToken)
 		require.Equal(t, http.StatusBadRequest, w.Code, w.Body.String())
 	})

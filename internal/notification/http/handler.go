@@ -106,3 +106,18 @@ func (h *Handler) MarkAllRead(c *gin.Context) {
 
 	c.JSON(http.StatusOK, MarkAllReadResponse{Updated: updated})
 }
+
+// Send is restricted to system administrators by route middleware.
+func (h *Handler) Send(c *gin.Context) {
+	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, 64*1024)
+	var body SendNotificationRequest
+	if err := c.ShouldBindJSON(&body); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid notification request"})
+		return
+	}
+	if err := h.service.SendManual(c.Request.Context(), auth.GetUserID(c), body.UserIDs, body.Title, body.Content); err != nil {
+		response.Error(c, err)
+		return
+	}
+	c.JSON(http.StatusCreated, gin.H{"sent": len(body.UserIDs)})
+}

@@ -2,12 +2,19 @@ package user
 
 import (
 	"net/http"
+	"regexp"
 	"time"
 
 	"github.com/nekogravitycat/court-booking-backend/internal/pkg/apperror"
 )
 
+var lineIDPattern = regexp.MustCompile(`^[a-z0-9._-]{4,20}$`)
+
+// IsValidLineID validates an optional profile contact ID using ASCII LINE characters.
+func IsValidLineID(id string) bool { return lineIDPattern.MatchString(id) }
+
 var (
+	ErrInvalidLineID        = apperror.New(http.StatusBadRequest, "line_id must contain 4-20 lowercase ASCII letters, digits, periods, hyphens, or underscores")
 	ErrSkillLevelNotSet     = apperror.New(http.StatusBadRequest, "skill level not set for this sport; set it via PUT /me/skill-levels/{sport_id}")
 	ErrInvalidSkillLevel    = apperror.New(http.StatusBadRequest, "skill level must be defined and active for this sport")
 	ErrSportInactive        = apperror.New(http.StatusBadRequest, "sport is inactive")
@@ -48,7 +55,8 @@ type User struct {
 	Phone         *string
 	Gender        *string    // One of the Gender* constants; nil when not provided
 	BirthDate     *time.Time // Calendar date (UTC midnight); nil when not provided
-	Avatar        *string    // ID of avatar image file
+	LineID        *string
+	Avatar        *string // ID of avatar image file
 	CreatedAt     time.Time
 	LastLoginAt   *time.Time
 	IsActive      bool
