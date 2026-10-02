@@ -54,8 +54,8 @@ func TestLocationPermissions(t *testing.T) {
 		Rule:              "Rules",
 		Facility:          "Facility",
 		Description:       "Desc",
-		Longitude:         10,
-		Latitude:          10,
+		Longitude:         f64(10),
+		Latitude:          f64(10),
 	}
 
 	wLoc := executeRequest("POST", "/v1/locations", createLoc, ownerToken)

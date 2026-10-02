@@ -25,6 +25,18 @@ func NewPool(ctx context.Context, dsn string) (*pgxpool.Pool, error) {
 	cfg.MaxConnIdleTime = 30 * time.Minute
 	cfg.HealthCheckPeriod = time.Minute
 
+	// Server-side timeouts bound how long a stuck lock or runaway query can hold
+	// a pooled connection. Values already supplied through the DSN win.
+	for k, v := range map[string]string{
+		"statement_timeout":                   "30000",
+		"lock_timeout":                        "15000",
+		"idle_in_transaction_session_timeout": "60000",
+	} {
+		if _, ok := cfg.ConnConfig.RuntimeParams[k]; !ok {
+			cfg.ConnConfig.RuntimeParams[k] = v
+		}
+	}
+
 	pool, err := pgxpool.NewWithConfig(ctx, cfg)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create database pool: %w", err)

@@ -1,5 +1,5 @@
 # ==== Stage 1: Builder ====
-FROM golang:alpine AS builder
+FROM golang:1.26-alpine AS builder
 
 # Install git (required if you have dependencies from git repositories)
 RUN apk add --no-cache git
@@ -31,7 +31,7 @@ RUN git config --global --add safe.directory '*'
 RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o server ./cmd/server
 
 # ==== Stage 2: Runner ====
-FROM alpine:latest
+FROM alpine:3.22
 
 # Install certificates (for HTTPS) and timezone data
 RUN apk --no-cache add ca-certificates tzdata

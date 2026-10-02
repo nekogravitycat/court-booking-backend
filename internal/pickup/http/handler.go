@@ -140,6 +140,22 @@ func (h *Handler) ListGroupsByHost(c *gin.Context) {
 
 	sortOrder := strings.ToUpper(req.SortOrder)
 
+	// Hidden (enable=false) groups are only listed for the host themself and
+	// system admins; everyone else, including anonymous callers, never sees them.
+	viewerID := auth.GetUserID(c)
+	canSeeHidden := false
+	if viewerID != "" {
+		canSeeHidden = viewerID == uri.HostID
+		if !canSeeHidden {
+			u, err := h.userService.GetByID(c.Request.Context(), viewerID)
+			if err != nil {
+				response.Error(c, err)
+				return
+			}
+			canSeeHidden = u.IsSystemAdmin
+		}
+	}
+
 	filter := pickup.GroupFilter{
 		Status:        req.Status,
 		SportID:       req.SportID,
@@ -151,7 +167,8 @@ func (h *Handler) ListGroupsByHost(c *gin.Context) {
 		Latitude:      req.Latitude,
 		Longitude:     req.Longitude,
 		HostID:        uri.HostID,
-		ViewerUserID:  auth.GetUserID(c),
+		ViewerUserID:  viewerID,
+		EnabledOnly:   !canSeeHidden,
 		Page:          req.Page,
 		PageSize:      req.PageSize,
 		SortBy:        req.SortBy,
@@ -198,6 +215,19 @@ func (h *Handler) GetGroup(c *gin.Context) {
 			response.Error(c, err)
 			return
 		}
+	}
+
+	// The host's phone is private: only the host, admins, and confirmed
+	// participants may see it.
+	canSeePhone, err := h.service.CanViewHostPhone(c.Request.Context(), group, auth.GetUserID(c))
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+	if !canSeePhone {
+		masked := *group
+		masked.HostPhone = nil
+		group = &masked
 	}
 
 	c.JSON(http.StatusOK, NewPickupGroupResponse(group, orders))
@@ -318,7 +348,7 @@ func (h *Handler) CreateOrder(c *gin.Context) {
 		return
 	}
 
-	bookerName := u.Email
+	bookerName := u.Username
 	if u.DisplayName != nil {
 		bookerName = *u.DisplayName
 	}

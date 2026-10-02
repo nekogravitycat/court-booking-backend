@@ -76,7 +76,7 @@ func TestResourceCRUDAndPermissions(t *testing.T) {
 		locPayloadA := locHttp.CreateLocationRequest{
 			OrganizationID: orgA_ID, Name: "Loc A", Capacity: 10,
 			OpeningHoursStart: "09:00:00", OpeningHoursEnd: "22:00:00",
-			LocationInfo: "Info A", Longitude: 121.0, Latitude: 25.0,
+			LocationInfo: "Info A", Longitude: f64(121.0), Latitude: f64(25.0),
 		}
 		wLocA := executeRequest("POST", "/v1/locations", locPayloadA, ownerAToken)
 		var locRespA locHttp.LocationResponse
@@ -86,7 +86,7 @@ func TestResourceCRUDAndPermissions(t *testing.T) {
 		locPayloadB := locHttp.CreateLocationRequest{
 			OrganizationID: orgB_ID, Name: "Loc B", Capacity: 10,
 			OpeningHoursStart: "09:00:00", OpeningHoursEnd: "22:00:00",
-			LocationInfo: "Info B", Longitude: 121.0, Latitude: 25.0,
+			LocationInfo: "Info B", Longitude: f64(121.0), Latitude: f64(25.0),
 		}
 		wLocB := executeRequest("POST", "/v1/locations", locPayloadB, ownerBToken)
 		var locRespB locHttp.LocationResponse

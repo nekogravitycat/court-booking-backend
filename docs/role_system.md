@@ -435,13 +435,9 @@ sequenceDiagram
 
 以下是我在對照資料庫結構與程式碼時發現的落差。它們**可能**都是刻意的設計決策，但目前無法從程式碼本身判斷，想請你確認：
 
-### 8.1 使用者無法上傳自己的頭像
+### 8.1 （已移除）頭像路由
 
-`PUT /v1/users/:id/avatar` 與 `DELETE /v1/users/:id/avatar` 註冊在 `usersGroup` 之下，而該群組套用了 `authMiddleware, adminMiddleware`（[user/http/route.go:21-28](../internal/user/http/route.go#L21-L28)）。因此非 System Admin 在 route 層就會被擋下 403。
-
-但 handler 內部又有 `isSelfOrSysAdmin` 檢查與「you can only upload your own avatar」的錯誤訊息（[user/http/handler.go:367](../internal/user/http/handler.go#L367)），這段對一般使用者而言是**永遠走不到的死碼**。
-
-**問題**：頭像上傳原本是打算開放給使用者本人的嗎？若是，這兩條路由應該移出 admin 群組。
+頭像路由目前位於獨立的 `avatarGroup`（只掛 `authMiddleware`），本人與 System Admin 皆可使用，此節的描述已過時。
 
 ### 8.2 Location Manager 的權限極為受限
 
@@ -471,13 +467,9 @@ sequenceDiagram
 
 **問題**：由於目前所有檔案用途（頭像、封面）本質上都是公開展示用的圖片，這應該是可接受的取捨。但若未來要存放證件、繳費證明一類的檔案，就需要加上擁有權檢查。要現在就先分級，還是等有需求再說？
 
-### 8.6 `AddLocationManager` 的成員前置條件沒有對應的錯誤映射
+### 8.6 （已修復）`AddLocationManager` 的成員前置條件
 
-`location.AddLocationManager` 檢查了與組織管理員的互斥，但**沒有**檢查「該使用者是否為組織成員」。這個條件由資料庫 FK（`location_managers_member_fkey`）把關，但 [location/repository.go:284](../internal/location/repository.go#L284) 只是把錯誤包起來回傳，沒有像 `internal/user/repository.go` 那樣把 FK 違規映射成領域錯誤。
-
-實際結果：指派一位非組織成員為場地管理員，會得到 **500 Internal Server Error**，而不是預期的 400/409。
-
-**問題**：要我補上這個映射嗎？（CLAUDE.md 的「Reuse before inventing」已經把 `internal/user/repository.go` 列為 FK 違規映射的參考範例，照抄即可。）
+指派非組織成員為場地管理員，現在會回 `400`（`user must be a member of the organization first`），不再是 500。
 
 ---
 

@@ -97,6 +97,11 @@ type Service interface {
 	// GetParticipantStats returns the anonymous gender / age / skill-level
 	// breakdown of the group's enrolled seats (pending and confirmed orders).
 	GetParticipantStats(ctx context.Context, groupID string) (*ParticipantStats, error)
+	// CanViewHostPhone reports whether the viewer may see the group host's phone:
+	// the host, a system admin, or a participant whose enrollment is confirmed.
+	CanViewHostPhone(ctx context.Context, group *PickupGroup, viewerID string) (bool, error)
+	// OnUserDeactivated cancels a deactivated user's upcoming enrollments and hosted groups.
+	OnUserDeactivated(ctx context.Context, userID string) error
 }
 
 type service struct {
@@ -234,7 +239,35 @@ func (s *service) ListGroups(ctx context.Context, filter GroupFilter) ([]*Pickup
 	return s.repo.ListGroups(ctx, filter)
 }
 
+// validateGroupCatalogChange checks the sport / skill-level range a group would
+// have after req is applied. It runs before the group lock is taken: the
+// catalog services use other pool connections, and calling them while holding
+// the global schedule lock could starve the pool and stall every enrollment.
+func (s *service) validateGroupCatalogChange(ctx context.Context, id string, req UpdateGroupRequest) error {
+	if req.SportID == nil && req.MinSkillLevel == nil && req.MaxSkillLevel == nil {
+		return nil
+	}
+	group, err := s.repo.GetGroupByID(ctx, id)
+	if err != nil {
+		return err
+	}
+	sportID, minLevel, maxLevel := group.SportID, group.MinSkillLevel, group.MaxSkillLevel
+	if req.SportID != nil {
+		sportID = *req.SportID
+	}
+	if req.MinSkillLevel != nil {
+		minLevel = *req.MinSkillLevel
+	}
+	if req.MaxSkillLevel != nil {
+		maxLevel = req.MaxSkillLevel
+	}
+	return s.validateSportAndSkillRange(ctx, sportID, minLevel, maxLevel)
+}
+
 func (s *service) UpdateGroup(ctx context.Context, id string, req UpdateGroupRequest) (*PickupGroup, error) {
+	if err := s.validateGroupCatalogChange(ctx, id, req); err != nil {
+		return nil, err
+	}
 	var result, previous *PickupGroup
 	err := s.repo.WithGroupLock(ctx, id, func(repo Repository) error {
 		var err error
@@ -298,25 +331,16 @@ func (s *service) updateGroup(ctx context.Context, id string, req UpdateGroupReq
 		group.LocationID = *req.LocationID
 	}
 
-	// Re-validate the sport / skill-level range whenever any of them changes, so
-	// the range stays defined on the group's sport scale.
-	sportOrSkillChanged := false
+	// The sport / skill-level range was already validated by
+	// validateGroupCatalogChange before the lock was taken.
 	if req.SportID != nil {
 		group.SportID = *req.SportID
-		sportOrSkillChanged = true
 	}
 	if req.MinSkillLevel != nil {
 		group.MinSkillLevel = *req.MinSkillLevel
-		sportOrSkillChanged = true
 	}
 	if req.MaxSkillLevel != nil {
 		group.MaxSkillLevel = req.MaxSkillLevel
-		sportOrSkillChanged = true
-	}
-	if sportOrSkillChanged {
-		if err := s.validateSportAndSkillRange(ctx, group.SportID, group.MinSkillLevel, group.MaxSkillLevel); err != nil {
-			return nil, err
-		}
 	}
 
 	if req.Status != nil {
@@ -590,6 +614,12 @@ func (s *service) updateOrder(ctx context.Context, id string, req UpdateOrderReq
 		}
 		// A plain booker may only cancel or request cancellation of their order.
 		if isOwner && !isReviewer {
+			// A rejected or cancelled order is terminal for the booker: leaving it
+			// would undo the host's rejection or re-occupy seats. Re-enrolling after
+			// a cancellation goes through the enrollment endpoint instead.
+			if oldStatus == OrderStatusRejected || oldStatus == OrderStatusCancelled {
+				return nil, ErrPermissionDenied
+			}
 			if st == OrderStatusCancelled && (oldStatus == OrderStatusConfirmed || oldStatus == OrderStatusCancelRequest || oldPaymentStatus == PaymentStatusDone) {
 				return nil, ErrCancellationRequiresReview
 			}
@@ -721,4 +751,57 @@ func (s *service) GetParticipantStats(ctx context.Context, groupID string) (*Par
 // seat: it is only released once the order is actually cancelled (or rejected).
 func isOccupyingStatus(s OrderStatus) bool {
 	return s == OrderStatusPending || s == OrderStatusConfirmed || s == OrderStatusCancelRequest
+}
+
+// OnUserDeactivated implements user.DeactivationHook: the deactivated user's
+// upcoming enrollments are cancelled (the hosts are told) and the groups they
+// host are cancelled (the enrolled users are told). It is idempotent.
+func (s *service) OnUserDeactivated(ctx context.Context, userID string) error {
+	orders, err := s.repo.CancelUpcomingOrdersByUser(ctx, userID)
+	if err != nil {
+		return err
+	}
+	groups, err := s.repo.CancelUpcomingGroupsByHost(ctx, userID)
+	if err != nil {
+		return err
+	}
+
+	var ns []*notification.Notification
+	for _, o := range orders {
+		if o.HostID == userID {
+			continue
+		}
+		groupID, orderID := o.GroupID, o.OrderID
+		ns = append(ns, &notification.Notification{
+			UserID:        o.HostID,
+			Type:          notification.TypePickupOrderCancelled,
+			Title:         "有人取消報名",
+			Content:       fmt.Sprintf("%s 的帳號已停用，其在「%s」的報名已自動取消。", o.BookerName, o.GroupTitle),
+			PickupGroupID: &groupID,
+			PickupOrderID: &orderID,
+		})
+	}
+	s.notify(ctx, ns...)
+
+	for _, g := range groups {
+		s.notifyEnrolled(ctx, g, notification.TypePickupGroupCancelled, "臨打團已取消", fmt.Sprintf("「%s」已被取消，因為團主的帳號已停用。", g.Title))
+	}
+	return nil
+}
+
+func (s *service) CanViewHostPhone(ctx context.Context, group *PickupGroup, viewerID string) (bool, error) {
+	if viewerID == "" {
+		return false, nil
+	}
+	if group.HostID == viewerID {
+		return true, nil
+	}
+	viewer, err := s.userService.GetByID(ctx, viewerID)
+	if err != nil {
+		return false, err
+	}
+	if viewer.IsSystemAdmin {
+		return true, nil
+	}
+	return s.repo.HasConfirmedOrder(ctx, group.ID, viewerID)
 }

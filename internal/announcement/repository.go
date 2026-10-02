@@ -9,6 +9,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/nekogravitycat/court-booking-backend/internal/pkg/pagination"
+	"github.com/nekogravitycat/court-booking-backend/internal/pkg/request"
 )
 
 type Repository interface {
@@ -71,8 +72,8 @@ func (r *pgxRepository) List(ctx context.Context, filter Filter) ([]*Announcemen
 
 	if filter.Keyword != "" {
 		query = query.Where(squirrel.Or{
-			squirrel.ILike{"title": "%" + filter.Keyword + "%"},
-			squirrel.ILike{"content": "%" + filter.Keyword + "%"},
+			squirrel.ILike{"title": "%" + request.EscapeLike(filter.Keyword) + "%"},
+			squirrel.ILike{"content": "%" + request.EscapeLike(filter.Keyword) + "%"},
 		})
 	}
 
@@ -87,7 +88,7 @@ func (r *pgxRepository) List(ctx context.Context, filter Filter) ([]*Announcemen
 		orderDir = filter.SortOrder
 	}
 
-	query = query.OrderBy(orderBy + " " + orderDir)
+	query = query.OrderBy(orderBy+" "+orderDir, "id ASC")
 
 	// Pagination
 	if filter.Page < 1 {

@@ -18,6 +18,7 @@ type Repository interface {
 	GetByID(ctx context.Context, id string) (*Resource, error)
 	List(ctx context.Context, filter Filter) ([]*Resource, int, error)
 	Update(ctx context.Context, res *Resource) error
+	SetCover(ctx context.Context, id string, cover *string) (*string, error)
 	Delete(ctx context.Context, id string) error
 }
 
@@ -114,7 +115,7 @@ func (r *pgxRepository) List(ctx context.Context, filter Filter) ([]*Resource, i
 		orderDir = filter.SortOrder
 	}
 
-	query = query.OrderBy(orderBy + " " + orderDir)
+	query = query.OrderBy(orderBy+" "+orderDir, "r.id ASC")
 
 	// Pagination
 	if filter.Page < 1 {
@@ -214,4 +215,23 @@ func (r *pgxRepository) Delete(ctx context.Context, id string) error {
 		return ErrNotFound
 	}
 	return nil
+}
+
+// SetCover replaces only the cover reference (so it cannot overwrite concurrent
+// edits to other columns) and returns the previous cover.
+func (r *pgxRepository) SetCover(ctx context.Context, id string, cover *string) (*string, error) {
+	var old *string
+	err := r.pool.QueryRow(ctx,
+		`UPDATE public.resources t SET cover = $2
+		 FROM (SELECT cover AS old_cover FROM public.resources WHERE id = $1 FOR UPDATE) o
+		 WHERE t.id = $1
+		 RETURNING o.old_cover`,
+		id, cover).Scan(&old)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, ErrNotFound
+		}
+		return nil, fmt.Errorf("set resource cover failed: %w", err)
+	}
+	return old, nil
 }

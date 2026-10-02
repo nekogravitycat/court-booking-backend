@@ -20,6 +20,10 @@ type Repository interface {
 	List(ctx context.Context, filter Filter) ([]*Booking, int, error)
 	Update(ctx context.Context, booking *Booking) error
 	Delete(ctx context.Context, id string) error
+	// CountUpcomingActiveByUser counts the user's not-yet-ended, non-cancelled bookings.
+	CountUpcomingActiveByUser(ctx context.Context, userID string) (int, error)
+	// CancelUpcomingByUser cancels the user's bookings that have not started yet.
+	CancelUpcomingByUser(ctx context.Context, userID string) error
 
 	// HasOverlap checks if there is any conflicting booking for the resource in the given time range.
 	// excludeBookingID is used during updates to ignore the booking itself.
@@ -67,7 +71,7 @@ func mapOverlapError(err error) error {
 func (r *pgxRepository) GetByID(ctx context.Context, id string) (*Booking, error) {
 	psql := squirrel.StatementBuilder.PlaceholderFormat(squirrel.Dollar)
 	query, args, err := psql.Select(
-		"b.id", "b.resource_id", "r.name", "r.sport_id", "b.user_id", "u.display_name",
+		"b.id", "b.resource_id", "r.name", "r.sport_id", "b.user_id", "COALESCE(u.display_name, u.username)",
 		"l.id", "l.name", "o.id", "o.name",
 		"b.start_time", "b.end_time", "b.status", "b.payment_status", "b.created_at", "b.updated_at",
 	).
@@ -101,7 +105,7 @@ func (r *pgxRepository) GetByID(ctx context.Context, id string) (*Booking, error
 func (r *pgxRepository) List(ctx context.Context, filter Filter) ([]*Booking, int, error) {
 	psql := squirrel.StatementBuilder.PlaceholderFormat(squirrel.Dollar)
 	query := psql.Select(
-		"b.id", "b.resource_id", "r.name", "r.sport_id", "b.user_id", "u.display_name",
+		"b.id", "b.resource_id", "r.name", "r.sport_id", "b.user_id", "COALESCE(u.display_name, u.username)",
 		"l.id", "l.name", "o.id", "o.name",
 		"b.start_time", "b.end_time", "b.status", "b.payment_status", "b.created_at", "b.updated_at",
 		"count(*) OVER() as total_count",
@@ -143,7 +147,7 @@ func (r *pgxRepository) List(ctx context.Context, filter Filter) ([]*Booking, in
 		orderDir = filter.SortOrder
 	}
 
-	query = query.OrderBy(orderBy + " " + orderDir)
+	query = query.OrderBy(orderBy+" "+orderDir, "b.id ASC")
 
 	// Pagination
 	if filter.Page < 1 {
@@ -203,18 +207,27 @@ func (r *pgxRepository) Update(ctx context.Context, b *Booking) error {
 		Set("status", b.Status).
 		Set("payment_status", b.PaymentStatus).
 		Set("updated_at", squirrel.Expr("now()")).
-		Where(squirrel.Eq{"id": b.ID}).
+		// Optimistic lock: the row must be unchanged since it was read, so a
+		// concurrent edit is reported instead of silently overwritten.
+		Where(squirrel.Eq{"id": b.ID, "updated_at": b.UpdatedAt}).
+		Suffix("RETURNING updated_at").
 		ToSql()
 	if err != nil {
 		return fmt.Errorf("build update booking query failed: %w", err)
 	}
 
-	ct, err := r.pool.Exec(ctx, query, args...)
-	if err != nil {
+	if err := r.pool.QueryRow(ctx, query, args...).Scan(&b.UpdatedAt); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			var exists bool
+			if err := r.pool.QueryRow(ctx, "SELECT EXISTS (SELECT 1 FROM public.bookings WHERE id = $1)", b.ID).Scan(&exists); err != nil {
+				return fmt.Errorf("check booking exists failed: %w", err)
+			}
+			if exists {
+				return ErrConcurrentUpdate
+			}
+			return ErrNotFound
+		}
 		return mapOverlapError(fmt.Errorf("update booking failed: %w", err))
-	}
-	if ct.RowsAffected() == 0 {
-		return ErrNotFound
 	}
 	return nil
 }
@@ -270,4 +283,26 @@ func (r *pgxRepository) HasOverlap(ctx context.Context, resourceID string, start
 		return false, fmt.Errorf("check overlap failed: %w", err)
 	}
 	return exists, nil
+}
+
+func (r *pgxRepository) CancelUpcomingByUser(ctx context.Context, userID string) error {
+	_, err := r.pool.Exec(ctx,
+		`UPDATE public.bookings SET status = 'cancelled', updated_at = now()
+		 WHERE user_id = $1 AND start_time > now() AND status <> 'cancelled'`,
+		userID)
+	if err != nil {
+		return fmt.Errorf("cancel upcoming bookings failed: %w", err)
+	}
+	return nil
+}
+
+func (r *pgxRepository) CountUpcomingActiveByUser(ctx context.Context, userID string) (int, error) {
+	var n int
+	err := r.pool.QueryRow(ctx,
+		"SELECT count(*) FROM public.bookings WHERE user_id = $1 AND end_time > now() AND status <> 'cancelled'",
+		userID).Scan(&n)
+	if err != nil {
+		return 0, fmt.Errorf("count active bookings failed: %w", err)
+	}
+	return n, nil
 }

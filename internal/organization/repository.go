@@ -103,7 +103,7 @@ func (r *pgxRepository) List(ctx context.Context, filter OrganizationFilter) ([]
 		orderDir = filter.SortOrder
 	}
 
-	queryBuilder = queryBuilder.OrderBy(orderBy + " " + orderDir)
+	queryBuilder = queryBuilder.OrderBy(orderBy+" "+orderDir, "id ASC")
 
 	// Pagination
 	if filter.Page < 1 {
@@ -294,19 +294,6 @@ func (r *pgxRepository) ListOrganizationManagers(ctx context.Context, orgID stri
 		Where(squirrel.Eq{"om.organization_id": orgID})
 
 	orderBy := "u.display_name"
-	if filter.SortBy != "" {
-		switch filter.SortBy {
-		case "created_at":
-			orderBy = "u.created_at"
-		case "name":
-			orderBy = "u.display_name"
-		default:
-			orderBy = "u." + filter.SortBy
-		}
-	}
-
-	// Correcting SortBy logic. The user might send 'name' or 'email'.
-	// The previous implementation used u.display_name ASC.
 
 	switch filter.SortBy {
 	case "name":
@@ -324,7 +311,7 @@ func (r *pgxRepository) ListOrganizationManagers(ctx context.Context, orgID stri
 		orderDir = filter.SortOrder
 	}
 
-	queryBuilder = queryBuilder.OrderBy(orderBy + " " + orderDir)
+	queryBuilder = queryBuilder.OrderBy(orderBy+" "+orderDir, "u.id ASC")
 
 	// Pagination
 	if filter.Page < 1 {
@@ -473,7 +460,7 @@ func (r *pgxRepository) ListMembers(ctx context.Context, orgID string, filter Ma
 		orderDir = filter.SortOrder
 	}
 
-	queryBuilder = queryBuilder.OrderBy(orderBy + " " + orderDir)
+	queryBuilder = queryBuilder.OrderBy(orderBy+" "+orderDir, "u.id ASC")
 
 	// Pagination
 	if filter.Page < 1 {

@@ -181,3 +181,6 @@ func grantPickupHost(t *testing.T, userID string) {
 	)
 	require.NoError(t, err, "Failed to grant pickup host role")
 }
+
+// f64 returns a pointer to v, for optional float request fields.
+func f64(v float64) *float64 { return &v }

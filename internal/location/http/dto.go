@@ -105,8 +105,8 @@ type CreateLocationRequest struct {
 	Rule              string   `json:"rule" binding:"omitempty,max=2000"`
 	Facility          string   `json:"facility" binding:"omitempty,max=2000"`
 	Description       string   `json:"description" binding:"omitempty,max=2000"`
-	Longitude         float64  `json:"longitude" binding:"required,min=-180,max=180"`
-	Latitude          float64  `json:"latitude" binding:"required,min=-90,max=90"`
+	Longitude         *float64 `json:"longitude" binding:"required,min=-180,max=180"`
+	Latitude          *float64 `json:"latitude" binding:"required,min=-90,max=90"`
 	ParkingName       *string  `json:"parking_name" binding:"omitempty,min=1,max=100"`
 	ParkingLatitude   *float64 `json:"parking_latitude" binding:"omitempty,min=-90,max=90"`
 	ParkingLongitude  *float64 `json:"parking_longitude" binding:"omitempty,min=-180,max=180"`

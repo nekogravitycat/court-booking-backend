@@ -3,9 +3,12 @@ package file
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 
 	"github.com/Masterminds/squirrel"
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -41,6 +44,10 @@ func (r *repository) Create(ctx context.Context, f *File) error {
 }
 
 func (r *repository) GetByID(ctx context.Context, id string) (*File, error) {
+	// A malformed ID can never match a row; avoid a Postgres cast error (500).
+	if _, err := uuid.Parse(id); err != nil {
+		return nil, ErrNotFound
+	}
 	psql := squirrel.StatementBuilder.PlaceholderFormat(squirrel.Dollar)
 	query, args, err := psql.Select("id", "user_id", "filename", "storage_path", "thumbnail_path", "content_type", "size", "created_at").
 		From("files").
@@ -64,6 +71,9 @@ func (r *repository) GetByID(ctx context.Context, id string) (*File, error) {
 		&f.CreatedAt,
 	)
 	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, ErrNotFound
+		}
 		return nil, fmt.Errorf("failed to get file: %w", err)
 	}
 

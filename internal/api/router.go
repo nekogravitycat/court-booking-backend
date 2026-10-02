@@ -84,9 +84,11 @@ func NewRouter(cfg Config) *gin.Engine {
 	config := cors.DefaultConfig()
 
 	// Parse allowed origins from config
-	allowedOrigins := strings.Split(cfg.ProdOrigins, ",")
-	for i, o := range allowedOrigins {
-		allowedOrigins[i] = strings.TrimSpace(o)
+	var allowedOrigins []string
+	for _, o := range strings.Split(cfg.ProdOrigins, ",") {
+		if o = strings.TrimSpace(o); o != "" {
+			allowedOrigins = append(allowedOrigins, o)
+		}
 	}
 
 	if cfg.IsProduction {
@@ -105,17 +107,18 @@ func NewRouter(cfg Config) *gin.Engine {
 
 	// Auth Middleware. The active-status check runs on every authenticated
 	// request so suspended / soft-deleted accounts lose access immediately.
-	authMiddleware := auth.AuthRequired(cfg.JWTManager, func(ctx context.Context, userID string) (bool, error) {
+	isActive := func(ctx context.Context, userID string) (bool, error) {
 		u, err := cfg.UserService.GetByID(ctx, userID)
 		if err != nil {
 			return false, err
 		}
 		return u.IsActive, nil
-	})
+	}
+	authMiddleware := auth.AuthRequired(cfg.JWTManager, isActive)
 	sysAdminMiddleware := RequireSystemAdmin(cfg.UserService)
 	// Optional auth for public endpoints that personalize their response when a
 	// valid token is present but never require one.
-	optionalAuthMiddleware := auth.AuthOptional(cfg.JWTManager)
+	optionalAuthMiddleware := auth.AuthOptional(cfg.JWTManager, isActive)
 
 	// Initialize Handlers (Injecting Services from cfg)
 	fileHandler := fileHttp.NewHandler(cfg.FileService)

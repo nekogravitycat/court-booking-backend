@@ -13,6 +13,7 @@ var (
 	ErrLocationRoleConflict = apperror.New(http.StatusConflict, "user is already a location manager in this organization")
 	ErrMemberRequired       = apperror.New(http.StatusBadRequest, "user must be a member of the organization first")
 	ErrUserAlreadyMember    = apperror.New(http.StatusConflict, "user is already a member of this organization")
+	ErrOwnerInactive        = apperror.New(http.StatusBadRequest, "owner must be an active user")
 	ErrUserNotFound         = apperror.New(http.StatusNotFound, "user not found")
 	ErrUserNotMember        = apperror.New(http.StatusNotFound, "user is not a member of the organization")
 	ErrOrgNotFound          = apperror.New(http.StatusNotFound, "organization not found")

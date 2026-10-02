@@ -82,7 +82,7 @@ func (r *CreateRequest) Validate() error {
 type UpdateRequest struct {
 	Name    *string `json:"name" binding:"omitempty,min=1,max=100"`
 	Price   *int    `json:"price" binding:"omitempty,min=0,max=1000000"`
-	SportID *string `json:"sport_id" binding:"omitempty,uuid"`
+	SportID *string `json:"sport_id" binding:"omitempty,uuid|eq="`
 }
 
 // Validate performs custom validation for UpdateRequest.

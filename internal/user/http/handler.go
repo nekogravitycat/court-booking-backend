@@ -294,7 +294,7 @@ func (h *UserHandler) Delete(c *gin.Context) {
 		return
 	}
 
-	if err := h.userService.Delete(c.Request.Context(), req.ID); err != nil {
+	if err := h.userService.Delete(c.Request.Context(), req.ID, auth.GetUserID(c)); err != nil {
 		response.Error(c, err)
 		return
 	}

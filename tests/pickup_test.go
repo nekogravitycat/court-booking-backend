@@ -704,8 +704,8 @@ func setupTestLocation(t *testing.T, hostToken string, ownerID string) string {
 		OpeningHoursStart: "08:00:00",
 		OpeningHoursEnd:   "22:00:00",
 		LocationInfo:      "Street 1",
-		Longitude:         121.0,
-		Latitude:          25.0,
+		Longitude:         f64(121.0),
+		Latitude:          f64(25.0),
 	}
 	wLoc := executeRequest("POST", "/v1/locations", locPayload, hostToken)
 	require.Equal(t, http.StatusCreated, wLoc.Code)

@@ -101,7 +101,7 @@ func (r *pgxRepository) List(ctx context.Context, filter Filter) ([]*SkillLevel,
 	if filter.SortOrder != "" {
 		orderDir = filter.SortOrder
 	}
-	query = query.OrderBy(orderBy + " " + orderDir)
+	query = query.OrderBy(orderBy+" "+orderDir, "id ASC")
 
 	if filter.Page < 1 {
 		filter.Page = 1

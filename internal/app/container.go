@@ -100,6 +100,11 @@ func NewContainer(cfg Config) *Container {
 	skillRatingRepo := skillrating.NewPgxRepository(cfg.DBPool)
 	skillRatingService := skillrating.NewService(skillRatingRepo, pickupService, skillLevelService, userService, notificationService)
 
+	// Account deactivation releases the user's upcoming bookings and pickup
+	// commitments.
+	userService.AddDeactivationHook(bookingService)
+	userService.AddDeactivationHook(pickupService)
+
 	// API Router Config
 	routerParams := api.Config{
 		IsProduction:        cfg.IsProduction,

@@ -103,7 +103,7 @@
 
     ```dotenv
     DB_DSN=postgres://user:password@localhost:5432/court_booking?sslmode=disable
-    JWT_SECRET=your-super-secret-key
+    JWT_SECRET=<至少 32 bytes 的隨機字串，例如 openssl rand -base64 48 的輸出>
     ```
 
     若要透過 Cloudflare Tunnel 對外發佈服務，另需設定 `CLOUDFLARE_TUNNEL_TOKEN`（見下方「對外發佈」一節）。

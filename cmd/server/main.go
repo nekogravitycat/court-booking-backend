@@ -60,6 +60,11 @@ func main() {
 	server := &http.Server{
 		Addr:    cfg.HTTPAddr,
 		Handler: appContainer.Router,
+		// Bound slow-header (Slowloris) and idle keep-alive connections. Body
+		// read / write timeouts are left unset on purpose so 5MB image uploads
+		// and downloads over slow links are not cut off.
+		ReadHeaderTimeout: 10 * time.Second,
+		IdleTimeout:       90 * time.Second,
 	}
 
 	// Run server in separate goroutine

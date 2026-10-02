@@ -2,6 +2,8 @@ package resource
 
 import (
 	"context"
+	"errors"
+	"log"
 	"net/http"
 	"strings"
 
@@ -77,7 +79,10 @@ func (s *service) Create(ctx context.Context, req CreateRequest) (*Resource, err
 	// Validation: Check if Location exists
 	_, err := s.locService.GetByID(ctx, req.LocationID)
 	if err != nil {
-		return nil, ErrInvalidLocation
+		if errors.Is(err, location.ErrLocNotFound) {
+			return nil, ErrInvalidLocation
+		}
+		return nil, err
 	}
 
 	res := &Resource{
@@ -112,7 +117,7 @@ func (s *service) Update(ctx context.Context, id string, req UpdateRequest) (*Re
 		if strings.TrimSpace(*req.Name) == "" {
 			return nil, ErrEmptyName
 		}
-		res.Name = *req.Name
+		res.Name = strings.TrimSpace(*req.Name)
 	}
 	if req.Price != nil {
 		if *req.Price < 0 {
@@ -154,43 +159,36 @@ func (s *service) Delete(ctx context.Context, id string) error {
 }
 
 func (s *service) UpdateCover(ctx context.Context, id string, fileID string) error {
-	res, err := s.repo.GetByID(ctx, id)
+	// Persist the new reference first; only delete the old file once the new
+	// reference is durably stored, to avoid orphaned files / dangling references.
+	oldCover, err := s.repo.SetCover(ctx, id, &fileID)
 	if err != nil {
 		return err
 	}
 
-	oldCover := res.Cover
-
-	// Persist the new reference first; only delete the old file once the new
-	// reference is durably stored, to avoid orphaned files / dangling references.
-	res.Cover = &fileID
-	if err := s.repo.Update(ctx, res); err != nil {
-		return err
-	}
-
 	if oldCover != nil && *oldCover != "" && *oldCover != fileID {
-		_ = s.fileService.Delete(ctx, *oldCover)
+		s.deleteFile(ctx, *oldCover)
 	}
 	return nil
 }
 
 func (s *service) RemoveCover(ctx context.Context, id string) error {
-	res, err := s.repo.GetByID(ctx, id)
+	// Clear the reference first, then delete the file, keeping the database
+	// consistent even if the storage delete fails (best effort).
+	oldCover, err := s.repo.SetCover(ctx, id, nil)
 	if err != nil {
 		return err
 	}
 
-	oldCover := res.Cover
-
-	// Clear the reference first, then delete the file, keeping the database
-	// consistent even if the storage delete fails (best effort).
-	res.Cover = nil
-	if err := s.repo.Update(ctx, res); err != nil {
-		return err
-	}
-
 	if oldCover != nil && *oldCover != "" {
-		_ = s.fileService.Delete(ctx, *oldCover)
+		s.deleteFile(ctx, *oldCover)
 	}
 	return nil
+}
+
+// deleteFile removes an orphaned file on a best-effort basis.
+func (s *service) deleteFile(ctx context.Context, fileID string) {
+	if err := s.fileService.Delete(ctx, fileID); err != nil {
+		log.Printf("warning: failed to delete file %s: %v", fileID, err)
+	}
 }

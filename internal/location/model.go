@@ -18,6 +18,7 @@ var (
 	ErrInvalidOpeningHours      = apperror.New(http.StatusBadRequest, "opening hours start must be before end")
 	ErrCapacityInvalid          = apperror.New(http.StatusBadRequest, "capacity must be greater than zero")
 	ErrInvalidTimeRange         = apperror.New(http.StatusBadRequest, "start time must be before end time")
+	ErrNotOrganizationMember    = apperror.New(http.StatusBadRequest, "user must be a member of the organization first")
 	ErrUserNotFound             = apperror.New(http.StatusNotFound, "user not found")
 	ErrInvalidTimezone          = apperror.New(http.StatusBadRequest, "invalid timezone; expected an IANA name such as Asia/Taipei")
 	ErrInvalidParking           = apperror.New(http.StatusBadRequest, "parking name, latitude and longitude must be provided together and be valid")

@@ -38,6 +38,8 @@ type Service interface {
 	Update(ctx context.Context, id string, req UpdateRequest, updaterUserID string, isSysAdmin bool) (*Booking, error)
 	Delete(ctx context.Context, id string, deleterUserID string, isSysAdmin bool) error
 	GetAvailability(ctx context.Context, resourceID string, date time.Time) ([]TimeSlot, error)
+	// OnUserDeactivated cancels a deactivated user's upcoming bookings.
+	OnUserDeactivated(ctx context.Context, userID string) error
 }
 
 type service struct {
@@ -104,6 +106,16 @@ func (s *service) Create(ctx context.Context, req CreateRequest) (*Booking, erro
 	}
 	if err := validateBookingWindow(loc, req.StartTime, req.EndTime); err != nil {
 		return nil, err
+	}
+
+	// 2c. Cap how many upcoming bookings one user can hold, so a single account
+	// cannot sweep the calendar.
+	active, err := s.repo.CountUpcomingActiveByUser(ctx, req.UserID)
+	if err != nil {
+		return nil, err
+	}
+	if active >= MaxActiveBookingsPerUser {
+		return nil, ErrTooManyActiveBookings
 	}
 
 	// 3. Check for Overlaps
@@ -174,6 +186,11 @@ func (s *service) Update(ctx context.Context, id string, req UpdateRequest, upda
 		return nil, ErrPermissionDenied
 	}
 
+	// A plain owner (no management privilege) is restricted the same way a
+	// pickup booker is: a confirmed, paid, started, or cancelled booking can
+	// only be handled by a manager.
+	plainOwner := isBookingOwner && !isSysAdmin && !isOrgMgr
+
 	// Prepare new values
 	newStart := b.StartTime
 	newEnd := b.EndTime
@@ -186,6 +203,12 @@ func (s *service) Update(ctx context.Context, id string, req UpdateRequest, upda
 	if req.EndTime != nil {
 		newEnd = *req.EndTime
 		timeChanged = true
+	}
+
+	if timeChanged && plainOwner {
+		if b.Status != StatusPending || b.PaymentStatus == PaymentStatusDone || !b.StartTime.After(time.Now().UTC()) {
+			return nil, ErrChangeRequiresReview
+		}
 	}
 
 	if timeChanged {
@@ -232,9 +255,17 @@ func (s *service) Update(ctx context.Context, id string, req UpdateRequest, upda
 
 		// Business Logic: Normal User (Booking Owner) can only cancel or
 		// request cancellation. SysAdmin or OrgManager can do anything.
-		if isBookingOwner && !isSysAdmin && !isOrgMgr {
+		if plainOwner {
 			if st != StatusCancelled && st != StatusCancelRequest {
 				return nil, ErrPermissionDenied
+			}
+			// A cancelled booking cannot be revived by its owner; they must
+			// create a new one.
+			if b.Status == StatusCancelled {
+				return nil, ErrPermissionDenied
+			}
+			if st == StatusCancelled && (b.Status == StatusConfirmed || b.Status == StatusCancelRequest || b.PaymentStatus == PaymentStatusDone) {
+				return nil, ErrCancellationRequiresReview
 			}
 		}
 		b.Status = st
@@ -277,7 +308,7 @@ func (s *service) Delete(ctx context.Context, id string, deleterUserID string, i
 	isBookingOwner := b.UserID == deleterUserID
 	isOrgMgr := false
 
-	if !isSysAdmin && !isBookingOwner {
+	if !isSysAdmin {
 		var err error
 		isOrgMgr, err = s.isOrgManager(ctx, b.ResourceID, deleterUserID)
 		if err != nil {
@@ -287,6 +318,14 @@ func (s *service) Delete(ctx context.Context, id string, deleterUserID string, i
 
 	if !isSysAdmin && !isBookingOwner && !isOrgMgr {
 		return ErrPermissionDenied
+	}
+
+	// Hard-deleting would erase the payment / approval record, so a plain owner
+	// may only delete a booking that is still unpaid and unconfirmed.
+	if isBookingOwner && !isSysAdmin && !isOrgMgr {
+		if b.Status == StatusConfirmed || b.Status == StatusCancelRequest || b.PaymentStatus == PaymentStatusDone {
+			return ErrCancellationRequiresReview
+		}
 	}
 
 	return s.repo.Delete(ctx, id)
@@ -398,8 +437,15 @@ func validateBookingWindow(loc *location.Location, start, end time.Time) error {
 		return ErrInvalidTimeRange
 	}
 
+	if start.After(time.Now().Add(MaxAdvanceBooking)) {
+		return ErrTooFarInAdvance
+	}
+
 	startLocal := start.In(tz)
 	endLocal := end.In(tz)
+	if !isAligned(startLocal) || !isAligned(endLocal) {
+		return ErrNotAligned
+	}
 
 	// Anchor the opening hours to the booking's local calendar day. A booking
 	// must start no earlier than opening and end no later than closing on the
@@ -532,4 +578,19 @@ func CalculateAvailability(date time.Time, tz *time.Location, openStr, closeStr 
 	}
 
 	return availableSlots, nil
+}
+
+// OnUserDeactivated implements user.DeactivationHook: a deactivated user's
+// upcoming bookings are cancelled so they stop holding time slots.
+func (s *service) OnUserDeactivated(ctx context.Context, userID string) error {
+	return s.repo.CancelUpcomingByUser(ctx, userID)
+}
+
+// isAligned reports whether t falls exactly on a BookingSlotGranularity
+// boundary of its (location-local) wall clock.
+func isAligned(t time.Time) bool {
+	if t.Second() != 0 || t.Nanosecond() != 0 {
+		return false
+	}
+	return t.Minute()%int(BookingSlotGranularity/time.Minute) == 0
 }

@@ -74,7 +74,10 @@ func AuthRequired(jwtManager *JWTManager, isActive ActiveStatusFunc) gin.Handler
 // Authorization header simply leaves the request unauthenticated. When a token
 // validly parses, the user id is stored in the context so handlers can read it
 // via GetUserID; otherwise GetUserID returns "".
-func AuthOptional(jwtManager *JWTManager) gin.HandlerFunc {
+//
+// When isActive is non-nil, a token whose account is no longer active is
+// treated as unauthenticated.
+func AuthOptional(jwtManager *JWTManager, isActive ActiveStatusFunc) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		header := c.GetHeader("Authorization")
 		if header == "" {
@@ -92,6 +95,13 @@ func AuthOptional(jwtManager *JWTManager) gin.HandlerFunc {
 		if err != nil {
 			c.Next()
 			return
+		}
+
+		if isActive != nil {
+			if active, err := isActive(c.Request.Context(), claims.Subject); err != nil || !active {
+				c.Next()
+				return
+			}
 		}
 
 		c.Set("userID", claims.Subject)

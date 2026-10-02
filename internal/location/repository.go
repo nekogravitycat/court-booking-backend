@@ -21,6 +21,7 @@ type Repository interface {
 	GetByID(ctx context.Context, id string) (*Location, error)
 	List(ctx context.Context, filter LocationFilter) ([]*Location, int, error)
 	Update(ctx context.Context, loc *Location) error
+	SetCover(ctx context.Context, id string, cover *string) (*string, error)
 	Delete(ctx context.Context, id string) error
 	// Manager methods
 	AddLocationManager(ctx context.Context, locationID string, userID string) error
@@ -121,7 +122,7 @@ func (r *pgxRepository) List(ctx context.Context, filter LocationFilter) ([]*Loc
 		query = query.Where(squirrel.Eq{"l.organization_id": filter.OrganizationID})
 	}
 	if filter.Name != "" {
-		query = query.Where(squirrel.ILike{"l.name": "%" + filter.Name + "%"})
+		query = query.Where(squirrel.ILike{"l.name": "%" + request.EscapeLike(filter.Name) + "%"})
 	}
 	if filter.Opening != nil {
 		query = query.Where(squirrel.Eq{"l.opening": filter.Opening})
@@ -162,7 +163,7 @@ func (r *pgxRepository) List(ctx context.Context, filter LocationFilter) ([]*Loc
 		orderDir = "ASC"
 	}
 
-	query = query.OrderBy(orderBy + " " + orderDir)
+	query = query.OrderBy(orderBy+" "+orderDir, "l.id ASC")
 
 	// Pagination
 	if filter.Page < 1 {
@@ -317,6 +318,10 @@ func (r *pgxRepository) AddLocationManager(ctx context.Context, locationID strin
 
 	_, err = tx.Exec(ctx, query, args...)
 	if err != nil {
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && pgErr.Code == pgerrcode.ForeignKeyViolation && pgErr.ConstraintName == "location_managers_member_fkey" {
+			return ErrNotOrganizationMember
+		}
 		return fmt.Errorf("AddLocationManager failed: %w", err)
 	}
 	return tx.Commit(ctx)
@@ -376,7 +381,7 @@ func (r *pgxRepository) ListLocationManagers(ctx context.Context, locationID str
 	case "ASC":
 		orderDir = "ASC"
 	}
-	query = query.OrderBy("u.display_name " + orderDir)
+	query = query.OrderBy("u.display_name "+orderDir, "u.id ASC")
 
 	// Pagination
 	if params.Page < 1 {
@@ -468,4 +473,23 @@ func (r *pgxRepository) GetOrganizationID(ctx context.Context, locationID string
 		return "", fmt.Errorf("GetOrganizationID failed: %w", err)
 	}
 	return orgID, nil
+}
+
+// SetCover replaces only the cover reference (so it cannot overwrite concurrent
+// edits to other columns) and returns the previous cover.
+func (r *pgxRepository) SetCover(ctx context.Context, id string, cover *string) (*string, error) {
+	var old *string
+	err := r.pool.QueryRow(ctx,
+		`UPDATE public.locations t SET cover = $2
+		 FROM (SELECT cover AS old_cover FROM public.locations WHERE id = $1 FOR UPDATE) o
+		 WHERE t.id = $1
+		 RETURNING o.old_cover`,
+		id, cover).Scan(&old)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, ErrLocNotFound
+		}
+		return nil, fmt.Errorf("set location cover failed: %w", err)
+	}
+	return old, nil
 }

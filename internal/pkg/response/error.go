@@ -2,6 +2,7 @@ package response
 
 import (
 	"errors"
+	"log"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
@@ -23,7 +24,7 @@ func Error(c *gin.Context, err error) {
 		return
 	}
 
-	// Default to 500 for unknown errors
-	// In a real app, we should log the internal error here
+	// Default to 500 for unknown errors. The details stay server-side only.
+	log.Printf("internal error: %s %s: %v", c.Request.Method, c.Request.URL.Path, err)
 	c.JSON(http.StatusInternalServerError, ErrorResponse{Error: "internal server error"})
 }

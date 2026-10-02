@@ -150,7 +150,7 @@ func (r *LoginRequest) Validate() error {
 // Use pointers to distinguish between "field not sent" and "field sent as false/empty".
 type UpdateUserRequest struct {
 	DisplayName   *string `json:"display_name" binding:"omitempty,max=50"`
-	Phone         *string `json:"phone" binding:"omitempty,tw_phone"`
+	Phone         *string `json:"phone" binding:"omitempty,tw_phone|eq="`
 	Gender        *string `json:"gender" binding:"omitempty,oneof=male female other"`
 	BirthDate     *string `json:"birth_date" binding:"omitempty,datetime=2006-01-02"`
 	LineID        *string `json:"line_id" binding:"omitempty,max=20"`
@@ -184,7 +184,7 @@ type MeResponse struct {
 // intentionally absent.
 type UpdateMeRequest struct {
 	DisplayName *string `json:"display_name" binding:"omitempty,max=50"`
-	Phone       *string `json:"phone" binding:"omitempty,tw_phone"`
+	Phone       *string `json:"phone" binding:"omitempty,tw_phone|eq="`
 	Gender      *string `json:"gender" binding:"omitempty,oneof=male female other"`
 	BirthDate   *string `json:"birth_date" binding:"omitempty,datetime=2006-01-02"`
 	LineID      *string `json:"line_id" binding:"omitempty,max=20"`

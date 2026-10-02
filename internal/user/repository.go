@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/nekogravitycat/court-booking-backend/internal/pkg/request"
 	"log"
 	"time"
 
@@ -30,6 +31,8 @@ type Repository interface {
 	Update(ctx context.Context, id string, req UpdateUserRequest) error
 	UpdateAvatar(ctx context.Context, id string, avatar *string) error
 	Delete(ctx context.Context, id string) error
+	// CountActiveSystemAdminsExcept counts active system admins other than excludeID.
+	CountActiveSystemAdminsExcept(ctx context.Context, excludeID string) (int, error)
 
 	// Pickup host role management
 	IsPickupHost(ctx context.Context, userID string) (bool, error)
@@ -264,10 +267,10 @@ func (r *pgxUserRepository) List(ctx context.Context, filter UserFilter) ([]*Use
 		queryBuilder = queryBuilder.Where(squirrel.Eq{"u.id": filter.IDs})
 	}
 	if filter.Email != "" {
-		queryBuilder = queryBuilder.Where(squirrel.ILike{"email": "%" + filter.Email + "%"})
+		queryBuilder = queryBuilder.Where(squirrel.ILike{"email": "%" + request.EscapeLike(filter.Email) + "%"})
 	}
 	if filter.DisplayName != "" {
-		queryBuilder = queryBuilder.Where(squirrel.ILike{"display_name": "%" + filter.DisplayName + "%"})
+		queryBuilder = queryBuilder.Where(squirrel.ILike{"display_name": "%" + request.EscapeLike(filter.DisplayName) + "%"})
 	}
 	if filter.IsActive != nil {
 		queryBuilder = queryBuilder.Where(squirrel.Eq{"is_active": *filter.IsActive})
@@ -385,7 +388,12 @@ func (r *pgxUserRepository) Update(ctx context.Context, id string, req UpdateUse
 		}
 	}
 	if req.Phone != nil {
-		query = query.Set("phone", req.Phone)
+		// An empty string clears the phone number.
+		if *req.Phone == "" {
+			query = query.Set("phone", nil)
+		} else {
+			query = query.Set("phone", *req.Phone)
+		}
 		changed = true
 	}
 	if req.Gender != nil {
@@ -503,4 +511,16 @@ func (r *pgxUserRepository) Delete(ctx context.Context, id string) error {
 	}
 
 	return nil
+}
+
+func (r *pgxUserRepository) CountActiveSystemAdminsExcept(ctx context.Context, excludeID string) (int, error) {
+	var n int
+	err := r.pool.QueryRow(ctx,
+		"SELECT count(*) FROM public.users WHERE is_system_admin = true AND is_active = true AND id <> $1",
+		excludeID,
+	).Scan(&n)
+	if err != nil {
+		return 0, fmt.Errorf("count active system admins failed: %w", err)
+	}
+	return n, nil
 }

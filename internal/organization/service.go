@@ -84,11 +84,15 @@ func (s *service) Create(ctx context.Context, name string, ownerID string) (*Org
 	}
 
 	// Verify owner exists
-	if _, err := s.userService.GetByID(ctx, ownerID); err != nil {
+	owner, err := s.userService.GetByID(ctx, ownerID)
+	if err != nil {
 		if errors.Is(err, user.ErrNotFound) {
 			return nil, ErrUserNotFound
 		}
 		return nil, err
+	}
+	if !owner.IsActive {
+		return nil, ErrOwnerInactive
 	}
 
 	org := &Organization{
@@ -120,11 +124,15 @@ func (s *service) Update(ctx context.Context, id string, req UpdateOrganizationR
 		req.Name = &name
 	}
 	if req.OwnerID != nil {
-		if _, err := s.userService.GetByID(ctx, *req.OwnerID); err != nil {
+		newOwner, err := s.userService.GetByID(ctx, *req.OwnerID)
+		if err != nil {
 			if errors.Is(err, user.ErrNotFound) {
 				return nil, ErrUserNotFound
 			}
 			return nil, err
+		}
+		if !newOwner.IsActive {
+			return nil, ErrOwnerInactive
 		}
 	}
 	if err := s.repo.UpdateDetails(ctx, id, req); err != nil {

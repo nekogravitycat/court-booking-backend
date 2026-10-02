@@ -84,8 +84,8 @@ func TestLocationCRUDAndPermissions(t *testing.T) {
 			OrganizationID: orgA_ID,
 			Name:           "", // Empty
 			Capacity:       10,
-			Longitude:      121.0,
-			Latitude:       25.0,
+			Longitude:      f64(121.0),
+			Latitude:       f64(25.0),
 		}
 		w := executeRequest("POST", "/v1/locations", invalidPayload, ownerAToken)
 		assert.Equal(t, http.StatusBadRequest, w.Code, "Should fail when name is empty")
@@ -94,8 +94,8 @@ func TestLocationCRUDAndPermissions(t *testing.T) {
 		invalidGeoPayload := locHttp.CreateLocationRequest{
 			OrganizationID: orgA_ID,
 			Name:           "Bad Geo",
-			Longitude:      200.0, // Invalid
-			Latitude:       100.0, // Invalid
+			Longitude:      f64(200.0), // Invalid
+			Latitude:       f64(100.0), // Invalid
 		}
 		wGeo := executeRequest("POST", "/v1/locations", invalidGeoPayload, ownerAToken)
 		assert.Equal(t, http.StatusBadRequest, wGeo.Code, "Should fail when coordinates are out of range")
@@ -109,8 +109,8 @@ func TestLocationCRUDAndPermissions(t *testing.T) {
 			OpeningHoursStart: "09:00:00",
 			OpeningHoursEnd:   "18:00:00",
 			LocationInfo:      "Info",
-			Longitude:         121.0,
-			Latitude:          25.0,
+			Longitude:         f64(121.0),
+			Latitude:          f64(25.0),
 		}
 
 		// Stranger trying to create
@@ -131,8 +131,8 @@ func TestLocationCRUDAndPermissions(t *testing.T) {
 			OpeningHoursEnd:   "22:00:00",
 			LocationInfo:      "Downtown",
 			Opening:           true,
-			Longitude:         121.5,
-			Latitude:          25.0,
+			Longitude:         f64(121.5),
+			Latitude:          f64(25.0),
 		}
 
 		w := executeRequest("POST", "/v1/locations", validPayload, ownerAToken)
@@ -153,7 +153,7 @@ func TestLocationCRUDAndPermissions(t *testing.T) {
 		dummyPayload := locHttp.CreateLocationRequest{
 			OrganizationID: orgA_ID, // Intentionally using Org A ID but sending with Admin B Token (Should fail per strict rules)
 			Name:           "Fail Attempt",
-			Longitude:      0, Latitude: 0,
+			Longitude:      f64(0), Latitude: f64(0),
 		}
 		// Verify cross-org creation fails first
 		executeRequest("POST", "/v1/locations", dummyPayload, adminBToken)
@@ -276,7 +276,7 @@ func TestLocationCRUDAndPermissions(t *testing.T) {
 			OpeningHoursEnd:   "18:00:00",
 			LocationInfo:      "Info 1",
 			Opening:           true,
-			Longitude:         121.0, Latitude: 25.0,
+			Longitude:         f64(121.0), Latitude: f64(25.0),
 		}, ownerAToken)
 		require.Equal(t, http.StatusCreated, w1.Code, "Failed to create Loc 1: %s", w1.Body.String())
 
@@ -289,7 +289,7 @@ func TestLocationCRUDAndPermissions(t *testing.T) {
 			OpeningHoursEnd:   "22:00:00",
 			LocationInfo:      "Info 2",
 			Opening:           false,
-			Longitude:         121.0, Latitude: 25.0,
+			Longitude:         f64(121.0), Latitude: f64(25.0),
 		}, ownerAToken)
 		require.Equal(t, http.StatusCreated, w2.Code, "Failed to create Loc 2: %s", w2.Body.String())
 
@@ -302,7 +302,7 @@ func TestLocationCRUDAndPermissions(t *testing.T) {
 			OpeningHoursEnd:   "14:00:00",
 			LocationInfo:      "Info 3",
 			Opening:           true,
-			Longitude:         121.0, Latitude: 25.0,
+			Longitude:         f64(121.0), Latitude: f64(25.0),
 		}, ownerAToken)
 		require.Equal(t, http.StatusCreated, w3.Code, "Failed to create Loc 3: %s", w3.Body.String())
 

@@ -47,6 +47,17 @@ type Repository interface {
 	// transaction (with SELECT FOR UPDATE) before applying the update. It is used
 	// when an order moves back into a seat-occupying state to prevent overbooking.
 	UpdateOrderWithCapacityCheck(ctx context.Context, order *PickupOrder) error
+
+	// HasConfirmedOrder reports whether the user holds a confirmed (or
+	// cancel-requested) order in the group.
+	HasConfirmedOrder(ctx context.Context, groupID, userID string) (bool, error)
+
+	// CancelUpcomingOrdersByUser cancels the user's seat-occupying orders in
+	// active groups that have not ended, and returns what was cancelled.
+	CancelUpcomingOrdersByUser(ctx context.Context, userID string) ([]CancelledOrder, error)
+	// CancelUpcomingGroupsByHost cancels the host's active groups that have not
+	// ended and returns them (only ID, HostID and Title are populated).
+	CancelUpcomingGroupsByHost(ctx context.Context, hostID string) ([]*PickupGroup, error)
 }
 
 type pgxRepository struct {
@@ -159,6 +170,16 @@ func scanGroupInto(g *PickupGroup, extra ...any) []any {
 	return append(targets, extra...)
 }
 
+// mapLocationFKError turns a pickup_groups.location_id foreign-key violation
+// into ErrLocationNotFound; any other error is wrapped with msg.
+func mapLocationFKError(err error, msg string) error {
+	var pgErr *pgconn.PgError
+	if errors.As(err, &pgErr) && pgErr.Code == pgerrcode.ForeignKeyViolation && pgErr.ConstraintName == "pickup_groups_location_id_fkey" {
+		return ErrLocationNotFound
+	}
+	return fmt.Errorf("%s: %w", msg, err)
+}
+
 func (r *pgxRepository) CreateGroup(ctx context.Context, g *PickupGroup) error {
 	psql := squirrel.StatementBuilder.PlaceholderFormat(squirrel.Dollar)
 	query, args, err := psql.Insert("public.pickup_groups").
@@ -172,7 +193,10 @@ func (r *pgxRepository) CreateGroup(ctx context.Context, g *PickupGroup) error {
 		return fmt.Errorf("build create pickup group query failed: %w", err)
 	}
 
-	return r.pool.QueryRow(ctx, query, args...).Scan(&g.ID, &g.CreatedAt, &g.UpdatedAt)
+	if err := r.pool.QueryRow(ctx, query, args...).Scan(&g.ID, &g.CreatedAt, &g.UpdatedAt); err != nil {
+		return mapLocationFKError(err, "create pickup group failed")
+	}
+	return nil
 }
 
 func (r *pgxRepository) GetGroupByID(ctx context.Context, id string) (*PickupGroup, error) {
@@ -240,6 +264,9 @@ func (r *pgxRepository) ListGroups(ctx context.Context, filter GroupFilter) ([]*
 	}
 	if filter.HostID != "" {
 		query = query.Where(squirrel.Eq{"pg.host_id": filter.HostID})
+	}
+	if filter.EnabledOnly {
+		query = query.Where(squirrel.Eq{"pg.enable": true})
 	}
 	if filter.PubliclyVisibleOnly {
 		// Publicly visible groups: active, enabled, and not yet ended. Fully
@@ -382,7 +409,7 @@ func (r *pgxRepository) UpdateGroup(ctx context.Context, g *PickupGroup) error {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return ErrGroupNotFound
 		}
-		return fmt.Errorf("update pickup group failed: %w", err)
+		return mapLocationFKError(err, "update pickup group failed")
 	}
 	return nil
 }
@@ -914,4 +941,67 @@ func (r *pgxRepository) ListParticipantSeats(ctx context.Context, groupID string
 		seats = append(seats, s)
 	}
 	return seats, tz, rows.Err()
+}
+
+func (r *pgxRepository) CancelUpcomingOrdersByUser(ctx context.Context, userID string) ([]CancelledOrder, error) {
+	rows, err := r.pool.Query(ctx,
+		`UPDATE public.pickup_orders po
+		 SET status = 'cancelled', updated_at = now()
+		 FROM public.pickup_groups pg
+		 WHERE po.pickup_group_id = pg.id
+		   AND po.user_id = $1
+		   AND po.status IN ('pending', 'confirmed', 'cancel_request')
+		   AND pg.status = 'active'
+		   AND pg.end_time > now()
+		 RETURNING po.id::text, pg.id::text, pg.title, pg.host_id::text, po.booker_name`,
+		userID)
+	if err != nil {
+		return nil, fmt.Errorf("cancel upcoming orders failed: %w", err)
+	}
+	defer rows.Close()
+
+	var out []CancelledOrder
+	for rows.Next() {
+		var c CancelledOrder
+		if err := rows.Scan(&c.OrderID, &c.GroupID, &c.GroupTitle, &c.HostID, &c.BookerName); err != nil {
+			return nil, fmt.Errorf("scan cancelled order failed: %w", err)
+		}
+		out = append(out, c)
+	}
+	return out, rows.Err()
+}
+
+func (r *pgxRepository) CancelUpcomingGroupsByHost(ctx context.Context, hostID string) ([]*PickupGroup, error) {
+	rows, err := r.pool.Query(ctx,
+		`UPDATE public.pickup_groups
+		 SET status = 'cancelled', updated_at = now()
+		 WHERE host_id = $1 AND status = 'active' AND end_time > now()
+		 RETURNING id::text, title`,
+		hostID)
+	if err != nil {
+		return nil, fmt.Errorf("cancel upcoming groups failed: %w", err)
+	}
+	defer rows.Close()
+
+	var out []*PickupGroup
+	for rows.Next() {
+		g := &PickupGroup{HostID: hostID}
+		if err := rows.Scan(&g.ID, &g.Title); err != nil {
+			return nil, fmt.Errorf("scan cancelled group failed: %w", err)
+		}
+		out = append(out, g)
+	}
+	return out, rows.Err()
+}
+
+func (r *pgxRepository) HasConfirmedOrder(ctx context.Context, groupID, userID string) (bool, error) {
+	var ok bool
+	err := r.pool.QueryRow(ctx,
+		`SELECT EXISTS (SELECT 1 FROM public.pickup_orders
+		 WHERE pickup_group_id = $1 AND user_id = $2 AND status IN ('confirmed', 'cancel_request'))`,
+		groupID, userID).Scan(&ok)
+	if err != nil {
+		return false, fmt.Errorf("check confirmed order failed: %w", err)
+	}
+	return ok, nil
 }

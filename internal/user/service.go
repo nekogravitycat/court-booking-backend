@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log"
 	"regexp"
 	"strings"
 	"time"
@@ -55,7 +56,9 @@ type Service interface {
 	Update(ctx context.Context, id string, req UpdateUserRequest, actingUserID string) (*User, error)
 	UpdateAvatar(ctx context.Context, id string, fileID string) error
 	RemoveAvatar(ctx context.Context, id string) error
-	Delete(ctx context.Context, id string) error
+	Delete(ctx context.Context, id string, actingUserID string) error
+	// AddDeactivationHook registers a cleanup run after an account is deactivated.
+	AddDeactivationHook(h DeactivationHook)
 
 	// Pickup host role management
 	IsPickupHost(ctx context.Context, userID string) (bool, error)
@@ -71,7 +74,17 @@ type HostFavoriteCleaner interface {
 	DeleteFavoritesByHostID(ctx context.Context, hostID string) error
 }
 
+// DeactivationHook cleans up a user's future commitments (bookings, pickup
+// enrollments, hosted groups) after the account is deactivated. Hooks are
+// registered by the owning modules, which keeps the user module decoupled from
+// them (avoids import cycles). Implementations must be idempotent: a failed
+// deactivation request can be retried.
+type DeactivationHook interface {
+	OnUserDeactivated(ctx context.Context, userID string) error
+}
+
 type service struct {
+	deactivationHooks []DeactivationHook
 	sportsService     sports.Service
 	skillLevelService skilllevel.Service
 	repo              Repository
@@ -160,11 +173,11 @@ func (s *service) Register(ctx context.Context, req RegisterRequest) (*User, err
 		return nil, ErrInvalidGender
 	}
 
-	var displayNamePtr *string
-	if strings.TrimSpace(displayName) != "" {
-		d := strings.TrimSpace(displayName)
-		displayNamePtr = &d
+	d := strings.TrimSpace(displayName)
+	if d == "" {
+		return nil, ErrDisplayNameRequired
 	}
+	displayNamePtr := &d
 
 	u := &User{
 		Email:        cleanEmail,
@@ -219,7 +232,7 @@ func (s *service) Login(ctx context.Context, email, password string) (*User, err
 	// Update last_login_at (best effort; do not fail login if update fails).
 	now := time.Now().UTC()
 	if err := s.repo.UpdateLastLogin(ctx, u.ID, now); err != nil {
-		// You might want to log this error, but do not expose it to the client.
+		log.Printf("warning: failed to update last login for user %s: %v", u.ID, err)
 	}
 
 	return u, nil
@@ -249,11 +262,51 @@ func (s *service) List(ctx context.Context, filter UserFilter) ([]*User, int, er
 	return s.repo.List(ctx, filter)
 }
 
+func (s *service) AddDeactivationHook(h DeactivationHook) {
+	s.deactivationHooks = append(s.deactivationHooks, h)
+}
+
+// checkCanDeactivate rejects deactivating oneself or the last active system admin.
+func (s *service) checkCanDeactivate(ctx context.Context, target *User, actingUserID string) error {
+	if !target.IsActive {
+		return nil
+	}
+	if target.ID == actingUserID {
+		return ErrCannotDeactivateSelf
+	}
+	if target.IsSystemAdmin {
+		others, err := s.repo.CountActiveSystemAdminsExcept(ctx, target.ID)
+		if err != nil {
+			return err
+		}
+		if others == 0 {
+			return ErrLastSystemAdmin
+		}
+	}
+	return nil
+}
+
+func (s *service) runDeactivationHooks(ctx context.Context, userID string) error {
+	for _, h := range s.deactivationHooks {
+		if err := h.OnUserDeactivated(ctx, userID); err != nil {
+			return fmt.Errorf("account deactivation cleanup failed: %w", err)
+		}
+	}
+	return nil
+}
+
 func (s *service) Update(ctx context.Context, id string, req UpdateUserRequest, actingUserID string) (*User, error) {
 	// 1. Check if user exists
-	_, err := s.repo.GetByID(ctx, id)
+	target, err := s.repo.GetByID(ctx, id)
 	if err != nil {
 		return nil, err
+	}
+
+	deactivating := req.IsActive != nil && !*req.IsActive && target.IsActive
+	if deactivating {
+		if err := s.checkCanDeactivate(ctx, target, actingUserID); err != nil {
+			return nil, err
+		}
 	}
 
 	// A system admin must not revoke their own system admin privilege, so the
@@ -268,19 +321,34 @@ func (s *service) Update(ctx context.Context, id string, req UpdateUserRequest, 
 	if req.Gender != nil && !IsValidGender(*req.Gender) {
 		return nil, ErrInvalidGender
 	}
+	if req.DisplayName != nil {
+		d := strings.TrimSpace(*req.DisplayName)
+		if d == "" {
+			return nil, ErrDisplayNameRequired
+		}
+		req.DisplayName = &d
+	}
 
 	// 3. Save changes
 	if err := s.repo.Update(ctx, id, req); err != nil {
 		return nil, err
 	}
+	if deactivating {
+		if err := s.runDeactivationHooks(ctx, id); err != nil {
+			return nil, err
+		}
+	}
 
 	return s.repo.GetByID(ctx, id)
 }
 
-func (s *service) Delete(ctx context.Context, id string) error {
+func (s *service) Delete(ctx context.Context, id string, actingUserID string) error {
 	// Check if user exists
 	u, err := s.repo.GetByID(ctx, id)
 	if err != nil {
+		return err
+	}
+	if err := s.checkCanDeactivate(ctx, u, actingUserID); err != nil {
 		return err
 	}
 
@@ -294,6 +362,9 @@ func (s *service) Delete(ctx context.Context, id string) error {
 	}
 
 	if err := s.repo.Delete(ctx, id); err != nil {
+		return err
+	}
+	if err := s.runDeactivationHooks(ctx, id); err != nil {
 		return err
 	}
 	// Clean up avatar file if exists

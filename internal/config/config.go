@@ -5,12 +5,18 @@ import (
 	"log"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/joho/godotenv"
 )
 
 const PROD_STRING = "prod"
+
+// nonProdEnvs lists the accepted APP_ENV values other than PROD_STRING. Any
+// other value is rejected so a typo (e.g. "production") cannot silently start
+// the server in development mode with permissive CORS.
+var nonProdEnvs = map[string]bool{"dev": true, "local": true}
 
 // minJWTSecretLength is the minimum acceptable length (in bytes) for JWT_SECRET.
 // 32 bytes matches the output size of HMAC-SHA256 and resists brute force.
@@ -40,9 +46,18 @@ func Load() (*Config, error) {
 	// Production origin (default: empty)
 	cfg.ProdOrigins = getEnv("PROD_ORIGINS", "")
 
-	// Application environment (default: dev)
-	appEnvStr := getEnv("APP_ENV", "dev")
+	// Application environment (default: dev; an empty value counts as unset).
+	appEnvStr := strings.TrimSpace(getEnv("APP_ENV", ""))
+	if appEnvStr == "" {
+		appEnvStr = "dev"
+	}
 	cfg.IsProduction = appEnvStr == PROD_STRING
+	if !cfg.IsProduction && !nonProdEnvs[appEnvStr] {
+		return nil, fmt.Errorf("invalid APP_ENV %q: must be %q, \"dev\" or \"local\"", appEnvStr, PROD_STRING)
+	}
+	if cfg.IsProduction && !hasOrigin(cfg.ProdOrigins) {
+		return nil, fmt.Errorf("PROD_ORIGINS is required when APP_ENV=%s", PROD_STRING)
+	}
 
 	// HTTP listen address (default: :8080)
 	cfg.HTTPAddr = getEnv("HTTP_ADDR", ":8080")
@@ -105,4 +120,15 @@ func getEnvAsInt(key string, defaultValue int) (int, error) {
 	}
 
 	return val, nil
+}
+
+// hasOrigin reports whether the comma-separated origin list has at least one
+// non-blank entry.
+func hasOrigin(origins string) bool {
+	for _, o := range strings.Split(origins, ",") {
+		if strings.TrimSpace(o) != "" {
+			return true
+		}
+	}
+	return false
 }

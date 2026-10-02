@@ -220,6 +220,14 @@ func TestPickupEnrolledStatusAndOrderDelete(t *testing.T) {
 		assert.Equal(t, http.StatusConflict, w.Code)
 	})
 
+	t.Run("rejected booker cannot escape rejection by changing status", func(t *testing.T) {
+		for _, st := range []string{"cancelled", "cancel_request", "pending"} {
+			w := executeRequest("PATCH", "/v1/pickup-orders/"+orderID, pickupHttp.UpdateOrderBody{Status: strPtr(st)}, user1Token)
+			assert.Equal(t, http.StatusForbidden, w.Code, st)
+		}
+		assert.Equal(t, "rejected", briefFor(user1Token).EnrolledStatus)
+	})
+
 	t.Run("system admin can hard-delete an order", func(t *testing.T) {
 		wDel := executeRequest("DELETE", "/v1/pickup-orders/"+orderID, nil, adminToken)
 		assert.Equal(t, http.StatusNoContent, wDel.Code)

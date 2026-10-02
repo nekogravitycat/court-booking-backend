@@ -77,7 +77,7 @@ func TestBookingCRUDAndPermissions(t *testing.T) {
 			OpeningHoursStart: "06:00:00", OpeningHoursEnd: "23:00:00",
 			Opening:      true,
 			Timezone:     "UTC",
-			LocationInfo: "Test Info", Longitude: 120.0, Latitude: 23.0,
+			LocationInfo: "Test Info", Longitude: f64(120.0), Latitude: f64(23.0),
 		}
 		wLoc := executeRequest("POST", "/v1/locations", locPayload, orgOwnerAToken)
 		var locA locHttp.LocationResponse

@@ -24,6 +24,7 @@ var (
 	ErrInvalidTimeRange            = apperror.New(http.StatusBadRequest, "start time must be before end time")
 	ErrPermissionDenied            = apperror.New(http.StatusForbidden, "permission denied")
 	ErrGroupNotActive              = apperror.New(http.StatusBadRequest, "pickup group is not active")
+	ErrLocationNotFound            = apperror.New(http.StatusNotFound, "location not found")
 	ErrSportNotFound               = apperror.New(http.StatusNotFound, "sport not found")
 	ErrSportInactive               = apperror.New(http.StatusBadRequest, "sport is not active")
 	ErrSkillLevelNotFound          = apperror.New(http.StatusBadRequest, "skill level is not defined for the selected sport")
@@ -178,10 +179,22 @@ type GroupFilter struct {
 	// listing: status=active, enable=true, and not yet ended. Fully booked
 	// groups are still included so users can see (though not join) them.
 	PubliclyVisibleOnly bool
+	// EnabledOnly limits results to groups with enable=true (hidden groups are
+	// only for their host and system admins).
+	EnabledOnly bool
 	// ViewerUserID, when set, resolves each group's enrolled_status for that user.
 	ViewerUserID string
 	Page         int
 	PageSize     int
 	SortBy       string
 	SortOrder    string
+}
+
+// CancelledOrder describes an order cancelled by an account deactivation.
+type CancelledOrder struct {
+	OrderID    string
+	GroupID    string
+	GroupTitle string
+	HostID     string
+	BookerName string
 }

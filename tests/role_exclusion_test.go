@@ -48,8 +48,8 @@ func TestRoleMutualExclusionAndUnifiedList(t *testing.T) {
 		OpeningHoursEnd:   "18:00",
 		LocationInfo:      "Restricted",
 		Opening:           true,
-		Longitude:         10,
-		Latitude:          10,
+		Longitude:         f64(10),
+		Latitude:          f64(10),
 	}
 	wLoc := executeRequest("POST", "/v1/locations", locPayload, ownerToken)
 	require.Equal(t, http.StatusCreated, wLoc.Code, "Owner should be able to create location")
