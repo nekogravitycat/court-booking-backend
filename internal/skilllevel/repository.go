@@ -103,48 +103,15 @@ func (r *pgxRepository) List(ctx context.Context, filter Filter) ([]*SkillLevel,
 	}
 	query = query.OrderBy(orderBy+" "+orderDir, "id ASC")
 
-	if filter.Page < 1 {
-		filter.Page = 1
-	}
-	if filter.PageSize < 1 {
-		filter.PageSize = 20
-	}
-	offset := (filter.Page - 1) * filter.PageSize
-	query = query.Limit(uint64(filter.PageSize)).Offset(uint64(offset))
-
-	sql, args, err := query.ToSql()
-	if err != nil {
-		return nil, 0, fmt.Errorf("build list skill levels query failed: %w", err)
-	}
-
-	rows, err := r.pool.Query(ctx, sql, args...)
-	if err != nil {
-		return nil, 0, fmt.Errorf("list skill levels failed: %w", err)
-	}
-	defer rows.Close()
-
-	var result []*SkillLevel
-	var total int
-	for rows.Next() {
+	return pagination.Collect(ctx, r.pool, query, filter.Page, filter.PageSize, "skill level", func(rows pgx.Rows, total *int) (*SkillLevel, error) {
 		var sl SkillLevel
 		if err := rows.Scan(
-			&sl.ID, &sl.SportID, &sl.Level, &sl.Label, &sl.IsActive, &sl.CreatedAt, &sl.UpdatedAt, &total,
+			&sl.ID, &sl.SportID, &sl.Level, &sl.Label, &sl.IsActive, &sl.CreatedAt, &sl.UpdatedAt, total,
 		); err != nil {
-			return nil, 0, fmt.Errorf("scan skill level failed: %w", err)
+			return nil, fmt.Errorf("scan skill level failed: %w", err)
 		}
-		result = append(result, &sl)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, 0, err
-	}
-	rows.Close()
-	if total == 0 {
-		total, err = pagination.Count(ctx, r.pool, query)
-		if err != nil {
-			return nil, 0, err
-		}
-	}
-	return result, total, nil
+		return &sl, nil
+	})
 }
 
 func (r *pgxRepository) Update(ctx context.Context, sl *SkillLevel) error {

@@ -50,6 +50,8 @@ type Service interface {
 	Register(ctx context.Context, req RegisterRequest) (*User, error)
 	Login(ctx context.Context, email, password string) (*User, error)
 	GetByID(ctx context.Context, id string) (*User, error)
+	// GetAccount returns only the account flags; prefer it over GetByID for authorization checks.
+	GetAccount(ctx context.Context, id string) (*Account, error)
 	GetByEmail(ctx context.Context, email string) (*User, error)
 
 	List(ctx context.Context, filter UserFilter) ([]*User, int, error)
@@ -242,6 +244,10 @@ func (s *service) GetByID(ctx context.Context, id string) (*User, error) {
 	return s.repo.GetByID(ctx, id)
 }
 
+func (s *service) GetAccount(ctx context.Context, id string) (*Account, error) {
+	return s.repo.GetAccount(ctx, id)
+}
+
 func (s *service) GetByEmail(ctx context.Context, email string) (*User, error) {
 	cleanEmail := normalizeEmail(email)
 	return s.repo.GetByEmail(ctx, cleanEmail)
@@ -369,7 +375,7 @@ func (s *service) Delete(ctx context.Context, id string, actingUserID string) er
 	}
 	// Clean up avatar file if exists
 	if u.Avatar != nil && *u.Avatar != "" {
-		_ = s.fileService.Delete(ctx, *u.Avatar)
+		file.ReleaseReplaced(ctx, s.fileService, u.Avatar, "")
 	}
 
 	return nil
@@ -403,45 +409,23 @@ func (s *service) ListPickupHosts(ctx context.Context, filter UserFilter) ([]*Us
 }
 
 func (s *service) UpdateAvatar(ctx context.Context, id string, fileID string) error {
-	u, err := s.repo.GetByID(ctx, id)
+	// Persist the new reference first; only delete the old file once the new
+	// reference is durably stored, to avoid orphaned files / dangling references.
+	oldAvatar, err := s.repo.SetAvatar(ctx, id, &fileID)
 	if err != nil {
 		return err
 	}
-
-	oldAvatar := u.Avatar
-
-	// Persist the new reference first. Only after the new avatar is durably
-	// stored do we delete the old file. Deleting first would leave an orphaned
-	// file or a dangling reference if the update failed.
-	u.Avatar = &fileID
-	if err := s.repo.UpdateAvatar(ctx, id, u.Avatar); err != nil {
-		return err
-	}
-
-	// Best-effort cleanup of the previous avatar file.
-	if oldAvatar != nil && *oldAvatar != "" && *oldAvatar != fileID {
-		_ = s.fileService.Delete(ctx, *oldAvatar)
-	}
+	file.ReleaseReplaced(ctx, s.fileService, oldAvatar, fileID)
 	return nil
 }
 
 func (s *service) RemoveAvatar(ctx context.Context, id string) error {
-	u, err := s.repo.GetByID(ctx, id)
+	// Clear the reference first, then delete the file, keeping the database
+	// consistent even if the storage delete fails (best effort).
+	oldAvatar, err := s.repo.SetAvatar(ctx, id, nil)
 	if err != nil {
 		return err
 	}
-
-	oldAvatar := u.Avatar
-
-	// Clear the reference first, then delete the file. This keeps the database
-	// consistent even if the storage delete fails (best effort).
-	u.Avatar = nil
-	if err := s.repo.UpdateAvatar(ctx, id, u.Avatar); err != nil {
-		return err
-	}
-
-	if oldAvatar != nil && *oldAvatar != "" {
-		_ = s.fileService.Delete(ctx, *oldAvatar)
-	}
+	file.ReleaseReplaced(ctx, s.fileService, oldAvatar, "")
 	return nil
 }

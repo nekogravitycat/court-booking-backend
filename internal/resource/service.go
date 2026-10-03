@@ -3,7 +3,6 @@ package resource
 import (
 	"context"
 	"errors"
-	"log"
 	"net/http"
 	"strings"
 
@@ -151,9 +150,7 @@ func (s *service) Delete(ctx context.Context, id string) error {
 	}
 
 	// Clean up cover file after the resource was deleted.
-	if res.Cover != nil && *res.Cover != "" {
-		_ = s.fileService.Delete(ctx, *res.Cover)
-	}
+	file.ReleaseReplaced(ctx, s.fileService, res.Cover, "")
 
 	return nil
 }
@@ -166,9 +163,7 @@ func (s *service) UpdateCover(ctx context.Context, id string, fileID string) err
 		return err
 	}
 
-	if oldCover != nil && *oldCover != "" && *oldCover != fileID {
-		s.deleteFile(ctx, *oldCover)
-	}
+	file.ReleaseReplaced(ctx, s.fileService, oldCover, fileID)
 	return nil
 }
 
@@ -180,15 +175,6 @@ func (s *service) RemoveCover(ctx context.Context, id string) error {
 		return err
 	}
 
-	if oldCover != nil && *oldCover != "" {
-		s.deleteFile(ctx, *oldCover)
-	}
+	file.ReleaseReplaced(ctx, s.fileService, oldCover, "")
 	return nil
-}
-
-// deleteFile removes an orphaned file on a best-effort basis.
-func (s *service) deleteFile(ctx context.Context, fileID string) {
-	if err := s.fileService.Delete(ctx, fileID); err != nil {
-		log.Printf("warning: failed to delete file %s: %v", fileID, err)
-	}
 }

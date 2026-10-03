@@ -107,18 +107,18 @@ func NewRouter(cfg Config) *gin.Engine {
 
 	// Auth Middleware. The active-status check runs on every authenticated
 	// request so suspended / soft-deleted accounts lose access immediately.
-	isActive := func(ctx context.Context, userID string) (bool, error) {
-		u, err := cfg.UserService.GetByID(ctx, userID)
+	lookupAccount := func(ctx context.Context, userID string) (auth.Account, error) {
+		a, err := cfg.UserService.GetAccount(ctx, userID)
 		if err != nil {
-			return false, err
+			return auth.Account{}, err
 		}
-		return u.IsActive, nil
+		return auth.Account{IsActive: a.IsActive, IsSystemAdmin: a.IsSystemAdmin}, nil
 	}
-	authMiddleware := auth.AuthRequired(cfg.JWTManager, isActive)
-	sysAdminMiddleware := RequireSystemAdmin(cfg.UserService)
+	authMiddleware := auth.AuthRequired(cfg.JWTManager, lookupAccount)
+	sysAdminMiddleware := RequireSystemAdmin()
 	// Optional auth for public endpoints that personalize their response when a
 	// valid token is present but never require one.
-	optionalAuthMiddleware := auth.AuthOptional(cfg.JWTManager, isActive)
+	optionalAuthMiddleware := auth.AuthOptional(cfg.JWTManager, lookupAccount)
 
 	// Initialize Handlers (Injecting Services from cfg)
 	fileHandler := fileHttp.NewHandler(cfg.FileService)
@@ -126,13 +126,13 @@ func NewRouter(cfg Config) *gin.Engine {
 	orgHandler := orgHttp.NewHandler(cfg.OrgService, cfg.FileService, fileHandler)
 	locHandler := locHttp.NewHandler(cfg.LocService, cfg.OrgService, cfg.FileService, fileHandler)
 	resHandler := resHttp.NewHandler(cfg.ResService, cfg.LocService, cfg.OrgService, cfg.BookingService, cfg.FileService, fileHandler)
-	bookingHandler := bookingHttp.NewHandler(cfg.BookingService, cfg.UserService, cfg.ResService, cfg.LocService, cfg.OrgService)
+	bookingHandler := bookingHttp.NewHandler(cfg.BookingService)
 	annHandler := annHttp.NewHandler(cfg.AnnService)
 	sportsHandler := sportsHttp.NewHandler(cfg.SportsService)
 	skillHandler := skillHttp.NewHandler(cfg.SkillLevelService)
 	pickupHandler := pickupHttp.NewHandler(cfg.PickupService, cfg.UserService)
 	favoriteHandler := favoriteHttp.NewHandler(cfg.FavoriteService)
-	skillRatingHandler := skillRatingHttp.NewHandler(cfg.SkillRatingService, cfg.UserService)
+	skillRatingHandler := skillRatingHttp.NewHandler(cfg.SkillRatingService)
 	notificationHandler := notificationHttp.NewHandler(cfg.NotificationService)
 
 	// Register Routes

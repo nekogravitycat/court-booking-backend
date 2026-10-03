@@ -21,14 +21,8 @@ func NewHandler(service notification.Service) *Handler {
 // List returns the current user's notifications, newest first.
 func (h *Handler) List(c *gin.Context) {
 	userID := auth.GetUserID(c)
-	if userID == "" {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
-		return
-	}
-
 	var req ListNotificationsRequest
-	if err := c.ShouldBindQuery(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid query parameters", "details": err.Error()})
+	if !request.BindQuery(c, &req) {
 		return
 	}
 
@@ -54,11 +48,6 @@ func (h *Handler) List(c *gin.Context) {
 // UnreadCount returns how many unread notifications the current user has.
 func (h *Handler) UnreadCount(c *gin.Context) {
 	userID := auth.GetUserID(c)
-	if userID == "" {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
-		return
-	}
-
 	count, err := h.service.CountUnread(c.Request.Context(), userID)
 	if err != nil {
 		response.Error(c, err)
@@ -71,14 +60,8 @@ func (h *Handler) UnreadCount(c *gin.Context) {
 // MarkRead marks one of the current user's notifications as read.
 func (h *Handler) MarkRead(c *gin.Context) {
 	userID := auth.GetUserID(c)
-	if userID == "" {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
-		return
-	}
-
 	var uri request.ByIDRequest
-	if err := c.ShouldBindUri(&uri); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request", "details": err.Error()})
+	if !request.BindURI(c, &uri) {
 		return
 	}
 
@@ -93,11 +76,6 @@ func (h *Handler) MarkRead(c *gin.Context) {
 // MarkAllRead marks every unread notification of the current user as read.
 func (h *Handler) MarkAllRead(c *gin.Context) {
 	userID := auth.GetUserID(c)
-	if userID == "" {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
-		return
-	}
-
 	updated, err := h.service.MarkAllRead(c.Request.Context(), userID)
 	if err != nil {
 		response.Error(c, err)

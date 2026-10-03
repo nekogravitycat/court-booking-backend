@@ -33,8 +33,7 @@ func NewHandler(service organization.Service, fileService file.Service, fileHand
 // It supports standard pagination parameters.
 func (h *OrganizationHandler) List(c *gin.Context) {
 	var req ListOrganizationsRequest
-	if err := c.ShouldBindQuery(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid query parameters", "details": err.Error()})
+	if !request.BindQuery(c, &req) {
 		return
 	}
 
@@ -79,8 +78,7 @@ func (h *OrganizationHandler) List(c *gin.Context) {
 // Access Control: System Admin only.
 func (h *OrganizationHandler) Create(c *gin.Context) {
 	var req CreateOrganizationRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request body", "details": err.Error()})
+	if !request.BindJSON(c, &req) {
 		return
 	}
 
@@ -101,8 +99,7 @@ func (h *OrganizationHandler) Create(c *gin.Context) {
 // Get retrieves detailed information about a specific organization by its ID.
 func (h *OrganizationHandler) Get(c *gin.Context) {
 	var req request.ByIDRequest
-	if err := c.ShouldBindUri(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request", "details": err.Error()})
+	if !request.BindURI(c, &req) {
 		return
 	}
 
@@ -120,15 +117,13 @@ func (h *OrganizationHandler) Get(c *gin.Context) {
 // Access Control: System Admin only.
 func (h *OrganizationHandler) Update(c *gin.Context) {
 	var uri request.ByIDRequest
-	if err := c.ShouldBindUri(&uri); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request", "details": err.Error()})
+	if !request.BindURI(c, &uri) {
 		return
 	}
 
 	// Bind to HTTP DTO
 	var body UpdateOrganizationRequest
-	if err := c.ShouldBindJSON(&body); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request body", "details": err.Error()})
+	if !request.BindJSON(c, &body) {
 		return
 	}
 
@@ -157,8 +152,7 @@ func (h *OrganizationHandler) Update(c *gin.Context) {
 // Access Control: System Admin only.
 func (h *OrganizationHandler) Delete(c *gin.Context) {
 	var req request.ByIDRequest
-	if err := c.ShouldBindUri(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request", "details": err.Error()})
+	if !request.BindURI(c, &req) {
 		return
 	}
 
@@ -173,15 +167,13 @@ func (h *OrganizationHandler) Delete(c *gin.Context) {
 // ListManagers retrieves managers of an organization.
 func (h *OrganizationHandler) ListManagers(c *gin.Context) {
 	var uri request.ByIDRequest
-	if err := c.ShouldBindUri(&uri); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request", "details": err.Error()})
+	if !request.BindURI(c, &uri) {
 		return
 	}
 
 	// Bind query parameters
 	var req ListManagerRequest
-	if err := c.ShouldBindQuery(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid query parameters", "details": err.Error()})
+	if !request.BindQuery(c, &req) {
 		return
 	}
 
@@ -237,14 +229,12 @@ func (h *OrganizationHandler) ListManagers(c *gin.Context) {
 // Access Control: System Admin or Organization Owner.
 func (h *OrganizationHandler) AddManager(c *gin.Context) {
 	var uri request.ByIDRequest
-	if err := c.ShouldBindUri(&uri); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request", "details": err.Error()})
+	if !request.BindURI(c, &uri) {
 		return
 	}
 
 	var body AddOrganizationManagerRequest
-	if err := c.ShouldBindJSON(&body); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request body", "details": err.Error()})
+	if !request.BindJSON(c, &body) {
 		return
 	}
 
@@ -262,17 +252,8 @@ func (h *OrganizationHandler) AddManager(c *gin.Context) {
 	actorID := auth.GetUserID(c)
 	// Permission check: Must be Owner or SysAdmin to add managers.
 	// CheckIsOwner is strict owner check.
-	if err := h.service.CheckOperation(c.Request.Context(), uri.ID, auth.GetUserID(c)); err != nil {
+	if err := h.service.RequireOwner(c.Request.Context(), uri.ID, actorID, "permission denied: only owner can add managers"); err != nil {
 		response.Error(c, err)
-		return
-	}
-	isOwner, err := h.service.IsOwnerOrAbove(c.Request.Context(), uri.ID, actorID)
-	if err != nil {
-		response.Error(c, err)
-		return
-	}
-	if !isOwner {
-		c.JSON(http.StatusForbidden, gin.H{"error": "permission denied: only owner can add managers"})
 		return
 	}
 
@@ -288,23 +269,13 @@ func (h *OrganizationHandler) AddManager(c *gin.Context) {
 // Access Control: System Admin or Organization Owner.
 func (h *OrganizationHandler) RemoveManager(c *gin.Context) {
 	var req OrgMemberRequest
-	if err := c.ShouldBindUri(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request", "details": err.Error()})
+	if !request.BindURI(c, &req) {
 		return
 	}
 
 	actorID := auth.GetUserID(c)
-	if err := h.service.CheckOperation(c.Request.Context(), req.ID, auth.GetUserID(c)); err != nil {
+	if err := h.service.RequireOwner(c.Request.Context(), req.ID, actorID, "permission denied: only owner can remove managers"); err != nil {
 		response.Error(c, err)
-		return
-	}
-	isOwner, err := h.service.IsOwnerOrAbove(c.Request.Context(), req.ID, actorID)
-	if err != nil {
-		response.Error(c, err)
-		return
-	}
-	if !isOwner {
-		c.JSON(http.StatusForbidden, gin.H{"error": "permission denied: only owner can remove managers"})
 		return
 	}
 
@@ -319,15 +290,13 @@ func (h *OrganizationHandler) RemoveManager(c *gin.Context) {
 // ListMembers retrieves members of an organization.
 func (h *OrganizationHandler) ListMembers(c *gin.Context) {
 	var uri request.ByIDRequest
-	if err := c.ShouldBindUri(&uri); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request", "details": err.Error()})
+	if !request.BindURI(c, &uri) {
 		return
 	}
 
 	// Bind query parameters
 	var req ListMemberRequest
-	if err := c.ShouldBindQuery(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid query parameters", "details": err.Error()})
+	if !request.BindQuery(c, &req) {
 		return
 	}
 
@@ -384,14 +353,12 @@ func (h *OrganizationHandler) ListMembers(c *gin.Context) {
 // Access Control: System Admin or Organization Owner.
 func (h *OrganizationHandler) AddMember(c *gin.Context) {
 	var uri request.ByIDRequest
-	if err := c.ShouldBindUri(&uri); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request", "details": err.Error()})
+	if !request.BindURI(c, &uri) {
 		return
 	}
 
 	var body AddOrganizationMemberRequest
-	if err := c.ShouldBindJSON(&body); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request body", "details": err.Error()})
+	if !request.BindJSON(c, &body) {
 		return
 	}
 
@@ -402,17 +369,8 @@ func (h *OrganizationHandler) AddMember(c *gin.Context) {
 
 	actorID := auth.GetUserID(c)
 	// Permission check: Must be Owner or SysAdmin to add members.
-	if err := h.service.CheckOperation(c.Request.Context(), uri.ID, auth.GetUserID(c)); err != nil {
+	if err := h.service.RequireOwner(c.Request.Context(), uri.ID, actorID, "permission denied: only owner can add members"); err != nil {
 		response.Error(c, err)
-		return
-	}
-	isOwner, err := h.service.IsOwnerOrAbove(c.Request.Context(), uri.ID, actorID)
-	if err != nil {
-		response.Error(c, err)
-		return
-	}
-	if !isOwner {
-		c.JSON(http.StatusForbidden, gin.H{"error": "permission denied: only owner can add members"})
 		return
 	}
 
@@ -428,24 +386,14 @@ func (h *OrganizationHandler) AddMember(c *gin.Context) {
 // Access Control: System Admin or Organization Owner.
 func (h *OrganizationHandler) RemoveMember(c *gin.Context) {
 	var req OrgMemberRequest
-	if err := c.ShouldBindUri(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request", "details": err.Error()})
+	if !request.BindURI(c, &req) {
 		return
 	}
 
 	actorID := auth.GetUserID(c)
 	// Permission check: Must be Owner or SysAdmin to remove members.
-	if err := h.service.CheckOperation(c.Request.Context(), req.ID, auth.GetUserID(c)); err != nil {
+	if err := h.service.RequireOwner(c.Request.Context(), req.ID, actorID, "permission denied: only owner can remove members"); err != nil {
 		response.Error(c, err)
-		return
-	}
-	isOwner, err := h.service.IsOwnerOrAbove(c.Request.Context(), req.ID, actorID)
-	if err != nil {
-		response.Error(c, err)
-		return
-	}
-	if !isOwner {
-		c.JSON(http.StatusForbidden, gin.H{"error": "permission denied: only owner can remove members"})
 		return
 	}
 
@@ -460,24 +408,14 @@ func (h *OrganizationHandler) RemoveMember(c *gin.Context) {
 // UploadCover uploads a cover image for an organization.
 func (h *OrganizationHandler) UploadCover(c *gin.Context) {
 	var uri request.ByIDRequest
-	if err := c.ShouldBindUri(&uri); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request", "details": err.Error()})
+	if !request.BindURI(c, &uri) {
 		return
 	}
 
 	// Permission check: Owner or above
 	currentUserID := auth.GetUserID(c)
-	if err := h.service.CheckOperation(c.Request.Context(), uri.ID, auth.GetUserID(c)); err != nil {
+	if err := h.service.RequireOwner(c.Request.Context(), uri.ID, currentUserID, "forbidden: only owners can upload organization cover"); err != nil {
 		response.Error(c, err)
-		return
-	}
-	allowed, err := h.service.IsOwnerOrAbove(c.Request.Context(), uri.ID, currentUserID)
-	if err != nil {
-		response.Error(c, err)
-		return
-	}
-	if !allowed {
-		c.JSON(http.StatusForbidden, gin.H{"error": "forbidden: only owners can upload organization cover"})
 		return
 	}
 
@@ -494,24 +432,14 @@ func (h *OrganizationHandler) UploadCover(c *gin.Context) {
 // RemoveCover removes the cover image from an organization.
 func (h *OrganizationHandler) RemoveCover(c *gin.Context) {
 	var uri request.ByIDRequest
-	if err := c.ShouldBindUri(&uri); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request", "details": err.Error()})
+	if !request.BindURI(c, &uri) {
 		return
 	}
 
 	// Permission check: Owner or above
 	currentUserID := auth.GetUserID(c)
-	if err := h.service.CheckOperation(c.Request.Context(), uri.ID, auth.GetUserID(c)); err != nil {
+	if err := h.service.RequireOwner(c.Request.Context(), uri.ID, currentUserID, "forbidden: only owners can remove organization cover"); err != nil {
 		response.Error(c, err)
-		return
-	}
-	allowed, err := h.service.IsOwnerOrAbove(c.Request.Context(), uri.ID, currentUserID)
-	if err != nil {
-		response.Error(c, err)
-		return
-	}
-	if !allowed {
-		c.JSON(http.StatusForbidden, gin.H{"error": "forbidden: only owners can remove organization cover"})
 		return
 	}
 

@@ -40,16 +40,7 @@ type LocationTag struct {
 }
 
 func NewLocationResponse(l *location.Location) LocationResponse {
-	var coverURL *string
-	var coverThumbnailURL *string
-
-	if l.Cover != nil {
-		url := file.FileURL(*l.Cover)
-		coverURL = &url
-
-		thumbURL := file.ThumbnailURL(*l.Cover)
-		coverThumbnailURL = &thumbURL
-	}
+	coverURL, coverThumbnailURL := file.URLs(l.Cover)
 
 	return LocationResponse{
 		ID:                l.ID,

@@ -1,6 +1,7 @@
 package http
 
 import (
+	"github.com/nekogravitycat/court-booking-backend/internal/pkg/request"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
@@ -20,11 +21,6 @@ func NewHandler(service favorite.Service) *Handler {
 // ListFavoriteHosts returns the current user's favorite hosts (nickname + avatar only).
 func (h *Handler) ListFavoriteHosts(c *gin.Context) {
 	userID := auth.GetUserID(c)
-	if userID == "" {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
-		return
-	}
-
 	favorites, err := h.service.ListFavorites(c.Request.Context(), userID)
 	if err != nil {
 		response.Error(c, err)
@@ -42,14 +38,8 @@ func (h *Handler) ListFavoriteHosts(c *gin.Context) {
 // AddFavoriteHost adds a host to the current user's favorites.
 func (h *Handler) AddFavoriteHost(c *gin.Context) {
 	userID := auth.GetUserID(c)
-	if userID == "" {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
-		return
-	}
-
 	var body FavoriteHostRequest
-	if err := c.ShouldBindJSON(&body); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request body", "details": err.Error()})
+	if !request.BindJSON(c, &body) {
 		return
 	}
 
@@ -64,14 +54,8 @@ func (h *Handler) AddFavoriteHost(c *gin.Context) {
 // RemoveFavoriteHost removes a host from the current user's favorites.
 func (h *Handler) RemoveFavoriteHost(c *gin.Context) {
 	userID := auth.GetUserID(c)
-	if userID == "" {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
-		return
-	}
-
 	var body FavoriteHostRequest
-	if err := c.ShouldBindJSON(&body); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request body", "details": err.Error()})
+	if !request.BindJSON(c, &body) {
 		return
 	}
 

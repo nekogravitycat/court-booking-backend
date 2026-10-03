@@ -61,16 +61,7 @@ func NewUserResponse(u *user.User) UserResponse {
 		lastLoginAt = &ll
 	}
 
-	var avatarURL *string
-	var avatarThumbnailURL *string
-
-	if u.Avatar != nil {
-		url := file.FileURL(*u.Avatar)
-		avatarURL = &url
-
-		thumbURL := file.ThumbnailURL(*u.Avatar)
-		avatarThumbnailURL = &thumbURL
-	}
+	avatarURL, avatarThumbnailURL := file.URLs(u.Avatar)
 
 	// Map the organizations
 	orgs := make([]orgHttp.OrganizationBrief, 0, len(u.Organizations))

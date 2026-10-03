@@ -12,6 +12,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/nekogravitycat/court-booking-backend/internal/db"
 	"github.com/nekogravitycat/court-booking-backend/internal/pkg/pagination"
 )
 
@@ -116,13 +117,20 @@ func (r *pgxRepository) WithOrderLock(ctx context.Context, id string, fn func(Re
 		}
 		return err
 	}
-	if _, err := tx.Exec(ctx, "SELECT id FROM public.users WHERE id = $1 FOR UPDATE", userID); err != nil {
-		return err
+	// Lock user, group, then order in one round trip; a batch runs its statements in order,
+	// so the lock order stays the same as separate statements.
+	var locks pgx.Batch
+	locks.Queue("SELECT id FROM public.users WHERE id = $1 FOR UPDATE", userID)
+	locks.Queue("SELECT id FROM public.pickup_groups WHERE id = $1 FOR UPDATE", groupID)
+	locks.Queue("SELECT id FROM public.pickup_orders WHERE id = $1 FOR UPDATE", id)
+	results := tx.SendBatch(ctx, &locks)
+	for i := 0; i < locks.Len(); i++ {
+		if _, err := results.Exec(); err != nil {
+			results.Close()
+			return err
+		}
 	}
-	if _, err := tx.Exec(ctx, "SELECT id FROM public.pickup_groups WHERE id = $1 FOR UPDATE", groupID); err != nil {
-		return err
-	}
-	if _, err := tx.Exec(ctx, "SELECT id FROM public.pickup_orders WHERE id = $1 FOR UPDATE", id); err != nil {
+	if err := results.Close(); err != nil {
 		return err
 	}
 	if err := fn(&pgxRepository{pool: tx}); err != nil {
@@ -173,8 +181,7 @@ func scanGroupInto(g *PickupGroup, extra ...any) []any {
 // mapLocationFKError turns a pickup_groups.location_id foreign-key violation
 // into ErrLocationNotFound; any other error is wrapped with msg.
 func mapLocationFKError(err error, msg string) error {
-	var pgErr *pgconn.PgError
-	if errors.As(err, &pgErr) && pgErr.Code == pgerrcode.ForeignKeyViolation && pgErr.ConstraintName == "pickup_groups_location_id_fkey" {
+	if db.IsViolation(err, pgerrcode.ForeignKeyViolation, "pickup_groups_location_id_fkey") {
 		return ErrLocationNotFound
 	}
 	return fmt.Errorf("%s: %w", msg, err)
@@ -301,62 +308,20 @@ func (r *pgxRepository) ListGroups(ctx context.Context, filter GroupFilter) ([]*
 	// pg.id is a tiebreaker so pagination stays stable across equal sort keys.
 	query = query.OrderBy(orderBy+" "+orderDir+" NULLS LAST", "pg.id")
 
-	if filter.Page < 1 {
-		filter.Page = 1
-	}
-	if filter.PageSize < 1 {
-		filter.PageSize = 20
-	}
-	offset := (filter.Page - 1) * filter.PageSize
-	query = query.Limit(uint64(filter.PageSize)).Offset(uint64(offset))
-
-	sql, args, err := query.ToSql()
-	if err != nil {
-		return nil, 0, fmt.Errorf("build list pickup groups query failed: %w", err)
-	}
-
-	rows, err := r.pool.Query(ctx, sql, args...)
-	if err != nil {
-		return nil, 0, fmt.Errorf("list pickup groups failed: %w", err)
-	}
-	defer rows.Close()
-
-	var groups []*PickupGroup
-	var total int
-
-	for rows.Next() {
+	return pagination.Collect(ctx, r.pool, query, filter.Page, filter.PageSize, "pickup group", func(rows pgx.Rows, total *int) (*PickupGroup, error) {
 		var g PickupGroup
 		var enrolledStatus *string
-		if err := rows.Scan(scanGroupInto(&g, &enrolledStatus, &total, &g.DistanceKm)...); err != nil {
-			return nil, 0, fmt.Errorf("scan pickup group failed: %w", err)
+		if err := rows.Scan(scanGroupInto(&g, &enrolledStatus, total, &g.DistanceKm)...); err != nil {
+			return nil, fmt.Errorf("scan pickup group failed: %w", err)
 		}
 		if enrolledStatus != nil {
 			g.EnrolledStatus = *enrolledStatus
 		}
-		groups = append(groups, &g)
-	}
-
-	if err := rows.Err(); err != nil {
-		return nil, 0, err
-	}
-	rows.Close()
-	if total == 0 {
-		total, err = pagination.Count(ctx, r.pool, query)
-		if err != nil {
-			return nil, 0, err
-		}
-	}
-	return groups, total, nil
+		return &g, nil
+	})
 }
 
 func (r *pgxRepository) UpdateGroup(ctx context.Context, g *PickupGroup) error {
-	var enrolled int
-	if err := r.pool.QueryRow(ctx, "SELECT COALESCE(SUM(party_size), 0) FROM public.pickup_orders WHERE pickup_group_id = $1 AND status NOT IN ('cancelled', 'rejected')", g.ID).Scan(&enrolled); err != nil {
-		return err
-	}
-	if g.Capacity < enrolled {
-		return ErrCapacityBelowEnrolled
-	}
 	var sportChanged, hasHistory bool
 	if err := r.pool.QueryRow(ctx, `SELECT sport_id <> $2::uuid,
  EXISTS(SELECT 1 FROM public.pickup_orders WHERE pickup_group_id = $1) OR EXISTS(SELECT 1 FROM public.skill_ratings WHERE pickup_group_id = $1)
@@ -425,8 +390,7 @@ func (r *pgxRepository) DeleteGroup(ctx context.Context, id string) error {
 
 	result, err := r.pool.Exec(ctx, query, args...)
 	if err != nil {
-		var pgErr *pgconn.PgError
-		if errors.As(err, &pgErr) && (pgErr.Code == pgerrcode.ForeignKeyViolation || pgErr.Code == pgerrcode.RestrictViolation) {
+		if db.IsInUse(err) {
 			return ErrGroupInUse
 		}
 		return fmt.Errorf("delete pickup group failed: %w", err)
@@ -582,8 +546,7 @@ func (r *pgxRepository) CreateOrder(ctx context.Context, order *PickupOrder) err
 	}
 
 	if err := tx.QueryRow(ctx, q, args...).Scan(&order.ID, &order.CreatedAt, &order.UpdatedAt); err != nil {
-		var pgErr *pgconn.PgError
-		if errors.As(err, &pgErr) && pgErr.Code == pgerrcode.UniqueViolation {
+		if db.IsUniqueViolation(err) {
 			return ErrAlreadyEnrolled
 		}
 		return fmt.Errorf("create pickup order failed: %w", err)

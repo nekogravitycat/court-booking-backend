@@ -23,6 +23,7 @@ var (
 	ErrInvalidStatus               = apperror.New(http.StatusBadRequest, "invalid status")
 	ErrInvalidTimeRange            = apperror.New(http.StatusBadRequest, "start time must be before end time")
 	ErrPermissionDenied            = apperror.New(http.StatusForbidden, "permission denied")
+	ErrOrdersForbidden             = apperror.New(http.StatusForbidden, "only group host or system admin can view orders")
 	ErrGroupNotActive              = apperror.New(http.StatusBadRequest, "pickup group is not active")
 	ErrLocationNotFound            = apperror.New(http.StatusNotFound, "location not found")
 	ErrSportNotFound               = apperror.New(http.StatusNotFound, "sport not found")

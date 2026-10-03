@@ -43,3 +43,13 @@ func FileURL(id string) string {
 func ThumbnailURL(id string) string {
 	return "/files/" + id + "/thumbnail"
 }
+
+// URLs returns the public file and thumbnail URLs for an optional file ID.
+// Both results are nil when id is nil.
+func URLs(id *string) (url, thumbnailURL *string) {
+	if id == nil {
+		return nil, nil
+	}
+	u, t := FileURL(*id), ThumbnailURL(*id)
+	return &u, &t
+}

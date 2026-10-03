@@ -228,7 +228,8 @@ func TestReviewProfilePreservesPrivileges(t *testing.T) {
 	require.NoError(t, repo.Update(ctx, old.ID, user.UpdateUserRequest{DisplayName: &name}))
 	var fileID string
 	require.NoError(t, testPool.QueryRow(ctx, "INSERT INTO public.files (user_id, filename, storage_path, content_type, size) VALUES ($1,'avatar.jpg','test-avatar.jpg','image/jpeg',1) RETURNING id", account.ID).Scan(&fileID))
-	require.NoError(t, repo.UpdateAvatar(ctx, old.ID, &fileID))
+	_, err = repo.SetAvatar(ctx, old.ID, &fileID)
+	require.NoError(t, err)
 	current, err := repo.GetByID(ctx, account.ID)
 	require.NoError(t, err)
 	require.False(t, current.IsActive)

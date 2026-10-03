@@ -28,3 +28,8 @@ func Error(c *gin.Context, err error) {
 	log.Printf("internal error: %s %s: %v", c.Request.Method, c.Request.URL.Path, err)
 	c.JSON(http.StatusInternalServerError, ErrorResponse{Error: "internal server error"})
 }
+
+// BadRequest sends a 400 response with the given message.
+func BadRequest(c *gin.Context, msg string) {
+	c.JSON(http.StatusBadRequest, ErrorResponse{Error: msg})
+}

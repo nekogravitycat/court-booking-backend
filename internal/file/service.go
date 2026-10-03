@@ -158,17 +158,22 @@ func (s *service) Upload(ctx context.Context, input UploadInput) (*File, error) 
 
 	// Determine which reader to use (original or resized image)
 	var reader io.Reader
-	if input.ResizeImage {
-		// For image uploads with ResizeImage=true, resize before saving
-		resizedReader, err := s.imgProc.GenerateThumbnail(bytes.NewReader(fileBytes), 1000, 1000)
+	var thumbReader io.Reader // nil when no thumbnail could be generated
+	switch {
+	case input.ResizeImage:
+		// Resize before saving; the thumbnail comes from the same single decode.
+		outputs, err := s.imgProc.GenerateThumbnails(bytes.NewReader(fileBytes), storage.Size{Width: 1000, Height: 1000}, thumbnailSize)
 		if err != nil {
 			return nil, ErrImageResizeFailed
 		}
-		reader = resizedReader
+		reader, thumbReader = outputs[0], outputs[1]
 		// Update content type to jpg
 		actualContentType = "image/jpeg"
-	} else {
-		// Use original file as-is
+	case strings.HasPrefix(actualContentType, "image/"):
+		// Use original file as-is; only the thumbnail needs processing.
+		reader = bytes.NewReader(fileBytes)
+		thumbReader = s.generateThumbnail(fileBytes, actualContentType)
+	default:
 		reader = bytes.NewReader(fileBytes)
 	}
 
@@ -186,7 +191,7 @@ func (s *service) Upload(ctx context.Context, input UploadInput) (*File, error) 
 	}
 
 	// Generate thumbnail if supported
-	thumbnailPath := s.generateAndSaveThumbnail(ctx, fileBytes, actualContentType, fileID, shard)
+	thumbnailPath := s.saveThumbnail(ctx, thumbReader, fileID, shard)
 
 	// === Create file in database ===
 
@@ -218,55 +223,32 @@ func (s *service) Upload(ctx context.Context, input UploadInput) (*File, error) 
 	return f, nil
 }
 
-// generateAndSaveThumbnail generates and saves a thumbnail for supported file types.
-// Returns the thumbnail path if successful, or nil if generation fails or is not supported.
-// This function is designed to be extensible for other file types in the future (e.g., video, PDF).
-func (s *service) generateAndSaveThumbnail(ctx context.Context, fileBytes []byte, contentType, fileID, shard string) *string {
-	// Check if content type supports thumbnail generation
-	if !s.supportsThumbnail(contentType) {
-		return nil
-	}
+// thumbnailSize is the bounding box of generated thumbnails.
+var thumbnailSize = storage.Size{Width: 200, Height: 200}
 
-	// Generate thumbnail based on content type
-	thumbReader, err := s.generateThumbnailForType(fileBytes, contentType)
+// generateThumbnail builds an image thumbnail; a failure is logged and yields nil because it
+// must not fail the upload.
+func (s *service) generateThumbnail(fileBytes []byte, contentType string) io.Reader {
+	r, err := s.imgProc.GenerateThumbnail(bytes.NewReader(fileBytes), thumbnailSize.Width, thumbnailSize.Height)
 	if err != nil {
-		// Log error if thumbnail generation fails but don't fail upload
 		log.Printf("failed to generate thumbnail for %s: %v", contentType, err)
 		return nil
 	}
+	return r
+}
 
-	// Save thumbnail to storage
+// saveThumbnail stores a generated thumbnail and returns its path, or nil if there is none or
+// saving fails (a missing thumbnail does not fail the upload).
+func (s *service) saveThumbnail(ctx context.Context, thumbReader io.Reader, fileID, shard string) *string {
+	if thumbReader == nil {
+		return nil
+	}
 	thumbnailPath := fmt.Sprintf("upload/%s/%s_thumb.jpg", shard, fileID)
 	if err := s.storage.Save(ctx, thumbnailPath, thumbReader); err != nil {
 		log.Printf("failed to save thumbnail: %v", err)
 		return nil
 	}
-
 	return &thumbnailPath
-}
-
-// supportsThumbnail checks if the given content type supports thumbnail generation.
-// This can be extended to support more file types in the future.
-func (s *service) supportsThumbnail(contentType string) bool {
-	// Currently only images are supported
-	// Future: add support for "video/*", "application/pdf", etc.
-	return strings.HasPrefix(contentType, "image/")
-}
-
-// generateThumbnailForType generates a thumbnail based on the content type.
-// This method can be extended to handle different file types differently.
-func (s *service) generateThumbnailForType(fileBytes []byte, contentType string) (io.Reader, error) {
-	// Currently only handle images
-	if strings.HasPrefix(contentType, "image/") {
-		return s.imgProc.GenerateThumbnail(bytes.NewReader(fileBytes), 200, 200)
-	}
-
-	// Future implementations:
-	// - For videos: extract first frame and resize
-	// - For PDFs: render first page and resize
-	// - For office docs: generate preview
-
-	return nil, fmt.Errorf("thumbnail generation not supported for content type: %s", contentType)
 }
 
 func (s *service) Delete(ctx context.Context, id string) error {

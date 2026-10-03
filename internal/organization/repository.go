@@ -6,10 +6,9 @@ import (
 	"fmt"
 
 	"github.com/Masterminds/squirrel"
-	"github.com/jackc/pgerrcode"
 	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/nekogravitycat/court-booking-backend/internal/db"
 	"github.com/nekogravitycat/court-booking-backend/internal/pkg/pagination"
 	"github.com/nekogravitycat/court-booking-backend/internal/user"
 )
@@ -20,7 +19,7 @@ type Repository interface {
 	Create(ctx context.Context, org *Organization) error
 	GetByID(ctx context.Context, id string) (*Organization, error)
 	List(ctx context.Context, filter OrganizationFilter) ([]*Organization, int, error)
-	UpdateCover(ctx context.Context, id string, cover *string) error
+	SetCover(ctx context.Context, id string, cover *string) (*string, error)
 	UpdateDetails(ctx context.Context, id string, req UpdateOrganizationRequest) error
 	Delete(ctx context.Context, id string) error
 	// Organization Manager methods
@@ -59,8 +58,6 @@ func (r *pgxRepository) Create(ctx context.Context, org *Organization) error {
 		return fmt.Errorf("build create organization query failed: %w", err)
 	}
 
-	// Default is_active to true if not handled by caller,
-	// though DB default is also true.
 	return r.pool.QueryRow(ctx, query, args...).
 		Scan(&org.ID, &org.CreatedAt)
 }
@@ -105,74 +102,35 @@ func (r *pgxRepository) List(ctx context.Context, filter OrganizationFilter) ([]
 
 	queryBuilder = queryBuilder.OrderBy(orderBy+" "+orderDir, "id ASC")
 
-	// Pagination
-	if filter.Page < 1 {
-		filter.Page = 1
-	}
-	if filter.PageSize < 1 {
-		filter.PageSize = 20
-	}
-	offset := (filter.Page - 1) * filter.PageSize
-
-	queryBuilder = queryBuilder.Limit(uint64(filter.PageSize)).Offset(uint64(offset))
-
-	sql, args, err := queryBuilder.ToSql()
-	if err != nil {
-		return nil, 0, fmt.Errorf("build list organizations query failed: %w", err)
-	}
-
-	rows, err := r.pool.Query(ctx, sql, args...)
-	if err != nil {
-		return nil, 0, fmt.Errorf("List failed: %w", err)
-	}
-	defer rows.Close()
-
-	var orgs []*Organization
-	var total int
-
-	for rows.Next() {
+	return pagination.Collect(ctx, r.pool, queryBuilder, filter.Page, filter.PageSize, "organization", func(rows pgx.Rows, total *int) (*Organization, error) {
 		var o Organization
-		if err := rows.Scan(&o.ID, &o.Name, &o.OwnerID, &o.Cover, &o.CreatedAt, &o.IsActive, &total); err != nil {
-			return nil, 0, fmt.Errorf("scan failed: %w", err)
+		if err := rows.Scan(&o.ID, &o.Name, &o.OwnerID, &o.Cover, &o.CreatedAt, &o.IsActive, total); err != nil {
+			return nil, fmt.Errorf("scan failed: %w", err)
 		}
-		orgs = append(orgs, &o)
-	}
-
-	if err := rows.Err(); err != nil {
-		return nil, 0, err
-	}
-	rows.Close()
-	if total == 0 {
-		total, err = pagination.Count(ctx, r.pool, queryBuilder)
-		if err != nil {
-			return nil, 0, err
-		}
-	}
-	return orgs, total, nil
+		return &o, nil
+	})
 }
 
-func (r *pgxRepository) UpdateCover(ctx context.Context, id string, cover *string) error {
-	psql := squirrel.StatementBuilder.PlaceholderFormat(squirrel.Dollar)
-	query, args, err := psql.Update("public.organizations").
-		Set("cover", cover).
-		Where(squirrel.Eq{"id": id}).
-		ToSql()
+// SetCover replaces only the cover reference (so it cannot overwrite concurrent
+// edits to other columns) and returns the previous cover.
+func (r *pgxRepository) SetCover(ctx context.Context, id string, cover *string) (*string, error) {
+	var old *string
+	err := r.pool.QueryRow(ctx,
+		`UPDATE public.organizations t SET cover = $2
+		 FROM (SELECT cover AS old_cover FROM public.organizations WHERE id = $1 FOR UPDATE) o
+		 WHERE t.id = $1
+		 RETURNING o.old_cover`,
+		id, cover).Scan(&old)
 	if err != nil {
-		return fmt.Errorf("build update organization query failed: %w", err)
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, ErrOrgNotFound
+		}
+		return nil, fmt.Errorf("set organization cover failed: %w", err)
 	}
-
-	ct, err := r.pool.Exec(ctx, query, args...)
-	if err != nil {
-		return fmt.Errorf("Update failed: %w", err)
-	}
-	if ct.RowsAffected() == 0 {
-		return ErrOrgNotFound
-	}
-	return nil
+	return old, nil
 }
 
 func (r *pgxRepository) Delete(ctx context.Context, id string) error {
-	// Soft delete implementation
 	// Soft delete implementation
 	psql := squirrel.StatementBuilder.PlaceholderFormat(squirrel.Dollar)
 	query, args, err := psql.Update("public.organizations").
@@ -231,11 +189,8 @@ func (r *pgxRepository) AddOrganizationManager(ctx context.Context, orgID string
 
 	_, err = tx.Exec(ctx, query, args...)
 	if err != nil {
-		var pgErr *pgconn.PgError
-		if errors.As(err, &pgErr) {
-			if pgErr.Code == pgerrcode.UniqueViolation {
-				return ErrUserAlreadyMember
-			}
+		if db.IsUniqueViolation(err) {
+			return ErrUserAlreadyMember
 		}
 		return fmt.Errorf("AddOrganizationManager failed: %w", err)
 	}
@@ -313,49 +268,13 @@ func (r *pgxRepository) ListOrganizationManagers(ctx context.Context, orgID stri
 
 	queryBuilder = queryBuilder.OrderBy(orderBy+" "+orderDir, "u.id ASC")
 
-	// Pagination
-	if filter.Page < 1 {
-		filter.Page = 1
-	}
-	if filter.PageSize < 1 {
-		filter.PageSize = 20
-	}
-	offset := (filter.Page - 1) * filter.PageSize
-
-	queryBuilder = queryBuilder.Limit(uint64(filter.PageSize)).Offset(uint64(offset))
-
-	query, args, err := queryBuilder.ToSql()
-	if err != nil {
-		return nil, 0, fmt.Errorf("build list org managers query failed: %w", err)
-	}
-
-	rows, err := r.pool.Query(ctx, query, args...)
-	if err != nil {
-		return nil, 0, fmt.Errorf("ListOrganizationManagers failed: %w", err)
-	}
-	defer rows.Close()
-
-	var users []*user.User
-	var total int
-
-	for rows.Next() {
+	return pagination.Collect(ctx, r.pool, queryBuilder, filter.Page, filter.PageSize, "org manager", func(rows pgx.Rows, total *int) (*user.User, error) {
 		var u user.User
-		if err := rows.Scan(&u.ID, &u.Email, &u.DisplayName, &u.CreatedAt, &u.IsActive, &total); err != nil {
-			return nil, 0, fmt.Errorf("scan org manager failed: %w", err)
+		if err := rows.Scan(&u.ID, &u.Email, &u.DisplayName, &u.CreatedAt, &u.IsActive, total); err != nil {
+			return nil, fmt.Errorf("scan org manager failed: %w", err)
 		}
-		users = append(users, &u)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, 0, err
-	}
-	rows.Close()
-	if total == 0 {
-		total, err = pagination.Count(ctx, r.pool, queryBuilder)
-		if err != nil {
-			return nil, 0, err
-		}
-	}
-	return users, total, nil
+		return &u, nil
+	})
 }
 
 // -----------------------------
@@ -462,49 +381,13 @@ func (r *pgxRepository) ListMembers(ctx context.Context, orgID string, filter Ma
 
 	queryBuilder = queryBuilder.OrderBy(orderBy+" "+orderDir, "u.id ASC")
 
-	// Pagination
-	if filter.Page < 1 {
-		filter.Page = 1
-	}
-	if filter.PageSize < 1 {
-		filter.PageSize = 20
-	}
-	offset := (filter.Page - 1) * filter.PageSize
-
-	queryBuilder = queryBuilder.Limit(uint64(filter.PageSize)).Offset(uint64(offset))
-
-	query, args, err := queryBuilder.ToSql()
-	if err != nil {
-		return nil, 0, fmt.Errorf("build list members query failed: %w", err)
-	}
-
-	rows, err := r.pool.Query(ctx, query, args...)
-	if err != nil {
-		return nil, 0, fmt.Errorf("ListMembers failed: %w", err)
-	}
-	defer rows.Close()
-
-	var users []*user.User
-	var total int
-
-	for rows.Next() {
+	return pagination.Collect(ctx, r.pool, queryBuilder, filter.Page, filter.PageSize, "member", func(rows pgx.Rows, total *int) (*user.User, error) {
 		var u user.User
-		if err := rows.Scan(&u.ID, &u.Email, &u.DisplayName, &u.CreatedAt, &u.IsActive, &total); err != nil {
-			return nil, 0, fmt.Errorf("scan member failed: %w", err)
+		if err := rows.Scan(&u.ID, &u.Email, &u.DisplayName, &u.CreatedAt, &u.IsActive, total); err != nil {
+			return nil, fmt.Errorf("scan member failed: %w", err)
 		}
-		users = append(users, &u)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, 0, err
-	}
-	rows.Close()
-	if total == 0 {
-		total, err = pagination.Count(ctx, r.pool, queryBuilder)
-		if err != nil {
-			return nil, 0, err
-		}
-	}
-	return users, total, nil
+		return &u, nil
+	})
 }
 
 // UpdateDetails serializes owner transfers with member and manager assignment.

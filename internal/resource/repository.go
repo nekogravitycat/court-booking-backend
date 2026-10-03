@@ -8,8 +8,8 @@ import (
 	"github.com/Masterminds/squirrel"
 	"github.com/jackc/pgerrcode"
 	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/nekogravitycat/court-booking-backend/internal/db"
 	"github.com/nekogravitycat/court-booking-backend/internal/pkg/pagination"
 )
 
@@ -54,19 +54,30 @@ func (r *pgxRepository) Create(ctx context.Context, res *Resource) error {
 
 // isSportFKViolation reports whether err is a foreign-key violation on resources.sport_id.
 func isSportFKViolation(err error) bool {
-	var pgErr *pgconn.PgError
-	return errors.As(err, &pgErr) &&
-		pgErr.Code == pgerrcode.ForeignKeyViolation &&
-		pgErr.ConstraintName == "resources_sport_id_fkey"
+	return db.IsViolation(err, pgerrcode.ForeignKeyViolation, "resources_sport_id_fkey")
+}
+
+// selectResources starts a resource query joined with its location.
+// extra columns are appended after the columns scanResourceInto expects.
+func selectResources(extra ...string) squirrel.SelectBuilder {
+	cols := append([]string{
+		"r.id", "r.resource_type", "r.sport_id", "r.location_id", "l.name", "r.name", "r.price", "r.cover", "r.created_at",
+	}, extra...)
+	return squirrel.StatementBuilder.PlaceholderFormat(squirrel.Dollar).Select(cols...).
+		From("public.resources r").
+		Join("public.locations l ON r.location_id = l.id")
+}
+
+// scanResourceInto returns the scan destinations matching selectResources, followed by extra.
+func scanResourceInto(res *Resource, extra ...any) []any {
+	return append([]any{
+		&res.ID, &res.ResourceType, &res.SportID, &res.LocationID, &res.LocationName,
+		&res.Name, &res.Price, &res.Cover, &res.CreatedAt,
+	}, extra...)
 }
 
 func (r *pgxRepository) GetByID(ctx context.Context, id string) (*Resource, error) {
-	psql := squirrel.StatementBuilder.PlaceholderFormat(squirrel.Dollar)
-	query, args, err := psql.Select(
-		"r.id", "r.resource_type", "r.sport_id", "r.location_id", "l.name", "r.name", "r.price", "r.cover", "r.created_at",
-	).
-		From("public.resources r").
-		Join("public.locations l ON r.location_id = l.id").
+	query, args, err := selectResources().
 		Where(squirrel.Eq{"r.id": id}).
 		ToSql()
 	if err != nil {
@@ -76,7 +87,7 @@ func (r *pgxRepository) GetByID(ctx context.Context, id string) (*Resource, erro
 	row := r.pool.QueryRow(ctx, query, args...)
 
 	var res Resource
-	if err := row.Scan(&res.ID, &res.ResourceType, &res.SportID, &res.LocationID, &res.LocationName, &res.Name, &res.Price, &res.Cover, &res.CreatedAt); err != nil {
+	if err := row.Scan(scanResourceInto(&res)...); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, ErrNotFound
 		}
@@ -86,13 +97,7 @@ func (r *pgxRepository) GetByID(ctx context.Context, id string) (*Resource, erro
 }
 
 func (r *pgxRepository) List(ctx context.Context, filter Filter) ([]*Resource, int, error) {
-	psql := squirrel.StatementBuilder.PlaceholderFormat(squirrel.Dollar)
-	query := psql.Select(
-		"r.id", "r.resource_type", "r.sport_id", "r.location_id", "l.name", "r.name", "r.price", "r.cover", "r.created_at",
-		"count(*) OVER() as total_count",
-	).
-		From("public.resources r").
-		Join("public.locations l ON r.location_id = l.id")
+	query := selectResources("count(*) OVER() as total_count")
 
 	if filter.OrganizationID != "" {
 		query = query.Where(squirrel.Eq{"l.organization_id": filter.OrganizationID})
@@ -117,53 +122,13 @@ func (r *pgxRepository) List(ctx context.Context, filter Filter) ([]*Resource, i
 
 	query = query.OrderBy(orderBy+" "+orderDir, "r.id ASC")
 
-	// Pagination
-	if filter.Page < 1 {
-		filter.Page = 1
-	}
-	if filter.PageSize < 1 {
-		filter.PageSize = 20
-	}
-	offset := (filter.Page - 1) * filter.PageSize
-
-	query = query.Limit(uint64(filter.PageSize)).Offset(uint64(offset))
-
-	sql, args, err := query.ToSql()
-	if err != nil {
-		return nil, 0, fmt.Errorf("build list resources query failed: %w", err)
-	}
-
-	rows, err := r.pool.Query(ctx, sql, args...)
-	if err != nil {
-		return nil, 0, fmt.Errorf("list resources failed: %w", err)
-	}
-	defer rows.Close()
-
-	var result []*Resource
-	var total int
-
-	for rows.Next() {
+	return pagination.Collect(ctx, r.pool, query, filter.Page, filter.PageSize, "resource", func(rows pgx.Rows, total *int) (*Resource, error) {
 		var res Resource
-		if err := rows.Scan(
-			&res.ID, &res.ResourceType, &res.SportID, &res.LocationID, &res.LocationName,
-			&res.Name, &res.Price, &res.Cover, &res.CreatedAt, &total,
-		); err != nil {
-			return nil, 0, fmt.Errorf("scan resource failed: %w", err)
+		if err := rows.Scan(scanResourceInto(&res, total)...); err != nil {
+			return nil, fmt.Errorf("scan resource failed: %w", err)
 		}
-		result = append(result, &res)
-	}
-
-	if err := rows.Err(); err != nil {
-		return nil, 0, err
-	}
-	rows.Close()
-	if total == 0 {
-		total, err = pagination.Count(ctx, r.pool, query)
-		if err != nil {
-			return nil, 0, err
-		}
-	}
-	return result, total, nil
+		return &res, nil
+	})
 }
 
 func (r *pgxRepository) Update(ctx context.Context, res *Resource) error {
@@ -205,8 +170,7 @@ func (r *pgxRepository) Delete(ctx context.Context, id string) error {
 	if err != nil {
 		// A booking referencing this resource (ON DELETE RESTRICT) surfaces as a
 		// foreign-key violation; report it as a 409 conflict instead of a 500.
-		var pgErr *pgconn.PgError
-		if errors.As(err, &pgErr) && (pgErr.Code == pgerrcode.ForeignKeyViolation || pgErr.Code == pgerrcode.RestrictViolation) {
+		if db.IsInUse(err) {
 			return ErrResourceInUse
 		}
 		return fmt.Errorf("delete resource failed: %w", err)

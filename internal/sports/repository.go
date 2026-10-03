@@ -10,6 +10,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/nekogravitycat/court-booking-backend/internal/db"
 	"github.com/nekogravitycat/court-booking-backend/internal/pkg/pagination"
 )
 
@@ -41,8 +42,7 @@ func (r *pgxRepository) Create(ctx context.Context, sp *Sport) error {
 	}
 
 	if err := r.pool.QueryRow(ctx, query, args...).Scan(&sp.ID, &sp.CreatedAt, &sp.UpdatedAt); err != nil {
-		var e *pgconn.PgError
-		if errors.As(err, &e) && e.Code == pgerrcode.UniqueViolation {
+		if db.IsUniqueViolation(err) {
 			return ErrCodeAlreadyUsed
 		}
 		return fmt.Errorf("create sport failed: %w", err)
@@ -93,48 +93,15 @@ func (r *pgxRepository) List(ctx context.Context, filter Filter) ([]*Sport, int,
 	}
 	query = query.OrderBy(orderBy+" "+orderDir, "id ASC")
 
-	if filter.Page < 1 {
-		filter.Page = 1
-	}
-	if filter.PageSize < 1 {
-		filter.PageSize = 20
-	}
-	offset := (filter.Page - 1) * filter.PageSize
-	query = query.Limit(uint64(filter.PageSize)).Offset(uint64(offset))
-
-	sql, args, err := query.ToSql()
-	if err != nil {
-		return nil, 0, fmt.Errorf("build list sports query failed: %w", err)
-	}
-
-	rows, err := r.pool.Query(ctx, sql, args...)
-	if err != nil {
-		return nil, 0, fmt.Errorf("list sports failed: %w", err)
-	}
-	defer rows.Close()
-
-	var result []*Sport
-	var total int
-	for rows.Next() {
+	return pagination.Collect(ctx, r.pool, query, filter.Page, filter.PageSize, "sport", func(rows pgx.Rows, total *int) (*Sport, error) {
 		var sp Sport
 		if err := rows.Scan(
-			&sp.ID, &sp.Code, &sp.Name, &sp.IsActive, &sp.CreatedAt, &sp.UpdatedAt, &total,
+			&sp.ID, &sp.Code, &sp.Name, &sp.IsActive, &sp.CreatedAt, &sp.UpdatedAt, total,
 		); err != nil {
-			return nil, 0, fmt.Errorf("scan sport failed: %w", err)
+			return nil, fmt.Errorf("scan sport failed: %w", err)
 		}
-		result = append(result, &sp)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, 0, err
-	}
-	rows.Close()
-	if total == 0 {
-		total, err = pagination.Count(ctx, r.pool, query)
-		if err != nil {
-			return nil, 0, err
-		}
-	}
-	return result, total, nil
+		return &sp, nil
+	})
 }
 
 func (r *pgxRepository) Update(ctx context.Context, sp *Sport) error {

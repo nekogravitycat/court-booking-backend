@@ -7,7 +7,7 @@ import (
 
 	"github.com/jackc/pgerrcode"
 	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/nekogravitycat/court-booking-backend/internal/db"
 )
 
 const skillLevelColumns = `us.sport_id, sp.name, us.skill_level, sl.label,
@@ -53,8 +53,7 @@ func (r *pgxUserRepository) SetSkillLevel(ctx context.Context, userID, sportID s
         VALUES ($1, $2, $3) ON CONFLICT (user_id, sport_id)
         DO UPDATE SET skill_level = EXCLUDED.skill_level, updated_at = NOW()`, userID, sportID, level)
 	if err != nil {
-		var pgErr *pgconn.PgError
-		if errors.As(err, &pgErr) && pgErr.Code == pgerrcode.ForeignKeyViolation {
+		if db.IsViolation(err, pgerrcode.ForeignKeyViolation, "") {
 			return nil, ErrInvalidSkillLevel
 		}
 		return nil, fmt.Errorf("set user skill level: %w", err)

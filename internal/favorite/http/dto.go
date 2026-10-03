@@ -19,15 +19,11 @@ type FavoriteHostResponse struct {
 }
 
 func NewFavoriteHostResponse(f *favorite.FavoriteHost) FavoriteHostResponse {
-	resp := FavoriteHostResponse{
-		HostID:   f.HostID,
-		Nickname: f.Nickname,
+	avatar, avatarThumb := file.URLs(f.Avatar)
+	return FavoriteHostResponse{
+		HostID:          f.HostID,
+		Nickname:        f.Nickname,
+		Avatar:          avatar,
+		AvatarThumbnail: avatarThumb,
 	}
-	if f.Avatar != nil {
-		url := file.FileURL(*f.Avatar)
-		resp.Avatar = &url
-		thumb := file.ThumbnailURL(*f.Avatar)
-		resp.AvatarThumbnail = &thumb
-	}
-	return resp
 }

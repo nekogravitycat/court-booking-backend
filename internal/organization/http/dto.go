@@ -80,16 +80,7 @@ func (r *UpdateOrganizationRequest) Validate() error {
 }
 
 func NewOrganizationResponse(o *organization.Organization) OrganizationResponse {
-	var coverURL *string
-	var coverThumbnailURL *string
-
-	if o.Cover != nil {
-		url := file.FileURL(*o.Cover)
-		coverURL = &url
-
-		thumbURL := file.ThumbnailURL(*o.Cover)
-		coverThumbnailURL = &thumbURL
-	}
+	coverURL, coverThumbnailURL := file.URLs(o.Cover)
 
 	return OrganizationResponse{
 		ID:             o.ID,

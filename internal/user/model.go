@@ -130,3 +130,9 @@ func AgeOn(birth, now time.Time) int {
 	}
 	return age
 }
+
+// Account is the light-weight account state used by per-request authorization checks.
+type Account struct {
+	IsActive      bool
+	IsSystemAdmin bool
+}

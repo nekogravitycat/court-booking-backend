@@ -50,6 +50,10 @@ type Service interface {
 	// Permission methods
 	IsOwnerOrAbove(ctx context.Context, orgID string, userID string) (bool, error)
 	IsManagerOrAbove(ctx context.Context, orgID string, userID string) (bool, error)
+	// RequireOwner and RequireManager gate an operation: CheckOperation, then the role check,
+	// failing with a 403 carrying forbiddenMsg.
+	RequireOwner(ctx context.Context, orgID, userID, forbiddenMsg string) error
+	RequireManager(ctx context.Context, orgID, userID, forbiddenMsg string) error
 }
 
 // LocationManagerChecker defines the method required to check location manager status.
@@ -153,52 +157,30 @@ func (s *service) Delete(ctx context.Context, id string) error {
 	}
 
 	// Clean up cover file after the organization is deactivated.
-	if org.Cover != nil && *org.Cover != "" {
-		_ = s.fileService.Delete(ctx, *org.Cover)
-	}
+	file.ReleaseReplaced(ctx, s.fileService, org.Cover, "")
 
 	return nil
 }
 
 func (s *service) UpdateCover(ctx context.Context, id string, fileID string) error {
-	org, err := s.repo.GetByID(ctx, id)
+	// Persist the new reference first; only delete the old file once the new
+	// reference is durably stored, to avoid orphaned files / dangling references.
+	oldCover, err := s.repo.SetCover(ctx, id, &fileID)
 	if err != nil {
 		return err
 	}
-
-	oldCover := org.Cover
-
-	// Persist the new reference first; only delete the old file once the new
-	// reference is durably stored, to avoid orphaned files / dangling references.
-	org.Cover = &fileID
-	if err := s.repo.UpdateCover(ctx, id, org.Cover); err != nil {
-		return err
-	}
-
-	if oldCover != nil && *oldCover != "" && *oldCover != fileID {
-		_ = s.fileService.Delete(ctx, *oldCover)
-	}
+	file.ReleaseReplaced(ctx, s.fileService, oldCover, fileID)
 	return nil
 }
 
 func (s *service) RemoveCover(ctx context.Context, id string) error {
-	org, err := s.repo.GetByID(ctx, id)
+	// Clear the reference first, then delete the file, keeping the database
+	// consistent even if the storage delete fails (best effort).
+	oldCover, err := s.repo.SetCover(ctx, id, nil)
 	if err != nil {
 		return err
 	}
-
-	oldCover := org.Cover
-
-	// Clear the reference first, then delete the file, keeping the database
-	// consistent even if the storage delete fails (best effort).
-	org.Cover = nil
-	if err := s.repo.UpdateCover(ctx, id, org.Cover); err != nil {
-		return err
-	}
-
-	if oldCover != nil && *oldCover != "" {
-		_ = s.fileService.Delete(ctx, *oldCover)
-	}
+	file.ReleaseReplaced(ctx, s.fileService, oldCover, "")
 	return nil
 }
 
@@ -321,11 +303,11 @@ func (s *service) IsOwnerOrAbove(ctx context.Context, orgID string, userID strin
 	}
 
 	// 1. Check System Admin (God mode)
-	user, err := s.userService.GetByID(ctx, userID)
+	account, err := s.userService.GetAccount(ctx, userID)
 	if err != nil {
 		return false, err
 	}
-	if user.IsSystemAdmin {
+	if account.IsSystemAdmin {
 		return true, nil
 	}
 
@@ -334,11 +316,7 @@ func (s *service) IsOwnerOrAbove(ctx context.Context, orgID string, userID strin
 	if err != nil {
 		return false, err
 	}
-	if org.OwnerID == userID {
-		return true, nil
-	}
-
-	return false, nil
+	return org.OwnerID == userID, nil
 }
 
 // IsManagerOrAbove verifies if the user is an Owner or Manager of the organization, or SysAdmin.
@@ -355,11 +333,31 @@ func (s *service) IsManagerOrAbove(ctx context.Context, orgID string, userID str
 	}
 
 	// Check if user is organization manager
-	isManager, err := s.repo.IsOrganizationManager(ctx, orgID, userID)
-	if err != nil {
-		return false, err
+	return s.repo.IsOrganizationManager(ctx, orgID, userID)
+}
+
+// RequireOwner fails unless the organization accepts new operations and the user is its owner or a SysAdmin.
+func (s *service) RequireOwner(ctx context.Context, orgID, userID, forbiddenMsg string) error {
+	return s.require(ctx, orgID, userID, forbiddenMsg, s.IsOwnerOrAbove)
+}
+
+// RequireManager fails unless the organization accepts new operations and the user is an owner, manager or SysAdmin.
+func (s *service) RequireManager(ctx context.Context, orgID, userID, forbiddenMsg string) error {
+	return s.require(ctx, orgID, userID, forbiddenMsg, s.IsManagerOrAbove)
+}
+
+func (s *service) require(ctx context.Context, orgID, userID, forbiddenMsg string, check func(context.Context, string, string) (bool, error)) error {
+	if err := s.CheckOperation(ctx, orgID, userID); err != nil {
+		return err
 	}
-	return isManager, nil
+	allowed, err := check(ctx, orgID, userID)
+	if err != nil {
+		return err
+	}
+	if !allowed {
+		return apperror.Forbidden(forbiddenMsg)
+	}
+	return nil
 }
 
 // CheckOperation preserves historical reads while blocking new operations for
@@ -372,11 +370,11 @@ func (s *service) CheckOperation(ctx context.Context, orgID, userID string) erro
 	if org.IsActive {
 		return nil
 	}
-	u, err := s.userService.GetByID(ctx, userID)
+	account, err := s.userService.GetAccount(ctx, userID)
 	if err != nil {
 		return err
 	}
-	if u.IsSystemAdmin {
+	if account.IsSystemAdmin {
 		return nil
 	}
 	return ErrOrgInactive

@@ -77,48 +77,16 @@ func (r *pgxRepository) List(ctx context.Context, filter Filter) ([]*Notificatio
 		query = query.Where(squirrel.Eq{"is_read": false})
 	}
 
-	if filter.Page < 1 {
-		filter.Page = 1
-	}
-	if filter.PageSize < 1 {
-		filter.PageSize = 20
-	}
-	query = query.Limit(uint64(filter.PageSize)).Offset(uint64((filter.Page - 1) * filter.PageSize))
-
-	sql, args, err := query.ToSql()
-	if err != nil {
-		return nil, 0, fmt.Errorf("build list notifications query failed: %w", err)
-	}
-
-	rows, err := r.pool.Query(ctx, sql, args...)
-	if err != nil {
-		return nil, 0, fmt.Errorf("list notifications failed: %w", err)
-	}
-	defer rows.Close()
-
-	var result []*Notification
-	var total int
-	for rows.Next() {
+	return pagination.Collect(ctx, r.pool, query, filter.Page, filter.PageSize, "notification", func(rows pgx.Rows, total *int) (*Notification, error) {
 		var n Notification
 		if err := rows.Scan(
 			&n.ID, &n.UserID, &n.Type, &n.Title, &n.Content, &n.PickupGroupID, &n.PickupOrderID, &n.IsRead, &n.CreatedAt,
-			&total,
+			total,
 		); err != nil {
-			return nil, 0, fmt.Errorf("scan notification failed: %w", err)
+			return nil, fmt.Errorf("scan notification failed: %w", err)
 		}
-		result = append(result, &n)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, 0, err
-	}
-	rows.Close()
-	if total == 0 {
-		total, err = pagination.Count(ctx, r.pool, query)
-		if err != nil {
-			return nil, 0, err
-		}
-	}
-	return result, total, nil
+		return &n, nil
+	})
 }
 
 func (r *pgxRepository) CountUnread(ctx context.Context, userID string) (int, error) {

@@ -7,69 +7,49 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/nekogravitycat/court-booking-backend/internal/auth"
 	"github.com/nekogravitycat/court-booking-backend/internal/booking"
-	"github.com/nekogravitycat/court-booking-backend/internal/location"
-	"github.com/nekogravitycat/court-booking-backend/internal/organization"
 	"github.com/nekogravitycat/court-booking-backend/internal/pkg/request"
 	"github.com/nekogravitycat/court-booking-backend/internal/pkg/response"
-	"github.com/nekogravitycat/court-booking-backend/internal/resource"
-	"github.com/nekogravitycat/court-booking-backend/internal/user"
 )
 
 type Handler struct {
-	service     booking.Service
-	userService user.Service
-	resService  resource.Service
-	locService  location.Service
-	orgService  organization.Service
+	service booking.Service
 }
 
-func NewHandler(
-	service booking.Service,
-	userService user.Service,
-	resService resource.Service,
-	locService location.Service,
-	orgService organization.Service,
-) *Handler {
-	return &Handler{
-		service:     service,
-		userService: userService,
-		resService:  resService,
-		locService:  locService,
-		orgService:  orgService,
-	}
+func NewHandler(service booking.Service) *Handler {
+	return &Handler{service: service}
 }
 
-// checkIsSysAdmin helper checks if the current user is a system admin
-func (h *Handler) checkIsSysAdmin(c *gin.Context, userID string) bool {
-	u, err := h.userService.GetByID(c.Request.Context(), userID)
-	if err != nil {
-		return false
+func (h *Handler) Create(c *gin.Context) {
+	var body CreateBookingRequest
+	if !request.BindJSON(c, &body) {
+		return
 	}
-	return u.IsSystemAdmin
-}
 
-// checkIsOrgManager helper checks if the current user is an organization manager (owner or admin) for the resource's organization
-func (h *Handler) checkIsOrgManager(c *gin.Context, resourceID string, userID string) bool {
-	ctx := c.Request.Context()
-	res, err := h.resService.GetByID(ctx, resourceID)
-	if err != nil {
-		return false
+	if err := body.Validate(); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
 	}
-	loc, err := h.locService.GetByID(ctx, res.LocationID)
-	if err != nil {
-		return false
+
+	userID := auth.GetUserID(c)
+	req := booking.CreateRequest{
+		UserID:     userID,
+		ResourceID: body.ResourceID,
+		StartTime:  body.StartTime,
+		EndTime:    body.EndTime,
 	}
-	allowed, err := h.orgService.IsManagerOrAbove(ctx, loc.OrganizationID, userID)
+
+	b, err := h.service.Create(c.Request.Context(), req)
 	if err != nil {
-		return false
+		response.Error(c, err)
+		return
 	}
-	return allowed
+
+	c.JSON(http.StatusCreated, NewBookingResponse(b))
 }
 
 func (h *Handler) List(c *gin.Context) {
 	var req ListBookingsRequest
-	if err := c.ShouldBindQuery(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid query parameters", "details": err.Error()})
+	if !request.BindQuery(c, &req) {
 		return
 	}
 
@@ -80,7 +60,7 @@ func (h *Handler) List(c *gin.Context) {
 
 	// Access Control Logic
 	currentUserID := auth.GetUserID(c)
-	isSysAdmin := h.checkIsSysAdmin(c, currentUserID)
+	isSysAdmin := auth.IsSystemAdmin(c)
 
 	filterUserID := currentUserID
 
@@ -127,65 +107,17 @@ func (h *Handler) List(c *gin.Context) {
 	c.JSON(http.StatusOK, resp)
 }
 
-func (h *Handler) Create(c *gin.Context) {
-	var body CreateBookingRequest
-	if err := c.ShouldBindJSON(&body); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request body", "details": err.Error()})
-		return
-	}
-
-	if err := body.Validate(); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-		return
-	}
-
-	userID := auth.GetUserID(c)
-	if userID == "" {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
-		return
-	}
-
-	req := booking.CreateRequest{
-		UserID:     userID,
-		ResourceID: body.ResourceID,
-		StartTime:  body.StartTime,
-		EndTime:    body.EndTime,
-	}
-
-	b, err := h.service.Create(c.Request.Context(), req)
-	if err != nil {
-		response.Error(c, err)
-		return
-	}
-
-	c.JSON(http.StatusCreated, NewBookingResponse(b))
-}
-
 func (h *Handler) Get(c *gin.Context) {
 	var req request.ByIDRequest
-	if err := c.ShouldBindUri(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request", "details": err.Error()})
-		return
-	}
-
-	b, err := h.service.GetByID(c.Request.Context(), req.ID)
-	if err != nil {
-		response.Error(c, err)
+	if !request.BindURI(c, &req) {
 		return
 	}
 
 	// Access Check: User owns booking OR SysAdmin OR OrgManager
-	userID := auth.GetUserID(c)
-
-	isOwner := userID == b.UserID
-	isSysAdmin := h.checkIsSysAdmin(c, userID)
-
-	if !isOwner && !isSysAdmin {
-		// Check if Org Manager
-		if !h.checkIsOrgManager(c, b.ResourceID, userID) {
-			c.JSON(http.StatusForbidden, gin.H{"error": "permission denied"})
-			return
-		}
+	b, err := h.service.GetForViewer(c.Request.Context(), req.ID, auth.GetUserID(c), auth.IsSystemAdmin(c))
+	if err != nil {
+		response.Error(c, err)
+		return
 	}
 
 	c.JSON(http.StatusOK, NewBookingResponse(b))
@@ -193,14 +125,12 @@ func (h *Handler) Get(c *gin.Context) {
 
 func (h *Handler) Update(c *gin.Context) {
 	var uri request.ByIDRequest
-	if err := c.ShouldBindUri(&uri); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request", "details": err.Error()})
+	if !request.BindURI(c, &uri) {
 		return
 	}
 
 	var body UpdateBookingRequest
-	if err := c.ShouldBindJSON(&body); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request body", "details": err.Error()})
+	if !request.BindJSON(c, &body) {
 		return
 	}
 
@@ -210,7 +140,7 @@ func (h *Handler) Update(c *gin.Context) {
 	}
 
 	userID := auth.GetUserID(c)
-	isSysAdmin := h.checkIsSysAdmin(c, userID)
+	isSysAdmin := auth.IsSystemAdmin(c)
 
 	req := booking.UpdateRequest{
 		StartTime:     body.StartTime,
@@ -230,13 +160,12 @@ func (h *Handler) Update(c *gin.Context) {
 
 func (h *Handler) Delete(c *gin.Context) {
 	var req request.ByIDRequest
-	if err := c.ShouldBindUri(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request", "details": err.Error()})
+	if !request.BindURI(c, &req) {
 		return
 	}
 
 	userID := auth.GetUserID(c)
-	isSysAdmin := h.checkIsSysAdmin(c, userID)
+	isSysAdmin := auth.IsSystemAdmin(c)
 
 	err := h.service.Delete(c.Request.Context(), req.ID, userID, isSysAdmin)
 	if err != nil {

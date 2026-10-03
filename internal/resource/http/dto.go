@@ -42,16 +42,7 @@ type ResourceTag struct {
 }
 
 func NewResponse(r *resource.Resource) ResourceResponse {
-	var coverURL *string
-	var coverThumbnailURL *string
-
-	if r.Cover != nil {
-		url := file.FileURL(*r.Cover)
-		coverURL = &url
-
-		thumbURL := file.ThumbnailURL(*r.Cover)
-		coverThumbnailURL = &thumbURL
-	}
+	coverURL, coverThumbnailURL := file.URLs(r.Cover)
 
 	return ResourceResponse{
 		ID:             r.ID,

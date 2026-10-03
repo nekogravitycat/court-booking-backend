@@ -72,7 +72,7 @@ func (s *service) Rate(ctx context.Context, groupID, userID string, level int, r
 		return nil, ErrGroupNotEnded
 	}
 
-	orders, err := s.pickupService.GetOrdersByGroupID(ctx, groupID, raterID)
+	orders, err := s.pickupService.GetOrdersByGroupID(ctx, groupID, raterID, raterIsAdmin)
 	if err != nil {
 		return nil, err
 	}

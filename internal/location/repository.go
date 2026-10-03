@@ -8,8 +8,8 @@ import (
 	"github.com/Masterminds/squirrel"
 	"github.com/jackc/pgerrcode"
 	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/nekogravitycat/court-booking-backend/internal/db"
 	"github.com/nekogravitycat/court-booking-backend/internal/pkg/pagination"
 	"github.com/nekogravitycat/court-booking-backend/internal/pkg/request"
 	"github.com/nekogravitycat/court-booking-backend/internal/user"
@@ -69,34 +69,41 @@ func (r *pgxRepository) Create(ctx context.Context, loc *Location) error {
 	return nil
 }
 
-func (r *pgxRepository) GetByID(ctx context.Context, id string) (*Location, error) {
-	psql := squirrel.StatementBuilder.PlaceholderFormat(squirrel.Dollar)
-	query, args, err := psql.Select(
+// selectLocations starts a location query joined with its organization.
+// extra columns are appended after the columns scanLocationInto expects. TIME columns are
+// cast to text so they scan into strings.
+func selectLocations(extra ...string) squirrel.SelectBuilder {
+	cols := append([]string{
 		"l.id", "l.organization_id", "o.name", "l.name", "l.created_at", "l.capacity",
 		"l.opening_hours_start::text", "l.opening_hours_end::text", "l.timezone",
 		"l.location_info", "l.opening", "l.rule", "l.facility", "l.description", "l.longitude", "l.latitude", "l.cover",
 		"l.parking_name", "l.parking_latitude", "l.parking_longitude",
-	).
+	}, extra...)
+	return squirrel.StatementBuilder.PlaceholderFormat(squirrel.Dollar).Select(cols...).
 		From("public.locations l").
-		Join("public.organizations o ON l.organization_id = o.id").
+		Join("public.organizations o ON l.organization_id = o.id")
+}
+
+// scanLocationInto returns the scan destinations matching selectLocations, followed by extra.
+func scanLocationInto(l *Location, extra ...any) []any {
+	return append([]any{
+		&l.ID, &l.OrganizationID, &l.OrganizationName, &l.Name, &l.CreatedAt, &l.Capacity,
+		&l.OpeningHoursStart, &l.OpeningHoursEnd, &l.Timezone,
+		&l.LocationInfo, &l.Opening, &l.Rule, &l.Facility, &l.Description, &l.Longitude, &l.Latitude, &l.Cover,
+		&l.ParkingName, &l.ParkingLatitude, &l.ParkingLongitude,
+	}, extra...)
+}
+
+func (r *pgxRepository) GetByID(ctx context.Context, id string) (*Location, error) {
+	query, args, err := selectLocations().
 		Where(squirrel.Eq{"l.id": id}).
 		ToSql()
 	if err != nil {
 		return nil, fmt.Errorf("build get location query failed: %w", err)
 	}
 
-	// We cast TIME to ::text to scan into string easily.
-
-	row := r.pool.QueryRow(ctx, query, args...)
-
 	var l Location
-	err = row.Scan(
-		&l.ID, &l.OrganizationID, &l.OrganizationName, &l.Name, &l.CreatedAt, &l.Capacity,
-		&l.OpeningHoursStart, &l.OpeningHoursEnd, &l.Timezone,
-		&l.LocationInfo, &l.Opening, &l.Rule, &l.Facility, &l.Description, &l.Longitude, &l.Latitude, &l.Cover,
-		&l.ParkingName, &l.ParkingLatitude, &l.ParkingLongitude,
-	)
-	if err != nil {
+	if err := r.pool.QueryRow(ctx, query, args...).Scan(scanLocationInto(&l)...); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, ErrLocNotFound
 		}
@@ -106,16 +113,7 @@ func (r *pgxRepository) GetByID(ctx context.Context, id string) (*Location, erro
 }
 
 func (r *pgxRepository) List(ctx context.Context, filter LocationFilter) ([]*Location, int, error) {
-	psql := squirrel.StatementBuilder.PlaceholderFormat(squirrel.Dollar)
-	query := psql.Select(
-		"l.id", "l.organization_id", "o.name", "l.name", "l.created_at", "l.capacity",
-		"l.opening_hours_start::text", "l.opening_hours_end::text", "l.timezone",
-		"l.location_info", "l.opening", "l.rule", "l.facility", "l.description", "l.longitude", "l.latitude", "l.cover",
-		"l.parking_name", "l.parking_latitude", "l.parking_longitude",
-		"count(*) OVER() as total_count",
-	).
-		From("public.locations l").
-		Join("public.organizations o ON l.organization_id = o.id")
+	query := selectLocations("count(*) OVER() as total_count")
 
 	// Dynamic Filtering
 	if filter.OrganizationID != "" {
@@ -165,56 +163,13 @@ func (r *pgxRepository) List(ctx context.Context, filter LocationFilter) ([]*Loc
 
 	query = query.OrderBy(orderBy+" "+orderDir, "l.id ASC")
 
-	// Pagination
-	if filter.Page < 1 {
-		filter.Page = 1
-	}
-	if filter.PageSize < 1 {
-		filter.PageSize = 20
-	}
-	offset := (filter.Page - 1) * filter.PageSize
-
-	query = query.Limit(uint64(filter.PageSize)).Offset(uint64(offset))
-
-	sql, args, err := query.ToSql()
-	if err != nil {
-		return nil, 0, fmt.Errorf("build list locations query failed: %w", err)
-	}
-
-	rows, err := r.pool.Query(ctx, sql, args...)
-	if err != nil {
-		return nil, 0, fmt.Errorf("list locations failed: %w", err)
-	}
-	defer rows.Close()
-
-	var locations []*Location
-	var total int
-
-	for rows.Next() {
+	return pagination.Collect(ctx, r.pool, query, filter.Page, filter.PageSize, "location", func(rows pgx.Rows, total *int) (*Location, error) {
 		var l Location
-		if err := rows.Scan(
-			&l.ID, &l.OrganizationID, &l.OrganizationName, &l.Name, &l.CreatedAt, &l.Capacity,
-			&l.OpeningHoursStart, &l.OpeningHoursEnd, &l.Timezone,
-			&l.LocationInfo, &l.Opening, &l.Rule, &l.Facility, &l.Description, &l.Longitude, &l.Latitude, &l.Cover,
-			&l.ParkingName, &l.ParkingLatitude, &l.ParkingLongitude,
-			&total,
-		); err != nil {
-			return nil, 0, fmt.Errorf("scan location failed: %w", err)
+		if err := rows.Scan(scanLocationInto(&l, total)...); err != nil {
+			return nil, fmt.Errorf("scan location failed: %w", err)
 		}
-		locations = append(locations, &l)
-	}
-
-	if err := rows.Err(); err != nil {
-		return nil, 0, err
-	}
-	rows.Close()
-	if total == 0 {
-		total, err = pagination.Count(ctx, r.pool, query)
-		if err != nil {
-			return nil, 0, err
-		}
-	}
-	return locations, total, nil
+		return &l, nil
+	})
 }
 
 func (r *pgxRepository) Update(ctx context.Context, loc *Location) error {
@@ -266,8 +221,7 @@ func (r *pgxRepository) Delete(ctx context.Context, id string) error {
 		// Deleting a location cascades to its resources, but a booking still
 		// referencing one of those resources (ON DELETE RESTRICT) raises a
 		// foreign-key violation. Report it as a 409 conflict instead of a 500.
-		var pgErr *pgconn.PgError
-		if errors.As(err, &pgErr) && (pgErr.Code == pgerrcode.ForeignKeyViolation || pgErr.Code == pgerrcode.RestrictViolation) {
+		if db.IsInUse(err) {
 			return ErrLocationInUse
 		}
 		return fmt.Errorf("delete location failed: %w", err)
@@ -318,8 +272,7 @@ func (r *pgxRepository) AddLocationManager(ctx context.Context, locationID strin
 
 	_, err = tx.Exec(ctx, query, args...)
 	if err != nil {
-		var pgErr *pgconn.PgError
-		if errors.As(err, &pgErr) && pgErr.Code == pgerrcode.ForeignKeyViolation && pgErr.ConstraintName == "location_managers_member_fkey" {
+		if db.IsViolation(err, pgerrcode.ForeignKeyViolation, "location_managers_member_fkey") {
 			return ErrNotOrganizationMember
 		}
 		return fmt.Errorf("AddLocationManager failed: %w", err)
@@ -383,48 +336,13 @@ func (r *pgxRepository) ListLocationManagers(ctx context.Context, locationID str
 	}
 	query = query.OrderBy("u.display_name "+orderDir, "u.id ASC")
 
-	// Pagination
-	if params.Page < 1 {
-		params.Page = 1
-	}
-	if params.PageSize < 1 {
-		params.PageSize = 20
-	}
-	offset := (params.Page - 1) * params.PageSize
-	query = query.Limit(uint64(params.PageSize)).Offset(uint64(offset))
-
-	sql, args, err := query.ToSql()
-	if err != nil {
-		return nil, 0, fmt.Errorf("build list location admins query failed: %w", err)
-	}
-
-	rows, err := r.pool.Query(ctx, sql, args...)
-	if err != nil {
-		return nil, 0, fmt.Errorf("ListLocationManagers failed: %w", err)
-	}
-	defer rows.Close()
-
-	var users []*user.User
-	var total int
-
-	for rows.Next() {
+	return pagination.Collect(ctx, r.pool, query, params.Page, params.PageSize, "location manager", func(rows pgx.Rows, total *int) (*user.User, error) {
 		var u user.User
-		if err := rows.Scan(&u.ID, &u.Email, &u.DisplayName, &u.CreatedAt, &u.IsActive, &total); err != nil {
-			return nil, 0, fmt.Errorf("scan failed: %w", err)
+		if err := rows.Scan(&u.ID, &u.Email, &u.DisplayName, &u.CreatedAt, &u.IsActive, total); err != nil {
+			return nil, fmt.Errorf("scan failed: %w", err)
 		}
-		users = append(users, &u)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, 0, err
-	}
-	rows.Close()
-	if total == 0 {
-		total, err = pagination.Count(ctx, r.pool, query)
-		if err != nil {
-			return nil, 0, err
-		}
-	}
-	return users, total, nil
+		return &u, nil
+	})
 }
 
 func (r *pgxRepository) IsLocationManagerInOrg(ctx context.Context, orgID string, userID string) (bool, error) {

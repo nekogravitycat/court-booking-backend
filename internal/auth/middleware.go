@@ -8,19 +8,31 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// ActiveStatusFunc reports whether the given user account is currently active
-// (i.e. not suspended or soft-deleted). It is injected as a function so the auth
-// package does not need to import the user package (which would create an import
-// cycle, since user already depends on auth).
-type ActiveStatusFunc func(ctx context.Context, userID string) (bool, error)
+// Account is the per-request account state the auth middleware needs.
+type Account struct {
+	IsActive      bool
+	IsSystemAdmin bool
+}
+
+// AccountLookupFunc loads the given user's current account state (the user is
+// not suspended or soft-deleted, and whether they are a system admin). It is
+// injected as a function so the auth package does not need to import the user
+// package (which would create an import cycle, since user already depends on auth).
+type AccountLookupFunc func(ctx context.Context, userID string) (Account, error)
+
+// setIdentity stores the authenticated identity into the Gin context.
+func setIdentity(c *gin.Context, userID string, a Account) {
+	c.Set(ctxUserID, userID)
+	c.Set(ctxIsSystemAdmin, a.IsSystemAdmin)
+}
 
 // AuthRequired is a Gin middleware that validates JWT from Authorization: Bearer <token>.
 //
-// When isActive is non-nil it additionally verifies, on every request, that the
+// When lookup is non-nil it additionally verifies, on every request, that the
 // account is still active. This ensures suspended / soft-deleted users lose
 // access immediately instead of remaining authorized until their access token
 // expires (there is otherwise no token revocation mechanism).
-func AuthRequired(jwtManager *JWTManager, isActive ActiveStatusFunc) gin.HandlerFunc {
+func AuthRequired(jwtManager *JWTManager, lookup AccountLookupFunc) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		header := c.GetHeader("Authorization")
 		if header == "" {
@@ -50,9 +62,10 @@ func AuthRequired(jwtManager *JWTManager, isActive ActiveStatusFunc) gin.Handler
 
 		// Reject tokens belonging to accounts that have since been suspended or
 		// soft-deleted. Treat lookup errors (including "not found") as unauthorized.
-		if isActive != nil {
-			active, err := isActive(c.Request.Context(), claims.Subject)
-			if err != nil || !active {
+		var account Account
+		if lookup != nil {
+			account, err = lookup(c.Request.Context(), claims.Subject)
+			if err != nil || !account.IsActive {
 				c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{
 					"error": "account is inactive or no longer exists",
 				})
@@ -61,7 +74,7 @@ func AuthRequired(jwtManager *JWTManager, isActive ActiveStatusFunc) gin.Handler
 		}
 
 		// Store user info into Gin context for later handlers.
-		c.Set("userID", claims.Subject)
+		setIdentity(c, claims.Subject, account)
 
 		c.Next()
 	}
@@ -75,9 +88,9 @@ func AuthRequired(jwtManager *JWTManager, isActive ActiveStatusFunc) gin.Handler
 // validly parses, the user id is stored in the context so handlers can read it
 // via GetUserID; otherwise GetUserID returns "".
 //
-// When isActive is non-nil, a token whose account is no longer active is
+// When lookup is non-nil, a token whose account is no longer active is
 // treated as unauthenticated.
-func AuthOptional(jwtManager *JWTManager, isActive ActiveStatusFunc) gin.HandlerFunc {
+func AuthOptional(jwtManager *JWTManager, lookup AccountLookupFunc) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		header := c.GetHeader("Authorization")
 		if header == "" {
@@ -97,14 +110,16 @@ func AuthOptional(jwtManager *JWTManager, isActive ActiveStatusFunc) gin.Handler
 			return
 		}
 
-		if isActive != nil {
-			if active, err := isActive(c.Request.Context(), claims.Subject); err != nil || !active {
+		var account Account
+		if lookup != nil {
+			account, err = lookup(c.Request.Context(), claims.Subject)
+			if err != nil || !account.IsActive {
 				c.Next()
 				return
 			}
 		}
 
-		c.Set("userID", claims.Subject)
+		setIdentity(c, claims.Subject, account)
 		c.Next()
 	}
 }

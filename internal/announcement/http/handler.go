@@ -20,8 +20,7 @@ func NewHandler(service announcement.Service) *Handler {
 
 func (h *Handler) List(c *gin.Context) {
 	var req ListAnnouncementsRequest
-	if err := c.ShouldBindQuery(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid query parameters", "details": err.Error()})
+	if !request.BindQuery(c, &req) {
 		return
 	}
 
@@ -64,8 +63,7 @@ func (h *Handler) List(c *gin.Context) {
 
 func (h *Handler) Get(c *gin.Context) {
 	var req request.ByIDRequest
-	if err := c.ShouldBindUri(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request", "details": err.Error()})
+	if !request.BindURI(c, &req) {
 		return
 	}
 
@@ -80,8 +78,7 @@ func (h *Handler) Get(c *gin.Context) {
 
 func (h *Handler) Create(c *gin.Context) {
 	var body CreateRequest
-	if err := c.ShouldBindJSON(&body); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request body", "details": err.Error()})
+	if !request.BindJSON(c, &body) {
 		return
 	}
 
@@ -106,14 +103,12 @@ func (h *Handler) Create(c *gin.Context) {
 
 func (h *Handler) Update(c *gin.Context) {
 	var uri request.ByIDRequest
-	if err := c.ShouldBindUri(&uri); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request", "details": err.Error()})
+	if !request.BindURI(c, &uri) {
 		return
 	}
 
 	var body UpdateRequest
-	if err := c.ShouldBindJSON(&body); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request body", "details": err.Error()})
+	if !request.BindJSON(c, &body) {
 		return
 	}
 
@@ -138,8 +133,7 @@ func (h *Handler) Update(c *gin.Context) {
 
 func (h *Handler) Delete(c *gin.Context) {
 	var req request.ByIDRequest
-	if err := c.ShouldBindUri(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request", "details": err.Error()})
+	if !request.BindURI(c, &req) {
 		return
 	}
 

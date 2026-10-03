@@ -84,7 +84,7 @@ type Service interface {
 	UpdateGroup(ctx context.Context, id string, req UpdateGroupRequest) (*PickupGroup, error)
 	DeleteGroup(ctx context.Context, id string) error
 
-	GetOrdersByGroupID(ctx context.Context, groupID, requesterID string) ([]*PickupOrder, error)
+	GetOrdersByGroupID(ctx context.Context, groupID, requesterID string, isSysAdmin bool) ([]*PickupOrder, error)
 	GetOrdersByUserID(ctx context.Context, userID string) ([]*PickupOrder, error)
 
 	CreateOrder(ctx context.Context, req CreateOrderRequest) (*PickupOrder, error)
@@ -92,14 +92,14 @@ type Service interface {
 	// The members are anonymous and are never rated.
 	CreatePartyOrder(ctx context.Context, req CreatePartyOrderRequest) (*PickupOrder, error)
 	UpdateOrder(ctx context.Context, id string, req UpdateOrderRequest, updaterUserID string, isSysAdmin bool) (*PickupOrder, error)
-	DeleteOrder(ctx context.Context, id, requesterUserID string, isSysAdmin bool) error
+	DeleteOrder(ctx context.Context, id string, isSysAdmin bool) error
 
 	// GetParticipantStats returns the anonymous gender / age / skill-level
 	// breakdown of the group's enrolled seats (pending and confirmed orders).
 	GetParticipantStats(ctx context.Context, groupID string) (*ParticipantStats, error)
 	// CanViewHostPhone reports whether the viewer may see the group host's phone:
 	// the host, a system admin, or a participant whose enrollment is confirmed.
-	CanViewHostPhone(ctx context.Context, group *PickupGroup, viewerID string) (bool, error)
+	CanViewHostPhone(ctx context.Context, group *PickupGroup, viewerID string, isSysAdmin bool) (bool, error)
 	// OnUserDeactivated cancels a deactivated user's upcoming enrollments and hosted groups.
 	OnUserDeactivated(ctx context.Context, userID string) error
 }
@@ -275,10 +275,7 @@ func (s *service) UpdateGroup(ctx context.Context, id string, req UpdateGroupReq
 		if err != nil {
 			return err
 		}
-		scoped := *s
-		scoped.repo = repo
-		scoped.notifier = nil
-		result, err = scoped.updateGroup(ctx, id, req)
+		result, err = updateGroup(ctx, repo, previous, req)
 		return err
 	})
 	if err != nil {
@@ -292,11 +289,11 @@ func (s *service) UpdateGroup(ctx context.Context, id string, req UpdateGroupReq
 	return result, nil
 }
 
-func (s *service) updateGroup(ctx context.Context, id string, req UpdateGroupRequest) (*PickupGroup, error) {
-	group, err := s.repo.GetGroupByID(ctx, id)
-	if err != nil {
-		return nil, err
-	}
+// updateGroup applies req to a copy of previous (the group as read under the lock) and persists it
+// through repo, which must be the lock-scoped repository.
+func updateGroup(ctx context.Context, repo Repository, previous *PickupGroup, req UpdateGroupRequest) (*PickupGroup, error) {
+	updated := *previous
+	group := &updated
 
 	if req.Title != nil {
 		group.Title = *req.Title
@@ -358,11 +355,11 @@ func (s *service) updateGroup(ctx context.Context, id string, req UpdateGroupReq
 		return nil, ErrInvalidTimeRange
 	}
 
-	if err := s.repo.UpdateGroup(ctx, group); err != nil {
+	if err := repo.UpdateGroup(ctx, group); err != nil {
 		return nil, err
 	}
 
-	return s.repo.GetGroupByID(ctx, id)
+	return repo.GetGroupByID(ctx, group.ID)
 }
 
 // notifyEnrolled sends one notification to every user currently holding a seat
@@ -396,19 +393,13 @@ func (s *service) DeleteGroup(ctx context.Context, id string) error {
 	return s.repo.DeleteGroup(ctx, id)
 }
 
-func (s *service) GetOrdersByGroupID(ctx context.Context, groupID, requesterID string) ([]*PickupOrder, error) {
+func (s *service) GetOrdersByGroupID(ctx context.Context, groupID, requesterID string, isSysAdmin bool) ([]*PickupOrder, error) {
 	group, err := s.repo.GetGroupByID(ctx, groupID)
 	if err != nil {
 		return nil, err
 	}
-	if group.HostID != requesterID {
-		requester, err := s.userService.GetByID(ctx, requesterID)
-		if err != nil {
-			return nil, err
-		}
-		if !requester.IsSystemAdmin {
-			return nil, ErrPermissionDenied
-		}
+	if group.HostID != requesterID && !isSysAdmin {
+		return nil, ErrOrdersForbidden
 	}
 	return s.repo.GetOrdersByGroupID(ctx, groupID)
 }
@@ -560,10 +551,7 @@ func (s *service) UpdateOrder(ctx context.Context, id string, req UpdateOrderReq
 		if err != nil {
 			return err
 		}
-		scoped := *s
-		scoped.repo = repo
-		scoped.notifier = nil
-		result, err = scoped.updateOrder(ctx, id, req, updaterUserID, isSysAdmin)
+		result, err = updateOrder(ctx, repo, previous, group, req, updaterUserID, isSysAdmin)
 		return err
 	})
 	if err != nil {
@@ -574,16 +562,11 @@ func (s *service) UpdateOrder(ctx context.Context, id string, req UpdateOrderReq
 	return result, nil
 }
 
-func (s *service) updateOrder(ctx context.Context, id string, req UpdateOrderRequest, updaterUserID string, isSysAdmin bool) (*PickupOrder, error) {
-	order, err := s.repo.GetOrderByID(ctx, id)
-	if err != nil {
-		return nil, err
-	}
-
-	group, err := s.repo.GetGroupByID(ctx, order.PickupGroupID)
-	if err != nil {
-		return nil, err
-	}
+// updateOrder applies req to a copy of previous (the order as read under the lock) and persists
+// it through repo, which must be the lock-scoped repository.
+func updateOrder(ctx context.Context, repo Repository, previous *PickupOrder, group *PickupGroup, req UpdateOrderRequest, updaterUserID string, isSysAdmin bool) (*PickupOrder, error) {
+	updated := *previous
+	order := &updated
 
 	isOwner := order.UserID == updaterUserID
 	isReviewer := isSysAdmin || group.HostID == updaterUserID
@@ -634,10 +617,10 @@ func (s *service) updateOrder(ctx context.Context, id string, req UpdateOrderReq
 	// request) into a seat-occupying state, re-validate capacity inside a
 	// transaction so a reviewer cannot push the group over its limit.
 	if isOccupyingStatus(order.Status) && !isOccupyingStatus(oldStatus) {
-		if err := s.repo.UpdateOrderWithCapacityCheck(ctx, order); err != nil {
+		if err := repo.UpdateOrderWithCapacityCheck(ctx, order); err != nil {
 			return nil, err
 		}
-	} else if err := s.repo.UpdateOrder(ctx, order); err != nil {
+	} else if err := repo.UpdateOrder(ctx, order); err != nil {
 		return nil, err
 	}
 
@@ -712,8 +695,7 @@ func paymentStatusText(p PaymentStatus) string {
 // which keeps the row and blocks the user from re-enrolling. The group's
 // current_enrolled is derived from a live SUM, so deleting the row releases its
 // seats automatically.
-func (s *service) DeleteOrder(ctx context.Context, id, requesterUserID string, isSysAdmin bool) error {
-	_ = requesterUserID // deletion is admin-only; the requester identity is not consulted.
+func (s *service) DeleteOrder(ctx context.Context, id string, isSysAdmin bool) error {
 	if !isSysAdmin {
 		return ErrPermissionDenied
 	}
@@ -789,18 +771,11 @@ func (s *service) OnUserDeactivated(ctx context.Context, userID string) error {
 	return nil
 }
 
-func (s *service) CanViewHostPhone(ctx context.Context, group *PickupGroup, viewerID string) (bool, error) {
+func (s *service) CanViewHostPhone(ctx context.Context, group *PickupGroup, viewerID string, isSysAdmin bool) (bool, error) {
 	if viewerID == "" {
 		return false, nil
 	}
-	if group.HostID == viewerID {
-		return true, nil
-	}
-	viewer, err := s.userService.GetByID(ctx, viewerID)
-	if err != nil {
-		return false, err
-	}
-	if viewer.IsSystemAdmin {
+	if group.HostID == viewerID || isSysAdmin {
 		return true, nil
 	}
 	return s.repo.HasConfirmedOrder(ctx, group.ID, viewerID)

@@ -34,6 +34,8 @@ type UpdateRequest struct {
 type Service interface {
 	Create(ctx context.Context, req CreateRequest) (*Booking, error)
 	GetByID(ctx context.Context, id string) (*Booking, error)
+	// GetForViewer returns the booking if the viewer owns it, manages its organization, or is a system admin.
+	GetForViewer(ctx context.Context, id string, viewerID string, isSysAdmin bool) (*Booking, error)
 	List(ctx context.Context, filter Filter) ([]*Booking, int, error)
 	Update(ctx context.Context, id string, req UpdateRequest, updaterUserID string, isSysAdmin bool) (*Booking, error)
 	Delete(ctx context.Context, id string, deleterUserID string, isSysAdmin bool) error
@@ -58,20 +60,21 @@ func NewService(repo Repository, resService resource.Service, locService locatio
 	}
 }
 
-// isOrgManager checks if the user is an Owner or Admin of the organization that owns the resource
-func (s *service) isOrgManager(ctx context.Context, resourceID string, userID string) (bool, error) {
-	// 1. Get Resource
-	res, err := s.resService.GetByID(ctx, resourceID)
-	if err != nil {
-		return false, err
+// authorize resolves the caller's relation to a booking and rejects callers who are neither a
+// system admin, the booking's owner, nor a manager of the booking's organization. isOrgMgr is
+// only evaluated for non-admins; management privileges also apply to a manager's own booking.
+func (s *service) authorize(ctx context.Context, b *Booking, userID string, isSysAdmin bool) (isOwner, isOrgMgr bool, err error) {
+	isOwner = b.UserID == userID
+	if !isSysAdmin {
+		isOrgMgr, err = s.orgService.IsManagerOrAbove(ctx, b.OrganizationID, userID)
+		if err != nil {
+			return false, false, err // Internal error (e.g. DB down)
+		}
 	}
-	// 2. Get Location
-	loc, err := s.locService.GetByID(ctx, res.LocationID)
-	if err != nil {
-		return false, err
+	if !isSysAdmin && !isOwner && !isOrgMgr {
+		return false, false, ErrPermissionDenied
 	}
-	// 3. Check Permission using Org Service
-	return s.orgService.IsManagerOrAbove(ctx, loc.OrganizationID, userID)
+	return isOwner, isOrgMgr, nil
 }
 
 func (s *service) Create(ctx context.Context, req CreateRequest) (*Booking, error) {
@@ -147,6 +150,17 @@ func (s *service) GetByID(ctx context.Context, id string) (*Booking, error) {
 	return s.repo.GetByID(ctx, id)
 }
 
+func (s *service) GetForViewer(ctx context.Context, id string, viewerID string, isSysAdmin bool) (*Booking, error) {
+	b, err := s.repo.GetByID(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	if _, _, err := s.authorize(ctx, b, viewerID, isSysAdmin); err != nil {
+		return nil, err
+	}
+	return b, nil
+}
+
 func (s *service) List(ctx context.Context, filter Filter) ([]*Booking, int, error) {
 	return s.repo.List(ctx, filter)
 }
@@ -157,11 +171,7 @@ func (s *service) Update(ctx context.Context, id string, req UpdateRequest, upda
 		return nil, err
 	}
 
-	res, err := s.resService.GetByID(ctx, b.ResourceID)
-	if err != nil {
-		return nil, err
-	}
-	if err := s.locService.CheckOperation(ctx, res.LocationID, updaterUserID); err != nil {
+	if err := s.orgService.CheckOperation(ctx, b.OrganizationID, updaterUserID); err != nil {
 		return nil, err
 	}
 
@@ -169,21 +179,9 @@ func (s *service) Update(ctx context.Context, id string, req UpdateRequest, upda
 	// 1. System Admin -> Allowed
 	// 2. Owner of Booking -> Allowed (with restrictions on Status)
 	// 3. Org Owner/Admin -> Allowed
-
-	isBookingOwner := b.UserID == updaterUserID
-	isOrgMgr := false
-
-	if !isSysAdmin {
-		// Management privileges also apply to a manager's own booking.
-		var err error
-		isOrgMgr, err = s.isOrgManager(ctx, b.ResourceID, updaterUserID)
-		if err != nil {
-			return nil, err // Internal error (e.g. DB down)
-		}
-	}
-
-	if !isSysAdmin && !isBookingOwner && !isOrgMgr {
-		return nil, ErrPermissionDenied
+	isBookingOwner, isOrgMgr, err := s.authorize(ctx, b, updaterUserID, isSysAdmin)
+	if err != nil {
+		return nil, err
 	}
 
 	// A plain owner (no management privilege) is restricted the same way a
@@ -223,11 +221,7 @@ func (s *service) Update(ctx context.Context, id string, req UpdateRequest, upda
 
 		// Validate the new time range against the location's operating
 		// constraints (open flag, opening hours, max duration).
-		res, err := s.resService.GetByID(ctx, b.ResourceID)
-		if err != nil {
-			return nil, err
-		}
-		loc, err := s.locService.GetByID(ctx, res.LocationID)
+		loc, err := s.locService.GetByID(ctx, b.LocationID)
 		if err != nil {
 			return nil, err
 		}
@@ -296,28 +290,13 @@ func (s *service) Delete(ctx context.Context, id string, deleterUserID string, i
 		return err
 	}
 
-	res, err := s.resService.GetByID(ctx, b.ResourceID)
+	if err := s.orgService.CheckOperation(ctx, b.OrganizationID, deleterUserID); err != nil {
+		return err
+	}
+
+	isBookingOwner, isOrgMgr, err := s.authorize(ctx, b, deleterUserID, isSysAdmin)
 	if err != nil {
 		return err
-	}
-	if err := s.locService.CheckOperation(ctx, res.LocationID, deleterUserID); err != nil {
-		return err
-	}
-
-	// Permission Check
-	isBookingOwner := b.UserID == deleterUserID
-	isOrgMgr := false
-
-	if !isSysAdmin {
-		var err error
-		isOrgMgr, err = s.isOrgManager(ctx, b.ResourceID, deleterUserID)
-		if err != nil {
-			return err
-		}
-	}
-
-	if !isSysAdmin && !isBookingOwner && !isOrgMgr {
-		return ErrPermissionDenied
 	}
 
 	// Hard-deleting would erase the payment / approval record, so a plain owner
@@ -360,26 +339,9 @@ func (s *service) GetAvailability(ctx context.Context, resourceID string, date t
 	startOfDay := time.Date(date.Year(), date.Month(), date.Day(), 0, 0, 0, 0, tz)
 	endOfDay := startOfDay.Add(24 * time.Hour)
 
-	// Fetch every booking overlapping the day, paging through all results so a
-	// busy resource is never silently truncated.
-	var bookings []*Booking
-	for page := 1; ; page++ {
-		batch, total, err := s.repo.List(ctx, Filter{
-			ResourceID: resourceID,
-			StartTime:  &startOfDay, // Filter where EndTime >= StartOfDay (handled by repo logic: EndTime > filter.StartTime)
-			EndTime:    &endOfDay,   // Filter where StartTime <= EndOfDay (handled by repo logic: StartTime < filter.EndTime)
-			Page:       page,
-			PageSize:   availabilityPageSize,
-			SortBy:     "start_time",
-			SortOrder:  "ASC",
-		})
-		if err != nil {
-			return nil, err
-		}
-		bookings = append(bookings, batch...)
-		if len(batch) == 0 || len(bookings) >= total {
-			break
-		}
+	bookings, err := s.repo.ListOccupied(ctx, resourceID, startOfDay, endOfDay)
+	if err != nil {
+		return nil, err
 	}
 
 	// Calculate Slots

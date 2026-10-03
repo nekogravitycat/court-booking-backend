@@ -46,10 +46,6 @@ const (
 	MaxActiveBookingsPerUser = 10
 )
 
-// availabilityPageSize is the batch size used when paging through a day's
-// bookings to compute availability, ensuring no bookings are silently dropped.
-const availabilityPageSize = 1000
-
 type Status string
 
 const (

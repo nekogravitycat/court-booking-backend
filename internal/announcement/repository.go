@@ -90,52 +90,15 @@ func (r *pgxRepository) List(ctx context.Context, filter Filter) ([]*Announcemen
 
 	query = query.OrderBy(orderBy+" "+orderDir, "id ASC")
 
-	// Pagination
-	if filter.Page < 1 {
-		filter.Page = 1
-	}
-	if filter.PageSize < 1 {
-		filter.PageSize = 20
-	}
-	offset := (filter.Page - 1) * filter.PageSize
-
-	query = query.Limit(uint64(filter.PageSize)).Offset(uint64(offset))
-
-	sql, args, err := query.ToSql()
-	if err != nil {
-		return nil, 0, fmt.Errorf("build list announcement query failed: %w", err)
-	}
-
-	rows, err := r.pool.Query(ctx, sql, args...)
-	if err != nil {
-		return nil, 0, fmt.Errorf("list announcements failed: %w", err)
-	}
-	defer rows.Close()
-
-	var result []*Announcement
-	var total int
-
-	for rows.Next() {
+	return pagination.Collect(ctx, r.pool, query, filter.Page, filter.PageSize, "announcement", func(rows pgx.Rows, total *int) (*Announcement, error) {
 		var a Announcement
 		if err := rows.Scan(
-			&a.ID, &a.Title, &a.Content, &a.CreatedAt, &a.UpdatedAt, &total,
+			&a.ID, &a.Title, &a.Content, &a.CreatedAt, &a.UpdatedAt, total,
 		); err != nil {
-			return nil, 0, fmt.Errorf("scan announcement failed: %w", err)
+			return nil, fmt.Errorf("scan announcement failed: %w", err)
 		}
-		result = append(result, &a)
-	}
-
-	if err := rows.Err(); err != nil {
-		return nil, 0, err
-	}
-	rows.Close()
-	if total == 0 {
-		total, err = pagination.Count(ctx, r.pool, query)
-		if err != nil {
-			return nil, 0, err
-		}
-	}
-	return result, total, nil
+		return &a, nil
+	})
 }
 
 func (r *pgxRepository) Update(ctx context.Context, a *Announcement) error {

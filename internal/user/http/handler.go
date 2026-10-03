@@ -38,7 +38,7 @@ func NewHandler(userService user.Service, jwtManager *auth.JWTManager, fileServi
 func (h *UserHandler) Register(c *gin.Context) {
 	var req RegisterRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request", "details": err.Error()})
+		response.BadRequest(c, "invalid request")
 		return
 	}
 
@@ -81,7 +81,7 @@ func (h *UserHandler) Register(c *gin.Context) {
 func (h *UserHandler) Login(c *gin.Context) {
 	var req LoginRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request", "details": err.Error()})
+		response.BadRequest(c, "invalid request")
 		return
 	}
 
@@ -155,8 +155,7 @@ func (h *UserHandler) Me(c *gin.Context) {
 // Access Control: System Admin only.
 func (h *UserHandler) List(c *gin.Context) {
 	var req ListUsersRequest
-	if err := c.ShouldBindQuery(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid query parameters", "details": err.Error()})
+	if !request.BindQuery(c, &req) {
 		return
 	}
 
@@ -206,8 +205,7 @@ func (h *UserHandler) List(c *gin.Context) {
 // Access Control: System Admin only.
 func (h *UserHandler) Get(c *gin.Context) {
 	var req request.ByIDRequest
-	if err := c.ShouldBindUri(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request", "details": err.Error()})
+	if !request.BindURI(c, &req) {
 		return
 	}
 
@@ -228,14 +226,13 @@ func (h *UserHandler) Get(c *gin.Context) {
 // Access Control: System Admin only.
 func (h *UserHandler) Update(c *gin.Context) {
 	var uri request.ByIDRequest
-	if err := c.ShouldBindUri(&uri); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request", "details": err.Error()})
+	if !request.BindURI(c, &uri) {
 		return
 	}
 
 	var body UpdateUserRequest
 	if err := c.ShouldBindJSON(&body); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid body", "details": err.Error()})
+		response.BadRequest(c, "invalid body")
 		return
 	}
 
@@ -280,17 +277,14 @@ func (h *UserHandler) isSelfOrSysAdmin(c *gin.Context, targetUserID string) bool
 		return true
 	}
 
-	// Check if system admin
-	u, err := h.userService.GetByID(c.Request.Context(), currentUserID)
-	return err == nil && u.IsSystemAdmin
+	return auth.IsSystemAdmin(c)
 }
 
 // Delete performs a soft delete on a user.
 // Access Control: System Admin only.
 func (h *UserHandler) Delete(c *gin.Context) {
 	var req request.ByIDRequest
-	if err := c.ShouldBindUri(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request", "details": err.Error()})
+	if !request.BindURI(c, &req) {
 		return
 	}
 
@@ -306,8 +300,7 @@ func (h *UserHandler) Delete(c *gin.Context) {
 // Access Control: System Admin only.
 func (h *UserHandler) ListPickupHosts(c *gin.Context) {
 	var req ListUsersRequest
-	if err := c.ShouldBindQuery(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid query parameters", "details": err.Error()})
+	if !request.BindQuery(c, &req) {
 		return
 	}
 
@@ -349,8 +342,7 @@ func (h *UserHandler) ListPickupHosts(c *gin.Context) {
 // Access Control: System Admin only.
 func (h *UserHandler) AddPickupHost(c *gin.Context) {
 	var body AddPickupHostRequest
-	if err := c.ShouldBindJSON(&body); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request body", "details": err.Error()})
+	if !request.BindJSON(c, &body) {
 		return
 	}
 
@@ -366,8 +358,7 @@ func (h *UserHandler) AddPickupHost(c *gin.Context) {
 // Access Control: System Admin only.
 func (h *UserHandler) RemovePickupHost(c *gin.Context) {
 	var uri request.ByIDRequest
-	if err := c.ShouldBindUri(&uri); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request", "details": err.Error()})
+	if !request.BindURI(c, &uri) {
 		return
 	}
 
@@ -382,8 +373,7 @@ func (h *UserHandler) RemovePickupHost(c *gin.Context) {
 // UploadAvatar uploads an avatar image for a user.
 func (h *UserHandler) UploadAvatar(c *gin.Context) {
 	var uri request.ByIDRequest
-	if err := c.ShouldBindUri(&uri); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request", "details": err.Error()})
+	if !request.BindURI(c, &uri) {
 		return
 	}
 
@@ -406,8 +396,7 @@ func (h *UserHandler) UploadAvatar(c *gin.Context) {
 // RemoveAvatar removes the avatar image from a user.
 func (h *UserHandler) RemoveAvatar(c *gin.Context) {
 	var uri request.ByIDRequest
-	if err := c.ShouldBindUri(&uri); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request", "details": err.Error()})
+	if !request.BindURI(c, &uri) {
 		return
 	}
 
@@ -448,7 +437,7 @@ func (h *UserHandler) UpdateMe(c *gin.Context) {
 
 	var body UpdateMeRequest
 	if err := c.ShouldBindJSON(&body); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid body", "details": err.Error()})
+		response.BadRequest(c, "invalid body")
 		return
 	}
 

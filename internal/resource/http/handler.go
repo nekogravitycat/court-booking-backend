@@ -40,8 +40,7 @@ func NewHandler(service resource.Service, locService location.Service, orgServic
 
 func (h *Handler) List(c *gin.Context) {
 	var req ListResourcesRequest
-	if err := c.ShouldBindQuery(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid query parameters", "details": err.Error()})
+	if !request.BindQuery(c, &req) {
 		return
 	}
 
@@ -86,8 +85,7 @@ func (h *Handler) List(c *gin.Context) {
 
 func (h *Handler) Create(c *gin.Context) {
 	var body CreateRequest
-	if err := c.ShouldBindJSON(&body); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request body", "details": err.Error()})
+	if !request.BindJSON(c, &body) {
 		return
 	}
 
@@ -105,17 +103,8 @@ func (h *Handler) Create(c *gin.Context) {
 	}
 
 	// 2. Check User Permission for that Org
-	if err := h.orgService.CheckOperation(c.Request.Context(), loc.OrganizationID, auth.GetUserID(c)); err != nil {
+	if err := h.orgService.RequireManager(c.Request.Context(), loc.OrganizationID, auth.GetUserID(c), "forbidden: only organization admins can create resources"); err != nil {
 		response.Error(c, err)
-		return
-	}
-	allowed, err := h.orgService.IsManagerOrAbove(c.Request.Context(), loc.OrganizationID, auth.GetUserID(c))
-	if err != nil {
-		response.Error(c, err)
-		return
-	}
-	if !allowed {
-		c.JSON(http.StatusForbidden, gin.H{"error": "forbidden: only organization admins can create resources"})
 		return
 	}
 
@@ -138,8 +127,7 @@ func (h *Handler) Create(c *gin.Context) {
 
 func (h *Handler) Get(c *gin.Context) {
 	var req request.ByIDRequest
-	if err := c.ShouldBindUri(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request", "details": err.Error()})
+	if !request.BindURI(c, &req) {
 		return
 	}
 
@@ -154,8 +142,7 @@ func (h *Handler) Get(c *gin.Context) {
 
 func (h *Handler) Update(c *gin.Context) {
 	var uri request.ByIDRequest
-	if err := c.ShouldBindUri(&uri); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request", "details": err.Error()})
+	if !request.BindURI(c, &uri) {
 		return
 	}
 
@@ -175,23 +162,13 @@ func (h *Handler) Update(c *gin.Context) {
 	}
 
 	// 3. Check Permissions
-	if err := h.orgService.CheckOperation(c.Request.Context(), loc.OrganizationID, auth.GetUserID(c)); err != nil {
+	if err := h.orgService.RequireManager(c.Request.Context(), loc.OrganizationID, auth.GetUserID(c), "forbidden: permission denied"); err != nil {
 		response.Error(c, err)
-		return
-	}
-	allowed, err := h.orgService.IsManagerOrAbove(c.Request.Context(), loc.OrganizationID, auth.GetUserID(c))
-	if err != nil {
-		response.Error(c, err)
-		return
-	}
-	if !allowed {
-		c.JSON(http.StatusForbidden, gin.H{"error": "forbidden: permission denied"})
 		return
 	}
 
 	var body UpdateRequest
-	if err := c.ShouldBindJSON(&body); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request body", "details": err.Error()})
+	if !request.BindJSON(c, &body) {
 		return
 	}
 
@@ -217,8 +194,7 @@ func (h *Handler) Update(c *gin.Context) {
 
 func (h *Handler) Delete(c *gin.Context) {
 	var req request.ByIDRequest
-	if err := c.ShouldBindUri(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request", "details": err.Error()})
+	if !request.BindURI(c, &req) {
 		return
 	}
 
@@ -235,17 +211,8 @@ func (h *Handler) Delete(c *gin.Context) {
 		return
 	}
 
-	if err := h.orgService.CheckOperation(c.Request.Context(), loc.OrganizationID, auth.GetUserID(c)); err != nil {
+	if err := h.orgService.RequireManager(c.Request.Context(), loc.OrganizationID, auth.GetUserID(c), "forbidden: permission denied"); err != nil {
 		response.Error(c, err)
-		return
-	}
-	allowed, err := h.orgService.IsManagerOrAbove(c.Request.Context(), loc.OrganizationID, auth.GetUserID(c))
-	if err != nil {
-		response.Error(c, err)
-		return
-	}
-	if !allowed {
-		c.JSON(http.StatusForbidden, gin.H{"error": "forbidden: permission denied"})
 		return
 	}
 
@@ -260,8 +227,7 @@ func (h *Handler) Delete(c *gin.Context) {
 // UploadCover uploads a cover image for a resource.
 func (h *Handler) UploadCover(c *gin.Context) {
 	var uri request.ByIDRequest
-	if err := c.ShouldBindUri(&uri); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request", "details": err.Error()})
+	if !request.BindURI(c, &uri) {
 		return
 	}
 
@@ -274,17 +240,8 @@ func (h *Handler) UploadCover(c *gin.Context) {
 
 	// Permission check: Location manager or above
 	currentUserID := auth.GetUserID(c)
-	if err := h.locService.CheckOperation(c.Request.Context(), res.LocationID, auth.GetUserID(c)); err != nil {
+	if err := h.locService.RequireLocationManager(c.Request.Context(), res.LocationID, currentUserID, "forbidden: you do not have permission to upload cover for this resource"); err != nil {
 		response.Error(c, err)
-		return
-	}
-	allowed, err := h.locService.IsLocationManagerOrAbove(c.Request.Context(), res.LocationID, currentUserID)
-	if err != nil {
-		response.Error(c, err)
-		return
-	}
-	if !allowed {
-		c.JSON(http.StatusForbidden, gin.H{"error": "forbidden: you do not have permission to upload cover for this resource"})
 		return
 	}
 
@@ -301,8 +258,7 @@ func (h *Handler) UploadCover(c *gin.Context) {
 // RemoveCover removes the cover image from a resource.
 func (h *Handler) RemoveCover(c *gin.Context) {
 	var uri request.ByIDRequest
-	if err := c.ShouldBindUri(&uri); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request", "details": err.Error()})
+	if !request.BindURI(c, &uri) {
 		return
 	}
 
@@ -315,17 +271,8 @@ func (h *Handler) RemoveCover(c *gin.Context) {
 
 	// Permission check: Location manager or above
 	currentUserID := auth.GetUserID(c)
-	if err := h.locService.CheckOperation(c.Request.Context(), res.LocationID, auth.GetUserID(c)); err != nil {
+	if err := h.locService.RequireLocationManager(c.Request.Context(), res.LocationID, currentUserID, "forbidden: you do not have permission to remove cover for this resource"); err != nil {
 		response.Error(c, err)
-		return
-	}
-	allowed, err := h.locService.IsLocationManagerOrAbove(c.Request.Context(), res.LocationID, currentUserID)
-	if err != nil {
-		response.Error(c, err)
-		return
-	}
-	if !allowed {
-		c.JSON(http.StatusForbidden, gin.H{"error": "forbidden: you do not have permission to remove cover for this resource"})
 		return
 	}
 
@@ -339,8 +286,7 @@ func (h *Handler) RemoveCover(c *gin.Context) {
 
 func (h *Handler) GetAvailability(c *gin.Context) {
 	var uri request.ByIDRequest
-	if err := c.ShouldBindUri(&uri); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request", "details": err.Error()})
+	if !request.BindURI(c, &uri) {
 		return
 	}
 

@@ -26,8 +26,7 @@ func NewHandler(service pickup.Service, userService user.Service) *Handler {
 
 func (h *Handler) CreateGroup(c *gin.Context) {
 	var body CreateGroupBody
-	if err := c.ShouldBindJSON(&body); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request body", "details": err.Error()})
+	if !request.BindJSON(c, &body) {
 		return
 	}
 
@@ -37,11 +36,6 @@ func (h *Handler) CreateGroup(c *gin.Context) {
 	}
 
 	userID := auth.GetUserID(c)
-	if userID == "" {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
-		return
-	}
-
 	enable := true
 	if body.Enable != nil {
 		enable = *body.Enable
@@ -76,8 +70,7 @@ func (h *Handler) CreateGroup(c *gin.Context) {
 // No authentication is required and only a trimmed set of fields is exposed.
 func (h *Handler) ListGroups(c *gin.Context) {
 	var req ListGroupsRequest
-	if err := c.ShouldBindQuery(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid query parameters", "details": err.Error()})
+	if !request.BindQuery(c, &req) {
 		return
 	}
 	if err := req.Validate(); err != nil {
@@ -123,14 +116,12 @@ func (h *Handler) ListGroups(c *gin.Context) {
 // included in the trimmed shape.
 func (h *Handler) ListGroupsByHost(c *gin.Context) {
 	var uri HostGroupsURI
-	if err := c.ShouldBindUri(&uri); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request", "details": err.Error()})
+	if !request.BindURI(c, &uri) {
 		return
 	}
 
 	var req ListGroupsRequest
-	if err := c.ShouldBindQuery(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid query parameters", "details": err.Error()})
+	if !request.BindQuery(c, &req) {
 		return
 	}
 	if err := req.Validate(); err != nil {
@@ -143,18 +134,7 @@ func (h *Handler) ListGroupsByHost(c *gin.Context) {
 	// Hidden (enable=false) groups are only listed for the host themself and
 	// system admins; everyone else, including anonymous callers, never sees them.
 	viewerID := auth.GetUserID(c)
-	canSeeHidden := false
-	if viewerID != "" {
-		canSeeHidden = viewerID == uri.HostID
-		if !canSeeHidden {
-			u, err := h.userService.GetByID(c.Request.Context(), viewerID)
-			if err != nil {
-				response.Error(c, err)
-				return
-			}
-			canSeeHidden = u.IsSystemAdmin
-		}
-	}
+	canSeeHidden := viewerID != "" && (viewerID == uri.HostID || auth.IsSystemAdmin(c))
 
 	filter := pickup.GroupFilter{
 		Status:        req.Status,
@@ -191,14 +171,12 @@ func (h *Handler) ListGroupsByHost(c *gin.Context) {
 
 func (h *Handler) GetGroup(c *gin.Context) {
 	var uri request.ByIDRequest
-	if err := c.ShouldBindUri(&uri); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request", "details": err.Error()})
+	if !request.BindURI(c, &uri) {
 		return
 	}
 
 	var query GetGroupQuery
-	if err := c.ShouldBindQuery(&query); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid query parameters", "details": err.Error()})
+	if !request.BindQuery(c, &query) {
 		return
 	}
 
@@ -210,7 +188,7 @@ func (h *Handler) GetGroup(c *gin.Context) {
 
 	var orders []*pickup.PickupOrder
 	if query.IncludeOrders {
-		orders, err = h.service.GetOrdersByGroupID(c.Request.Context(), uri.ID, auth.GetUserID(c))
+		orders, err = h.service.GetOrdersByGroupID(c.Request.Context(), uri.ID, auth.GetUserID(c), auth.IsSystemAdmin(c))
 		if err != nil {
 			response.Error(c, err)
 			return
@@ -219,7 +197,7 @@ func (h *Handler) GetGroup(c *gin.Context) {
 
 	// The host's phone is private: only the host, admins, and confirmed
 	// participants may see it.
-	canSeePhone, err := h.service.CanViewHostPhone(c.Request.Context(), group, auth.GetUserID(c))
+	canSeePhone, err := h.service.CanViewHostPhone(c.Request.Context(), group, auth.GetUserID(c), auth.IsSystemAdmin(c))
 	if err != nil {
 		response.Error(c, err)
 		return
@@ -235,26 +213,14 @@ func (h *Handler) GetGroup(c *gin.Context) {
 
 func (h *Handler) UpdateGroup(c *gin.Context) {
 	var uri request.ByIDRequest
-	if err := c.ShouldBindUri(&uri); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request", "details": err.Error()})
+	if !request.BindURI(c, &uri) {
 		return
 	}
 
 	userID := auth.GetUserID(c)
-	if userID == "" {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
-		return
-	}
-
-	u, err := h.userService.GetByID(c.Request.Context(), userID)
-	if err != nil {
-		response.Error(c, err)
-		return
-	}
-
 	// System admins may update any group; its creator may update only their
 	// own groups.
-	if !u.IsSystemAdmin {
+	if !auth.IsSystemAdmin(c) {
 		group, err := h.service.GetGroupByID(c.Request.Context(), uri.ID)
 		if err != nil {
 			response.Error(c, err)
@@ -267,8 +233,7 @@ func (h *Handler) UpdateGroup(c *gin.Context) {
 	}
 
 	var body UpdateGroupBody
-	if err := c.ShouldBindJSON(&body); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request body", "details": err.Error()})
+	if !request.BindJSON(c, &body) {
 		return
 	}
 
@@ -299,24 +264,11 @@ func (h *Handler) UpdateGroup(c *gin.Context) {
 
 func (h *Handler) DeleteGroup(c *gin.Context) {
 	var uri request.ByIDRequest
-	if err := c.ShouldBindUri(&uri); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request", "details": err.Error()})
+	if !request.BindURI(c, &uri) {
 		return
 	}
 
-	userID := auth.GetUserID(c)
-	if userID == "" {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
-		return
-	}
-
-	u, err := h.userService.GetByID(c.Request.Context(), userID)
-	if err != nil {
-		response.Error(c, err)
-		return
-	}
-
-	if !u.IsSystemAdmin {
+	if !auth.IsSystemAdmin(c) {
 		c.JSON(http.StatusForbidden, gin.H{"error": "only system admin can delete pickup groups"})
 		return
 	}
@@ -326,22 +278,16 @@ func (h *Handler) DeleteGroup(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusNoContent, nil)
+	c.Status(http.StatusNoContent)
 }
 
 func (h *Handler) CreateOrder(c *gin.Context) {
 	var uri request.ByIDRequest
-	if err := c.ShouldBindUri(&uri); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request", "details": err.Error()})
+	if !request.BindURI(c, &uri) {
 		return
 	}
 
 	userID := auth.GetUserID(c)
-	if userID == "" {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
-		return
-	}
-
 	u, err := h.userService.GetByID(c.Request.Context(), userID)
 	if err != nil {
 		response.Error(c, err)
@@ -375,32 +321,22 @@ func (h *Handler) CreateOrder(c *gin.Context) {
 
 func (h *Handler) UpdateOrder(c *gin.Context) {
 	var uri request.ByIDRequest
-	if err := c.ShouldBindUri(&uri); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request", "details": err.Error()})
+	if !request.BindURI(c, &uri) {
 		return
 	}
 
 	var body UpdateOrderBody
-	if err := c.ShouldBindJSON(&body); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request body", "details": err.Error()})
+	if !request.BindJSON(c, &body) {
 		return
 	}
 
 	userID := auth.GetUserID(c)
-	if userID == "" {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
-		return
-	}
-
 	if body.Status == nil && body.PaymentStatus == nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "status or payment_status is required"})
 		return
 	}
 
-	isSysAdmin := false
-	if u, err := h.userService.GetByID(c.Request.Context(), userID); err == nil {
-		isSysAdmin = u.IsSystemAdmin
-	}
+	isSysAdmin := auth.IsSystemAdmin(c)
 
 	req := pickup.UpdateOrderRequest{
 		Status:        body.Status,
@@ -421,23 +357,13 @@ func (h *Handler) UpdateOrder(c *gin.Context) {
 // (PATCH with status=rejected).
 func (h *Handler) DeleteOrder(c *gin.Context) {
 	var uri request.ByIDRequest
-	if err := c.ShouldBindUri(&uri); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request", "details": err.Error()})
+	if !request.BindURI(c, &uri) {
 		return
 	}
 
-	userID := auth.GetUserID(c)
-	if userID == "" {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
-		return
-	}
+	isSysAdmin := auth.IsSystemAdmin(c)
 
-	isSysAdmin := false
-	if u, err := h.userService.GetByID(c.Request.Context(), userID); err == nil {
-		isSysAdmin = u.IsSystemAdmin
-	}
-
-	if err := h.service.DeleteOrder(c.Request.Context(), uri.ID, userID, isSysAdmin); err != nil {
+	if err := h.service.DeleteOrder(c.Request.Context(), uri.ID, isSysAdmin); err != nil {
 		response.Error(c, err)
 		return
 	}
@@ -447,32 +373,12 @@ func (h *Handler) DeleteOrder(c *gin.Context) {
 
 func (h *Handler) ListGroupOrders(c *gin.Context) {
 	var uri request.ByIDRequest
-	if err := c.ShouldBindUri(&uri); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request", "details": err.Error()})
+	if !request.BindURI(c, &uri) {
 		return
 	}
 
 	userID := auth.GetUserID(c)
-	if userID == "" {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
-		return
-	}
-
-	group, err := h.service.GetGroupByID(c.Request.Context(), uri.ID)
-	if err != nil {
-		response.Error(c, err)
-		return
-	}
-
-	if group.HostID != userID {
-		// System admins may also review enrollments.
-		if u, err := h.userService.GetByID(c.Request.Context(), userID); err != nil || !u.IsSystemAdmin {
-			c.JSON(http.StatusForbidden, gin.H{"error": "only group host or system admin can view orders"})
-			return
-		}
-	}
-
-	orders, err := h.service.GetOrdersByGroupID(c.Request.Context(), uri.ID, auth.GetUserID(c))
+	orders, err := h.service.GetOrdersByGroupID(c.Request.Context(), uri.ID, userID, auth.IsSystemAdmin(c))
 	if err != nil {
 		response.Error(c, err)
 		return
@@ -488,11 +394,6 @@ func (h *Handler) ListGroupOrders(c *gin.Context) {
 
 func (h *Handler) ListMyOrders(c *gin.Context) {
 	userID := auth.GetUserID(c)
-	if userID == "" {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
-		return
-	}
-
 	orders, err := h.service.GetOrdersByUserID(c.Request.Context(), userID)
 	if err != nil {
 		response.Error(c, err)
@@ -512,23 +413,16 @@ func (h *Handler) ListMyOrders(c *gin.Context) {
 // skill level. The whole party must fit within the group's remaining capacity.
 func (h *Handler) CreatePartyOrder(c *gin.Context) {
 	var uri request.ByIDRequest
-	if err := c.ShouldBindUri(&uri); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request", "details": err.Error()})
+	if !request.BindURI(c, &uri) {
 		return
 	}
 
 	var body CreatePartyOrderBody
-	if err := c.ShouldBindJSON(&body); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request body", "details": err.Error()})
+	if !request.BindJSON(c, &body) {
 		return
 	}
 
 	userID := auth.GetUserID(c)
-	if userID == "" {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
-		return
-	}
-
 	u, err := h.userService.GetByID(c.Request.Context(), userID)
 	if err != nil {
 		response.Error(c, err)
@@ -565,8 +459,7 @@ func (h *Handler) CreatePartyOrder(c *gin.Context) {
 // of a group's enrolled seats. Public: it exposes counts only, never identities.
 func (h *Handler) GetParticipantStats(c *gin.Context) {
 	var uri request.ByIDRequest
-	if err := c.ShouldBindUri(&uri); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request", "details": err.Error()})
+	if !request.BindURI(c, &uri) {
 		return
 	}
 

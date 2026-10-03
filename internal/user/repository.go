@@ -25,11 +25,12 @@ type Repository interface {
 	DeleteSkillLevel(ctx context.Context, userID, sportID string) error
 	GetByEmail(ctx context.Context, email string) (*User, error)
 	GetByID(ctx context.Context, id string) (*User, error)
+	GetAccount(ctx context.Context, id string) (*Account, error)
 	Create(ctx context.Context, u *User) error
 	UpdateLastLogin(ctx context.Context, id string, t time.Time) error
 	List(ctx context.Context, filter UserFilter) ([]*User, int, error)
 	Update(ctx context.Context, id string, req UpdateUserRequest) error
-	UpdateAvatar(ctx context.Context, id string, avatar *string) error
+	SetAvatar(ctx context.Context, id string, avatar *string) (*string, error)
 	Delete(ctx context.Context, id string) error
 	// CountActiveSystemAdminsExcept counts active system admins other than excludeID.
 	CountActiveSystemAdminsExcept(ctx context.Context, excludeID string) (int, error)
@@ -52,13 +53,15 @@ func NewPgxRepository(pool *pgxpool.Pool) Repository {
 	}
 }
 
-func (r *pgxUserRepository) GetByEmail(ctx context.Context, email string) (*User, error) {
-	psql := squirrel.StatementBuilder.PlaceholderFormat(squirrel.Dollar)
-	query, args, err := psql.Select(
-		"u.id", "u.email", "u.username", "u.password_hash", "u.display_name", "u.phone", "u.gender", "u.birth_date", "u.line_id", "u.avatar", "u.created_at",
-		"u.last_login_at", "u.is_active", "u.is_system_admin",
-		"EXISTS(SELECT 1 FROM public.pickup_hosts ph WHERE ph.user_id = u.id) AS is_pickup_host",
-		`COALESCE(
+// userColumns are the user columns shared by every user query; scanUser scans them in this order.
+var userColumns = []string{
+	"u.id", "u.email", "u.username", "u.password_hash", "u.display_name", "u.phone", "u.gender", "u.birth_date", "u.line_id", "u.avatar", "u.created_at",
+	"u.last_login_at", "u.is_active", "u.is_system_admin",
+	"EXISTS(SELECT 1 FROM public.pickup_hosts ph WHERE ph.user_id = u.id) AS is_pickup_host",
+}
+
+// userOrganizationsColumn aggregates the user's active organizations and roles as JSON.
+const userOrganizationsColumn = `COALESCE(
 				(
 					SELECT json_agg(json_build_object(
 						'id', o.id,
@@ -73,121 +76,70 @@ func (r *pgxUserRepository) GetByEmail(ctx context.Context, email string) (*User
 					)) AND o.is_active = true
 				),
 				'[]'::json
-			) AS organizations`,
-	).
-		From("public.users u").
-		Where(squirrel.Eq{"u.email": email}).
-		ToSql()
-	if err != nil {
-		return nil, fmt.Errorf("build get user by email query failed: %w", err)
-	}
+			) AS organizations`
 
-	row := r.pool.QueryRow(ctx, query, args...)
-
+// scanUser scans a row selected with userColumns, then any extra columns, then userOrganizationsColumn.
+func scanUser(row pgx.Row, extra ...any) (*User, error) {
 	var u User
 	var orgsJSON []byte
-
-	if err := row.Scan(
-		&u.ID,
-		&u.Email,
-		&u.Username,
-		&u.PasswordHash,
-		&u.DisplayName,
-		&u.Phone,
-		&u.Gender,
-		&u.BirthDate,
-		&u.LineID,
-		&u.Avatar,
-		&u.CreatedAt,
-		&u.LastLoginAt,
-		&u.IsActive,
-		&u.IsSystemAdmin,
-		&u.IsPickupHost,
-		&orgsJSON, // Scan JSON for organizations
-	); err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, ErrNotFound
-		}
-		return nil, fmt.Errorf("GetByEmail query failed: %w", err)
+	dest := []any{
+		&u.ID, &u.Email, &u.Username, &u.PasswordHash, &u.DisplayName, &u.Phone, &u.Gender, &u.BirthDate,
+		&u.LineID, &u.Avatar, &u.CreatedAt, &u.LastLoginAt, &u.IsActive, &u.IsSystemAdmin, &u.IsPickupHost,
+	}
+	dest = append(dest, extra...)
+	dest = append(dest, &orgsJSON)
+	if err := row.Scan(dest...); err != nil {
+		return nil, err
 	}
 
-	// Try parse the organizations JSON into the slice
+	// A malformed organizations value must not fail the whole read.
 	if len(orgsJSON) > 0 {
 		if err := json.Unmarshal(orgsJSON, &u.Organizations); err != nil {
 			log.Printf("warning: failed to unmarshal organizations for user %s: %v", u.ID, err)
 		}
 	}
-
 	return &u, nil
 }
 
-func (r *pgxUserRepository) GetByID(ctx context.Context, id string) (*User, error) {
-	psql := squirrel.StatementBuilder.PlaceholderFormat(squirrel.Dollar)
-	query, args, err := psql.Select(
-		"u.id", "u.email", "u.username", "u.password_hash", "u.display_name", "u.phone", "u.gender", "u.birth_date", "u.line_id", "u.avatar", "u.created_at",
-		"u.last_login_at", "u.is_active", "u.is_system_admin",
-		"EXISTS(SELECT 1 FROM public.pickup_hosts ph WHERE ph.user_id = u.id) AS is_pickup_host",
-		`COALESCE(
-				(
-					SELECT json_agg(json_build_object(
-						'id', o.id,
-						'name', o.name,
-						'owner', (o.owner_id = u.id),
-						'organization_manager', EXISTS(SELECT 1 FROM public.organization_managers om WHERE om.organization_id = o.id AND om.user_id = u.id),
-						'location_manager', COALESCE((SELECT json_agg(lm.location_id) FROM public.location_managers lm WHERE lm.organization_id = o.id AND lm.user_id = u.id), '[]'::json)
-					))
-					FROM public.organizations o
-					WHERE (o.owner_id = u.id OR o.id IN (
-						SELECT organization_id FROM public.organization_members WHERE user_id = u.id
-					)) AND o.is_active = true
-				),
-				'[]'::json
-			) AS organizations`,
-	).
-		From("public.users u").
-		Where(squirrel.Eq{"u.id": id}).
-		ToSql()
+// GetAccount reads only the account flags, skipping the organization aggregation GetByID performs.
+func (r *pgxUserRepository) GetAccount(ctx context.Context, id string) (*Account, error) {
+	var a Account
+	err := r.pool.QueryRow(ctx, "SELECT is_active, is_system_admin FROM public.users WHERE id = $1", id).Scan(&a.IsActive, &a.IsSystemAdmin)
 	if err != nil {
-		return nil, fmt.Errorf("build get user by id query failed: %w", err)
-	}
-
-	row := r.pool.QueryRow(ctx, query, args...)
-
-	var u User
-	var orgsJSON []byte
-
-	if err := row.Scan(
-		&u.ID,
-		&u.Email,
-		&u.Username,
-		&u.PasswordHash,
-		&u.DisplayName,
-		&u.Phone,
-		&u.Gender,
-		&u.BirthDate,
-		&u.LineID,
-		&u.Avatar,
-		&u.CreatedAt,
-		&u.LastLoginAt,
-		&u.IsActive,
-		&u.IsSystemAdmin,
-		&u.IsPickupHost,
-		&orgsJSON, // Scan JSON for organizations
-	); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, ErrNotFound
 		}
-		return nil, fmt.Errorf("GetByID query failed: %w", err)
+		return nil, fmt.Errorf("GetAccount query failed: %w", err)
+	}
+	return &a, nil
+}
+
+func (r *pgxUserRepository) getBy(ctx context.Context, column string, value any, caller string) (*User, error) {
+	psql := squirrel.StatementBuilder.PlaceholderFormat(squirrel.Dollar)
+	query, args, err := psql.Select(append(append([]string{}, userColumns...), userOrganizationsColumn)...).
+		From("public.users u").
+		Where(squirrel.Eq{column: value}).
+		ToSql()
+	if err != nil {
+		return nil, fmt.Errorf("build %s query failed: %w", caller, err)
 	}
 
-	// Try parse the organizations JSON into the slice
-	if len(orgsJSON) > 0 {
-		if err := json.Unmarshal(orgsJSON, &u.Organizations); err != nil {
-			log.Printf("warning: failed to unmarshal organizations for user %s: %v", u.ID, err)
+	u, err := scanUser(r.pool.QueryRow(ctx, query, args...))
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, ErrNotFound
 		}
+		return nil, fmt.Errorf("%s query failed: %w", caller, err)
 	}
+	return u, nil
+}
 
-	return &u, nil
+func (r *pgxUserRepository) GetByEmail(ctx context.Context, email string) (*User, error) {
+	return r.getBy(ctx, "u.email", email, "GetByEmail")
+}
+
+func (r *pgxUserRepository) GetByID(ctx context.Context, id string) (*User, error) {
+	return r.getBy(ctx, "u.id", id, "GetByID")
 }
 
 func (r *pgxUserRepository) Create(ctx context.Context, u *User) error {
@@ -239,28 +191,8 @@ func (r *pgxUserRepository) UpdateLastLogin(ctx context.Context, id string, t ti
 
 func (r *pgxUserRepository) List(ctx context.Context, filter UserFilter) ([]*User, int, error) {
 	psql := squirrel.StatementBuilder.PlaceholderFormat(squirrel.Dollar)
-	queryBuilder := psql.Select(
-		"u.id", "u.email", "u.username", "u.password_hash", "u.display_name", "u.phone", "u.gender", "u.birth_date", "u.line_id", "u.avatar", "u.created_at",
-		"u.last_login_at", "u.is_active", "u.is_system_admin",
-		"EXISTS(SELECT 1 FROM public.pickup_hosts ph WHERE ph.user_id = u.id) AS is_pickup_host",
-		"count(*) OVER() AS total_count",
-		`COALESCE(
-				(
-					SELECT json_agg(json_build_object(
-						'id', o.id,
-						'name', o.name,
-						'owner', (o.owner_id = u.id),
-						'organization_manager', EXISTS(SELECT 1 FROM public.organization_managers om WHERE om.organization_id = o.id AND om.user_id = u.id),
-						'location_manager', COALESCE((SELECT json_agg(lm.location_id) FROM public.location_managers lm WHERE lm.organization_id = o.id AND lm.user_id = u.id), '[]'::json)
-					))
-					FROM public.organizations o
-					WHERE (o.owner_id = u.id OR o.id IN (
-						SELECT organization_id FROM public.organization_members WHERE user_id = u.id
-					)) AND o.is_active = true
-				),
-				'[]'::json
-			) AS organizations`,
-	).From("public.users u")
+	columns := append(append([]string{}, userColumns...), "count(*) OVER() AS total_count", userOrganizationsColumn)
+	queryBuilder := psql.Select(columns...).From("public.users u")
 
 	// Dynamic filtering
 	if len(filter.IDs) > 0 {
@@ -295,81 +227,13 @@ func (r *pgxUserRepository) List(ctx context.Context, filter UserFilter) ([]*Use
 
 	queryBuilder = queryBuilder.OrderBy(orderBy+" "+orderDir, "u.id ASC")
 
-	// Pagination
-	if filter.Page < 1 {
-		filter.Page = 1
-	}
-	if filter.PageSize < 1 {
-		filter.PageSize = 20
-	}
-	offset := (filter.Page - 1) * filter.PageSize
-
-	queryBuilder = queryBuilder.Limit(uint64(filter.PageSize)).Offset(uint64(offset))
-
-	sql, args, err := queryBuilder.ToSql()
-	if err != nil {
-		return nil, 0, fmt.Errorf("build list users query failed: %w", err)
-	}
-
-	rows, err := r.pool.Query(ctx, sql, args...)
-	if err != nil {
-		return nil, 0, fmt.Errorf("list users failed: %w", err)
-	}
-	defer rows.Close()
-
-	var users []*User
-	var total int
-
-	for rows.Next() {
-		var u User
-		var orgsJSON []byte
-
-		if err := rows.Scan(
-			&u.ID,
-			&u.Email,
-			&u.Username,
-			&u.PasswordHash,
-			&u.DisplayName,
-			&u.Phone,
-			&u.Gender,
-			&u.BirthDate,
-			&u.LineID,
-			&u.Avatar,
-			&u.CreatedAt,
-			&u.LastLoginAt,
-			&u.IsActive,
-			&u.IsSystemAdmin,
-			&u.IsPickupHost,
-			&total,    // Scan the window function result
-			&orgsJSON, // Scan the JSON result for organizations
-		); err != nil {
-			return nil, 0, fmt.Errorf("scan user failed: %w", err)
-		}
-
-		// Parse the organizations JSON into the slice
-		// pgx can actually scan directly into structs if setup correctly,
-		// but using json.Unmarshal is safer and simpler for this specific case without extra config.
-		if len(orgsJSON) > 0 {
-			if err := json.Unmarshal(orgsJSON, &u.Organizations); err != nil {
-				// Log the error but continue; we don't want one bad record to fail the whole list.
-				log.Printf("warning: failed to unmarshal organizations for user %s: %v", u.ID, err)
-			}
-		}
-
-		users = append(users, &u)
-	}
-
-	if err := rows.Err(); err != nil {
-		return nil, 0, err
-	}
-	rows.Close()
-	if total == 0 {
-		total, err = pagination.Count(ctx, r.pool, queryBuilder)
+	return pagination.Collect(ctx, r.pool, queryBuilder, filter.Page, filter.PageSize, "user", func(rows pgx.Rows, total *int) (*User, error) {
+		u, err := scanUser(rows, total)
 		if err != nil {
-			return nil, 0, err
+			return nil, fmt.Errorf("scan user failed: %w", err)
 		}
-	}
-	return users, total, nil
+		return u, nil
+	})
 }
 
 func (r *pgxUserRepository) Update(ctx context.Context, id string, req UpdateUserRequest) error {
@@ -429,15 +293,22 @@ func (r *pgxUserRepository) Update(ctx context.Context, id string, req UpdateUse
 	return nil
 }
 
-func (r *pgxUserRepository) UpdateAvatar(ctx context.Context, id string, avatar *string) error {
-	ct, err := r.pool.Exec(ctx, "UPDATE public.users SET avatar = $2 WHERE id = $1", id, avatar)
+// SetAvatar replaces only the avatar reference and returns the previous one.
+func (r *pgxUserRepository) SetAvatar(ctx context.Context, id string, avatar *string) (*string, error) {
+	var old *string
+	err := r.pool.QueryRow(ctx,
+		`UPDATE public.users t SET avatar = $2
+		 FROM (SELECT avatar AS old_avatar FROM public.users WHERE id = $1 FOR UPDATE) o
+		 WHERE t.id = $1
+		 RETURNING o.old_avatar`,
+		id, avatar).Scan(&old)
 	if err != nil {
-		return fmt.Errorf("update avatar failed: %w", err)
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, ErrNotFound
+		}
+		return nil, fmt.Errorf("set avatar failed: %w", err)
 	}
-	if ct.RowsAffected() == 0 {
-		return ErrNotFound
-	}
-	return nil
+	return old, nil
 }
 
 func (r *pgxUserRepository) IsPickupHost(ctx context.Context, userID string) (bool, error) {

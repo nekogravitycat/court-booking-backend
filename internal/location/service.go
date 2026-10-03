@@ -2,7 +2,6 @@ package location
 
 import (
 	"context"
-	"log"
 	"strings"
 	"time"
 
@@ -72,8 +71,10 @@ type Service interface {
 	// Permission methods
 	IsOrganizationManagerOrAbove(ctx context.Context, locationID string, userID string) (bool, error)
 	IsLocationManagerOrAbove(ctx context.Context, locationID string, userID string) (bool, error)
-	// Utility methods
-	GetOrganizationID(ctx context.Context, locationID string) (string, error)
+	// RequireOrganizationManager and RequireLocationManager gate an operation: CheckOperation,
+	// then the role check, failing with a 403 carrying forbiddenMsg.
+	RequireOrganizationManager(ctx context.Context, locationID, userID, forbiddenMsg string) error
+	RequireLocationManager(ctx context.Context, locationID, userID, forbiddenMsg string) error
 }
 
 type service struct {
@@ -262,9 +263,7 @@ func (s *service) UpdateCover(ctx context.Context, id string, fileID string) err
 		return err
 	}
 
-	if oldCover != nil && *oldCover != "" && *oldCover != fileID {
-		s.deleteFile(ctx, *oldCover)
-	}
+	file.ReleaseReplaced(ctx, s.fileService, oldCover, fileID)
 	return nil
 }
 
@@ -276,17 +275,8 @@ func (s *service) RemoveCover(ctx context.Context, id string) error {
 		return err
 	}
 
-	if oldCover != nil && *oldCover != "" {
-		s.deleteFile(ctx, *oldCover)
-	}
+	file.ReleaseReplaced(ctx, s.fileService, oldCover, "")
 	return nil
-}
-
-// deleteFile removes an orphaned file on a best-effort basis.
-func (s *service) deleteFile(ctx context.Context, fileID string) {
-	if err := s.fileService.Delete(ctx, fileID); err != nil {
-		log.Printf("warning: failed to delete file %s: %v", fileID, err)
-	}
 }
 
 func (s *service) Delete(ctx context.Context, id string) error {
@@ -301,9 +291,7 @@ func (s *service) Delete(ctx context.Context, id string) error {
 	}
 
 	// Clean up cover file
-	if loc.Cover != nil && *loc.Cover != "" {
-		_ = s.fileService.Delete(ctx, *loc.Cover)
-	}
+	file.ReleaseReplaced(ctx, s.fileService, loc.Cover, "")
 
 	return nil
 }
@@ -365,11 +353,11 @@ func (s *service) IsOrganizationManagerOrAbove(ctx context.Context, locationID s
 	}
 
 	// 1. Check System Admin
-	u, err := s.userService.GetByID(ctx, userID)
+	account, err := s.userService.GetAccount(ctx, userID)
 	if err != nil {
 		return false, err
 	}
-	if u.IsSystemAdmin {
+	if account.IsSystemAdmin {
 		return true, nil
 	}
 
@@ -403,18 +391,6 @@ func (s *service) IsLocationManagerOrAbove(ctx context.Context, locationID strin
 		return false, err
 	}
 	return isLocMgr, nil
-}
-
-// ------------------------
-//    Utility methods
-// ------------------------
-
-func (s *service) GetOrganizationID(ctx context.Context, locationID string) (string, error) {
-	// Verify location exists
-	if _, err := s.repo.GetByID(ctx, locationID); err != nil {
-		return "", err
-	}
-	return s.repo.GetOrganizationID(ctx, locationID)
 }
 
 // applyParking sets or clears the location's parking lot. The name, latitude and
@@ -461,4 +437,30 @@ func (s *service) CheckOperation(ctx context.Context, locationID, userID string)
 		return err
 	}
 	return s.orgService.CheckOperation(ctx, orgID, userID)
+}
+
+// RequireOrganizationManager fails unless the location's organization accepts new operations and
+// the user is an organization manager, owner or SysAdmin.
+func (s *service) RequireOrganizationManager(ctx context.Context, locationID, userID, forbiddenMsg string) error {
+	return s.require(ctx, locationID, userID, forbiddenMsg, s.IsOrganizationManagerOrAbove)
+}
+
+// RequireLocationManager fails unless the location's organization accepts new operations and
+// the user manages the location or is an organization manager, owner or SysAdmin.
+func (s *service) RequireLocationManager(ctx context.Context, locationID, userID, forbiddenMsg string) error {
+	return s.require(ctx, locationID, userID, forbiddenMsg, s.IsLocationManagerOrAbove)
+}
+
+func (s *service) require(ctx context.Context, locationID, userID, forbiddenMsg string, check func(context.Context, string, string) (bool, error)) error {
+	if err := s.CheckOperation(ctx, locationID, userID); err != nil {
+		return err
+	}
+	allowed, err := check(ctx, locationID, userID)
+	if err != nil {
+		return err
+	}
+	if !allowed {
+		return apperror.Forbidden(forbiddenMsg)
+	}
+	return nil
 }

@@ -1,5 +1,7 @@
 package apperror
 
+import "net/http"
+
 // AppError is a custom error type that includes an HTTP status code and an optional internal error code.
 type AppError struct {
 	Code    int    // HTTP Status Code (e.g., 400, 404)
@@ -30,4 +32,9 @@ func Wrap(err error, code int, message string) *AppError {
 		Message: message,
 		Err:     err,
 	}
+}
+
+// Forbidden creates a 403 AppError with the given message.
+func Forbidden(message string) *AppError {
+	return New(http.StatusForbidden, message)
 }

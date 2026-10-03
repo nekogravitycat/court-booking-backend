@@ -2,13 +2,11 @@ package favorite
 
 import (
 	"context"
-	"errors"
 	"fmt"
 
 	"github.com/Masterminds/squirrel"
-	"github.com/jackc/pgerrcode"
-	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/nekogravitycat/court-booking-backend/internal/db"
 )
 
 // Repository defines persistence for favorite hosts.
@@ -36,8 +34,7 @@ func (r *pgxRepository) AddFavorite(ctx context.Context, userID, hostID string) 
 		userID, hostID,
 	)
 	if err != nil {
-		var e *pgconn.PgError
-		if errors.As(err, &e) && e.Code == pgerrcode.UniqueViolation {
+		if db.IsUniqueViolation(err) {
 			return ErrAlreadyFavorited
 		}
 		return fmt.Errorf("add favorite failed: %w", err)

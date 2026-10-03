@@ -5,27 +5,18 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/nekogravitycat/court-booking-backend/internal/auth"
-	"github.com/nekogravitycat/court-booking-backend/internal/user"
 )
 
 // RequireSystemAdmin ensures the authenticated user is a system admin.
-// It MUST be used after auth.AuthRequired middleware.
-func RequireSystemAdmin(userService user.Service) gin.HandlerFunc {
+// It MUST be used after auth.AuthRequired middleware, which loads the admin flag.
+func RequireSystemAdmin() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		userID := auth.GetUserID(c)
-		if userID == "" {
+		if auth.GetUserID(c) == "" {
 			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
 			return
 		}
 
-		// Check permissions
-		u, err := userService.GetByID(c.Request.Context(), userID)
-		if err != nil {
-			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "user not found"})
-			return
-		}
-
-		if !u.IsSystemAdmin {
+		if !auth.IsSystemAdmin(c) {
 			c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "forbidden: system admin access required"})
 			return
 		}
