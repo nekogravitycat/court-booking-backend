@@ -53,15 +53,12 @@ func (s *service) CreateGroupSeries(ctx context.Context, req CreateGroupSeriesRe
 	offset := time.Duration(req.RegistrationDeadlineMinutesBeforeStart) * time.Minute
 	groups := make([]*PickupGroup, len(req.Occurrences))
 	for i, o := range req.Occurrences {
-		if !o.EndTime.After(o.StartTime) {
-			return nil, ErrInvalidTimeRange
-		}
 		if o.StartTime.Before(now) || o.StartTime.After(horizon) {
 			return nil, ErrOccurrenceOutsideHorizon
 		}
 		deadline := o.StartTime.Add(-offset)
-		if deadline.Before(now) || deadline.After(o.StartTime) {
-			return nil, ErrInvalidRegistrationDeadline
+		if err := validateGroupTimes(now, o.StartTime, deadline, o.EndTime); err != nil {
+			return nil, err
 		}
 		groups[i] = &PickupGroup{
 			HostID:               req.HostID,

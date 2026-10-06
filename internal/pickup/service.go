@@ -217,12 +217,21 @@ func normalizeSocial(v *string) (*string, error) {
 	return &t, nil
 }
 
-func (s *service) CreateGroup(ctx context.Context, req CreateGroupRequest) (*PickupGroup, error) {
-	if req.RegistrationDeadline.Before(time.Now()) || req.RegistrationDeadline.After(req.StartTime) {
-		return nil, ErrInvalidRegistrationDeadline
+// validateGroupTimes enforces the time rules every new group must meet: the
+// registration deadline lies between now and the start, and the end follows the start.
+func validateGroupTimes(now, start, deadline, end time.Time) error {
+	if deadline.Before(now) || deadline.After(start) {
+		return ErrInvalidRegistrationDeadline
 	}
-	if !req.EndTime.After(req.StartTime) {
-		return nil, ErrInvalidTimeRange
+	if !end.After(start) {
+		return ErrInvalidTimeRange
+	}
+	return nil
+}
+
+func (s *service) CreateGroup(ctx context.Context, req CreateGroupRequest) (*PickupGroup, error) {
+	if err := validateGroupTimes(time.Now(), req.StartTime, req.RegistrationDeadline, req.EndTime); err != nil {
+		return nil, err
 	}
 	social, err := normalizeSocial(req.Social)
 	if err != nil {

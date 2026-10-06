@@ -50,7 +50,7 @@ func ceilToGranularity(t time.Time, tz *time.Location) time.Time {
 // dayRange returns the [start, end) instants of the calendar day of date in tz.
 func dayRange(date time.Time, tz *time.Location) (time.Time, time.Time) {
 	start := time.Date(date.Year(), date.Month(), date.Day(), 0, 0, 0, 0, tz)
-	return start, start.Add(24 * time.Hour)
+	return start, start.AddDate(0, 0, 1)
 }
 
 // ComputeAvailability is the single availability calculation shared by the

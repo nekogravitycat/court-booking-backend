@@ -381,17 +381,22 @@ func validateBookingWindow(loc *location.Location, start, end time.Time) error {
 
 // validateAdvanceWindow enforces the location's booking window: the start must
 // be at least minimum_booking_notice after now and at most
-// maximum_booking_advance after now. It is shared in spirit with
-// ComputeAvailability, which derives the same bounds from bookingWindowBounds.
-// Booking Series do not use it.
+// maximum_booking_advance after now. It uses the same bookingWindowBounds as
+// ComputeAvailability, so the two cannot disagree. start must already be
+// aligned (validateOccurrence). Booking Series do not use it.
 func validateAdvanceWindow(loc *location.Location, start, now time.Time) error {
+	tz, err := loadLocationTZ(loc.Timezone)
+	if err != nil {
+		return err
+	}
 	if start.Before(now) {
 		return ErrStartTimePast
 	}
-	if start.Before(now.Add(noticeOf(loc))) {
+	earliest, latestEnd := bookingWindowBounds(loc, tz, now)
+	if start.Before(earliest) {
 		return ErrTooSoon
 	}
-	if start.After(now.Add(advanceOf(loc))) {
+	if start.After(latestEnd.Add(-BookingSlotGranularity)) {
 		return ErrTooFarInAdvance
 	}
 	return nil
