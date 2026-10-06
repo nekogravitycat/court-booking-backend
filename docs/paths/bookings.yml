@@ -190,3 +190,105 @@ bookingDetail:
         description: Permission denied
       "404":
         description: Not found
+
+createBookingSeries:
+  post:
+    tags:
+      - Bookings
+    summary: "建立季租 (Booking Series)"
+    description: |
+      建立一組固定週期的預約 (3 / 6 / 12 個月)。All-or-nothing：任一 occurrence 衝突或驗證失敗，整個 Series 都不會建立。
+
+      - 每個 occurrence 須符合 Location 營業時間與 30 分鐘對齊，且不得已經開始或位於過去。
+      - 不受一般預約的「最多 10 筆 upcoming」、90 天提前上限與 Location booking window 限制。
+      - 建立的預約狀態皆為 `pending`。
+      - 與既有預約重疊時回傳 `409` 並列出衝突的 occurrences。
+
+      **權限 Access Control**: 沿用一般預約建立權限 (已登入，且組織可營運)。
+    security:
+      - bearerAuth: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: "../components/schemas/booking.yml#/CreateBookingSeriesRequest"
+    responses:
+      "201":
+        description: created
+        content:
+          application/json:
+            schema:
+              $ref: "../components/schemas/booking.yml#/BookingSeriesResponse"
+      "400":
+        description: Invalid input (term, weekdays, time slot, outside opening hours, past start)
+      "404":
+        description: Resource not found
+      "409":
+        description: Conflicting occurrences
+        content:
+          application/json:
+            schema:
+              $ref: "../components/schemas/booking.yml#/BookingSeriesConflictResponse"
+
+bookingSeriesDetail:
+  get:
+    tags:
+      - Bookings
+    summary: "查詢季租"
+    description: |
+      **權限 Access Control**: System Admin、Series 擁有者、或該 Organization 的管理者。
+    security:
+      - bearerAuth: []
+    parameters:
+      - in: path
+        name: id
+        required: true
+        schema:
+          type: string
+          format: uuid
+    responses:
+      "200":
+        description: ok
+        content:
+          application/json:
+            schema:
+              $ref: "../components/schemas/booking.yml#/BookingSeriesResponse"
+      "403":
+        description: Permission denied
+      "404":
+        description: Not found
+
+locationAvailability:
+  get:
+    tags:
+      - Locations
+    summary: "查詢 Location 底下所有場地的可用時段"
+    description: |
+      一次回傳該 Location 所有 Resources 的可預約時段，依 Resource 分組。與 `GET /resources/{id}/availability` 共用同一套計算
+      (Location timezone、營業時間、booking window、30 分鐘對齊、已佔用預約)，同一 Resource 結果一致。
+    security:
+      - bearerAuth: []
+    parameters:
+      - in: path
+        name: id
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - in: query
+        name: date
+        required: false
+        schema:
+          type: string
+          format: date
+        description: 查詢日期 (預設為當日)
+    responses:
+      "200":
+        description: ok
+        content:
+          application/json:
+            schema:
+              $ref: "../components/schemas/booking.yml#/LocationAvailabilityResponse"
+      "404":
+        description: Location not found

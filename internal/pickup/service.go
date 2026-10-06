@@ -7,8 +7,10 @@ import (
 	"log"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/nekogravitycat/court-booking-backend/internal/notification"
+	"github.com/nekogravitycat/court-booking-backend/internal/pkg/request"
 	"github.com/nekogravitycat/court-booking-backend/internal/skilllevel"
 	"github.com/nekogravitycat/court-booking-backend/internal/sports"
 	"github.com/nekogravitycat/court-booking-backend/internal/user"
@@ -25,6 +27,7 @@ type CreateGroupRequest struct {
 	HostID               string
 	Title                string
 	Description          *string
+	Social               *string
 	StartTime            time.Time
 	RegistrationDeadline time.Time
 	EndTime              time.Time
@@ -62,8 +65,10 @@ type UpdateOrderRequest struct {
 }
 
 type UpdateGroupRequest struct {
-	Title                *string
-	Description          *string
+	Title       *string
+	Description *string
+	// Social distinguishes absent (unchanged), null (cleared) and a value.
+	Social               request.Nullable[string]
 	StartTime            *time.Time
 	RegistrationDeadline *time.Time
 	EndTime              *time.Time
@@ -79,6 +84,14 @@ type UpdateGroupRequest struct {
 
 type Service interface {
 	CreateGroup(ctx context.Context, req CreateGroupRequest) (*PickupGroup, error)
+	// CreateGroupSeries creates one independent group per occurrence, all-or-nothing.
+	CreateGroupSeries(ctx context.Context, req CreateGroupSeriesRequest) (*GroupSeries, error)
+	// MarkAbsence marks a confirmed order absent after its group has ended (host or system admin).
+	MarkAbsence(ctx context.Context, groupID, orderID, actorID string, isSysAdmin bool) (*PickupOrder, error)
+	// ClearAbsence revokes an absence mark (host or system admin).
+	ClearAbsence(ctx context.Context, groupID, orderID, actorID string, isSysAdmin bool) error
+	// GetUserStats returns the user's participation, absence count and absence rate.
+	GetUserStats(ctx context.Context, userID string) (*UserPickupStats, error)
 	GetGroupByID(ctx context.Context, id string) (*PickupGroup, error)
 	ListGroups(ctx context.Context, filter GroupFilter) ([]*PickupGroup, int, error)
 	UpdateGroup(ctx context.Context, id string, req UpdateGroupRequest) (*PickupGroup, error)
@@ -189,12 +202,31 @@ func (s *service) notify(ctx context.Context, ns ...*notification.Notification) 
 	}
 }
 
+// normalizeSocial trims the social text; blank becomes nil. It rejects text longer than MaxSocialLength.
+func normalizeSocial(v *string) (*string, error) {
+	if v == nil {
+		return nil, nil
+	}
+	t := strings.TrimSpace(*v)
+	if t == "" {
+		return nil, nil
+	}
+	if utf8.RuneCountInString(t) > MaxSocialLength {
+		return nil, ErrSocialTooLong
+	}
+	return &t, nil
+}
+
 func (s *service) CreateGroup(ctx context.Context, req CreateGroupRequest) (*PickupGroup, error) {
 	if req.RegistrationDeadline.Before(time.Now()) || req.RegistrationDeadline.After(req.StartTime) {
 		return nil, ErrInvalidRegistrationDeadline
 	}
 	if !req.EndTime.After(req.StartTime) {
 		return nil, ErrInvalidTimeRange
+	}
+	social, err := normalizeSocial(req.Social)
+	if err != nil {
+		return nil, err
 	}
 
 	if err := s.validateSportAndSkillRange(ctx, req.SportID, req.MinSkillLevel, req.MaxSkillLevel); err != nil {
@@ -205,6 +237,7 @@ func (s *service) CreateGroup(ctx context.Context, req CreateGroupRequest) (*Pic
 		HostID:               req.HostID,
 		Title:                req.Title,
 		Description:          req.Description,
+		Social:               social,
 		StartTime:            req.StartTime,
 		RegistrationDeadline: req.RegistrationDeadline,
 		EndTime:              req.EndTime,
@@ -300,6 +333,13 @@ func updateGroup(ctx context.Context, repo Repository, previous *PickupGroup, re
 	}
 	if req.Description != nil {
 		group.Description = req.Description
+	}
+	if req.Social.Set {
+		social, err := normalizeSocial(req.Social.Value)
+		if err != nil {
+			return nil, err
+		}
+		group.Social = social
 	}
 	if req.StartTime != nil {
 		group.StartTime = *req.StartTime

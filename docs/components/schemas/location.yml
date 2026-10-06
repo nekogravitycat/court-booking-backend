@@ -60,6 +60,17 @@ LocationResponse:
       description: "URL to cover thumbnail (e.g., /files/{file-id}/thumbnail)"
       example: "/files/a1b2c3d4-e5f6-7890-abcd-ef1234567890/thumbnail"
       nullable: true
+    minimum_booking_notice_minutes:
+      type: integer
+      minimum: 0
+      default: 0
+      description: "一般預約的最短提前時間 (分鐘)。開始時間須 >= 現在 + 此值。不影響 Booking Series。"
+    maximum_booking_advance_days:
+      type: integer
+      minimum: 1
+      maximum: 90
+      default: 90
+      description: "一般預約最遠可預約天數 (上限 90)。minimum_booking_notice_minutes 不得超過此值換算的分鐘數。不影響 Booking Series。"
   required:
     - id
     - organization
@@ -118,6 +129,17 @@ CreateLocationRequest:
       type: number
       minimum: -180
       maximum: 180
+    minimum_booking_notice_minutes:
+      type: integer
+      minimum: 0
+      default: 0
+      description: "一般預約的最短提前時間 (分鐘)。開始時間須 >= 現在 + 此值。不影響 Booking Series。"
+    maximum_booking_advance_days:
+      type: integer
+      minimum: 1
+      maximum: 90
+      default: 90
+      description: "一般預約最遠可預約天數 (上限 90)。minimum_booking_notice_minutes 不得超過此值換算的分鐘數。不影響 Booking Series。"
   required:
     - organization_id
     - name
@@ -167,6 +189,17 @@ UpdateLocationRequest:
     remove_parking:
       type: boolean
       description: "設為 true 會清除整組停車場資訊；不可與 parking_* 欄位同時提供 (400)。三個 parking_* 欄位都不傳則維持不變。"
+    minimum_booking_notice_minutes:
+      type: integer
+      minimum: 0
+      default: 0
+      description: "一般預約的最短提前時間 (分鐘)。開始時間須 >= 現在 + 此值。不影響 Booking Series。"
+    maximum_booking_advance_days:
+      type: integer
+      minimum: 1
+      maximum: 90
+      default: 90
+      description: "一般預約最遠可預約天數 (上限 90)。minimum_booking_notice_minutes 不得超過此值換算的分鐘數。不影響 Booking Series。"
 
 LocationTag:
   type: object

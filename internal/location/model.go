@@ -21,6 +21,7 @@ var (
 	ErrNotOrganizationMember    = apperror.New(http.StatusBadRequest, "user must be a member of the organization first")
 	ErrUserNotFound             = apperror.New(http.StatusNotFound, "user not found")
 	ErrInvalidTimezone          = apperror.New(http.StatusBadRequest, "invalid timezone; expected an IANA name such as Asia/Taipei")
+	ErrInvalidBookingWindow     = apperror.New(http.StatusBadRequest, "minimum_booking_notice_minutes must be >= 0, maximum_booking_advance_days must be between 1 and 90, and the notice must not exceed the advance")
 	ErrInvalidParking           = apperror.New(http.StatusBadRequest, "parking name, latitude and longitude must be provided together and be valid")
 )
 
@@ -47,7 +48,19 @@ type Location struct {
 	ParkingLatitude  *float64
 	ParkingLongitude *float64
 	Cover            *string // ID of cover image file
+
+	// Booking window applied to ordinary (non-series) bookings.
+	MinimumBookingNoticeMinutes int
+	MaximumBookingAdvanceDays   int
 }
+
+// Booking window limits and defaults. MaxBookingAdvanceDays is the system-wide
+// hard cap on how far ahead an ordinary booking may start.
+const (
+	DefaultMinimumBookingNoticeMinutes = 0
+	DefaultMaximumBookingAdvanceDays   = 90
+	MaxBookingAdvanceDays              = 90
+)
 
 // LocationFilter defines parameters for listing locations.
 type LocationFilter struct {

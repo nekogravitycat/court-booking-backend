@@ -45,6 +45,7 @@ func (h *Handler) CreateGroup(c *gin.Context) {
 		HostID:               userID,
 		Title:                body.Title,
 		Description:          body.Description,
+		Social:               body.Social,
 		StartTime:            body.StartTime,
 		RegistrationDeadline: body.RegistrationDeadline,
 		EndTime:              body.EndTime,
@@ -240,6 +241,7 @@ func (h *Handler) UpdateGroup(c *gin.Context) {
 	req := pickup.UpdateGroupRequest{
 		Title:                body.Title,
 		Description:          body.Description,
+		Social:               body.Social,
 		StartTime:            body.StartTime,
 		RegistrationDeadline: body.RegistrationDeadline,
 		EndTime:              body.EndTime,
@@ -470,4 +472,111 @@ func (h *Handler) GetParticipantStats(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, NewParticipantStatsResponse(stats))
+}
+
+// CreateGroupSeries creates one independent pickup group per occurrence in a single transaction.
+func (h *Handler) CreateGroupSeries(c *gin.Context) {
+	var body CreateGroupSeriesBody
+	if !request.BindJSON(c, &body) {
+		return
+	}
+	if err := body.Validate(); err != nil {
+		response.Error(c, err)
+		return
+	}
+
+	enable := true
+	if body.Enable != nil {
+		enable = *body.Enable
+	}
+	occurrences := make([]pickup.GroupOccurrence, len(body.Occurrences))
+	for i, o := range body.Occurrences {
+		occurrences[i] = pickup.GroupOccurrence{StartTime: o.StartTime, EndTime: o.EndTime}
+	}
+
+	series, err := h.service.CreateGroupSeries(c.Request.Context(), pickup.CreateGroupSeriesRequest{
+		HostID:                                 auth.GetUserID(c),
+		Title:                                  body.Title,
+		Description:                            body.Description,
+		Social:                                 body.Social,
+		LocationID:                             body.LocationID,
+		SportID:                                body.SportID,
+		Fee:                                    body.Fee,
+		Capacity:                               body.Capacity,
+		MinSkillLevel:                          body.MinSkillLevel,
+		MaxSkillLevel:                          body.MaxSkillLevel,
+		Enable:                                 enable,
+		RegistrationDeadlineMinutesBeforeStart: *body.RegistrationDeadlineMinutesBeforeStart,
+		Occurrences:                            occurrences,
+	})
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+
+	c.JSON(http.StatusCreated, NewPickupGroupSeriesResponse(series))
+}
+
+// attendanceURI binds the group and order ids of the attendance endpoints.
+type attendanceURI struct {
+	GroupID string `uri:"id" binding:"required,uuid"`
+	OrderID string `uri:"order_id" binding:"required,uuid"`
+}
+
+// MarkAbsence marks a confirmed order absent (host or system admin, after the group ended).
+func (h *Handler) MarkAbsence(c *gin.Context) {
+	var uri attendanceURI
+	if !request.BindURI(c, &uri) {
+		return
+	}
+
+	order, err := h.service.MarkAbsence(c.Request.Context(), uri.GroupID, uri.OrderID, auth.GetUserID(c), auth.IsSystemAdmin(c))
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+
+	c.JSON(http.StatusOK, NewPickupOrderResponse(order))
+}
+
+// ClearAbsence revokes an absence mark (host or system admin).
+func (h *Handler) ClearAbsence(c *gin.Context) {
+	var uri attendanceURI
+	if !request.BindURI(c, &uri) {
+		return
+	}
+
+	if err := h.service.ClearAbsence(c.Request.Context(), uri.GroupID, uri.OrderID, auth.GetUserID(c), auth.IsSystemAdmin(c)); err != nil {
+		response.Error(c, err)
+		return
+	}
+
+	c.Status(http.StatusNoContent)
+}
+
+// GetUserStats returns a user's pickup participation and absence statistics.
+func (h *Handler) GetUserStats(c *gin.Context) {
+	var uri request.ByIDRequest
+	if !request.BindURI(c, &uri) {
+		return
+	}
+
+	// Surfaces a 404 for an unknown user instead of reporting empty statistics.
+	if _, err := h.userService.GetAccount(c.Request.Context(), uri.ID); err != nil {
+		response.Error(c, err)
+		return
+	}
+
+	stats, err := h.service.GetUserStats(c.Request.Context(), uri.ID)
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+
+	c.JSON(http.StatusOK, UserPickupStatsResponse{
+		UserID:                   uri.ID,
+		PickupParticipationCount: stats.ParticipationCount,
+		PickupAbsenceCount:       stats.AbsenceCount,
+		PickupAbsenceRate:        stats.AbsenceRate,
+	})
 }

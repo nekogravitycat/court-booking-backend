@@ -16,6 +16,13 @@ import (
 
 type Repository interface {
 	Create(ctx context.Context, booking *Booking) error
+	// CreateSeries inserts the series and all of its bookings in one transaction.
+	// An overlap with an existing booking yields ErrTimeConflict and nothing is stored.
+	CreateSeries(ctx context.Context, series *BookingSeries, bookings []*Booking) error
+	GetSeriesByID(ctx context.Context, id string) (*BookingSeries, error)
+	// ListOccupiedByLocation returns the non-cancelled bookings of every resource of the location that
+	// overlap [from, to], grouped by resource id, in a single query.
+	ListOccupiedByLocation(ctx context.Context, locationID string, from, to time.Time) (map[string][]*Booking, error)
 	GetByID(ctx context.Context, id string) (*Booking, error)
 	List(ctx context.Context, filter Filter) ([]*Booking, int, error)
 	// ListOccupied returns the start/end/status of the resource's non-cancelled bookings that
@@ -59,6 +66,109 @@ func (r *pgxRepository) Create(ctx context.Context, b *Booking) error {
 	return nil
 }
 
+func (r *pgxRepository) CreateSeries(ctx context.Context, s *BookingSeries, bookings []*Booking) error {
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("begin booking series tx failed: %w", err)
+	}
+	defer tx.Rollback(ctx)
+
+	if err := tx.QueryRow(ctx,
+		"INSERT INTO public.booking_series (user_id, resource_id, term_months) VALUES ($1, $2, $3) RETURNING id, created_at",
+		s.UserID, s.ResourceID, s.TermMonths).Scan(&s.ID, &s.CreatedAt); err != nil {
+		return fmt.Errorf("create booking series failed: %w", err)
+	}
+
+	psql := squirrel.StatementBuilder.PlaceholderFormat(squirrel.Dollar)
+	insert := psql.Insert("public.bookings").
+		Columns("resource_id", "user_id", "start_time", "end_time", "status", "booking_series_id")
+	for _, b := range bookings {
+		insert = insert.Values(b.ResourceID, b.UserID, b.StartTime, b.EndTime, b.Status, s.ID)
+	}
+	query, args, err := insert.Suffix("RETURNING id, created_at, updated_at").ToSql()
+	if err != nil {
+		return fmt.Errorf("build create series bookings query failed: %w", err)
+	}
+	rows, err := tx.Query(ctx, query, args...)
+	if err != nil {
+		return mapOverlapError(fmt.Errorf("create series bookings failed: %w", err))
+	}
+	i := 0
+	for rows.Next() {
+		if err := rows.Scan(&bookings[i].ID, &bookings[i].CreatedAt, &bookings[i].UpdatedAt); err != nil {
+			rows.Close()
+			return fmt.Errorf("scan series booking failed: %w", err)
+		}
+		bookings[i].BookingSeriesID = &s.ID
+		i++
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return mapOverlapError(fmt.Errorf("create series bookings failed: %w", err))
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return mapOverlapError(fmt.Errorf("commit booking series failed: %w", err))
+	}
+	return nil
+}
+
+func (r *pgxRepository) GetSeriesByID(ctx context.Context, id string) (*BookingSeries, error) {
+	var s BookingSeries
+	if err := r.pool.QueryRow(ctx,
+		"SELECT id, user_id, resource_id, term_months, created_at FROM public.booking_series WHERE id = $1", id,
+	).Scan(&s.ID, &s.UserID, &s.ResourceID, &s.TermMonths, &s.CreatedAt); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, ErrSeriesNotFound
+		}
+		return nil, fmt.Errorf("get booking series failed: %w", err)
+	}
+
+	query, args, err := selectBookings().
+		Where(squirrel.Eq{"b.booking_series_id": id}).
+		OrderBy("b.start_time ASC", "b.id ASC").
+		ToSql()
+	if err != nil {
+		return nil, fmt.Errorf("build get series bookings query failed: %w", err)
+	}
+	rows, err := r.pool.Query(ctx, query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("list series bookings failed: %w", err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var b Booking
+		if err := rows.Scan(scanBookingInto(&b)...); err != nil {
+			return nil, fmt.Errorf("scan series booking failed: %w", err)
+		}
+		s.Bookings = append(s.Bookings, &b)
+	}
+	return &s, rows.Err()
+}
+
+func (r *pgxRepository) ListOccupiedByLocation(ctx context.Context, locationID string, from, to time.Time) (map[string][]*Booking, error) {
+	rows, err := r.pool.Query(ctx,
+		`SELECT b.resource_id, b.start_time, b.end_time, b.status
+		 FROM public.bookings b JOIN public.resources r ON r.id = b.resource_id
+		 WHERE r.location_id = $1 AND b.status <> $2 AND b.end_time >= $3 AND b.start_time <= $4
+		 ORDER BY b.start_time`,
+		locationID, StatusCancelled, from, to)
+	if err != nil {
+		return nil, fmt.Errorf("list occupied bookings by location failed: %w", err)
+	}
+	defer rows.Close()
+
+	byResource := make(map[string][]*Booking)
+	for rows.Next() {
+		var b Booking
+		if err := rows.Scan(&b.ResourceID, &b.StartTime, &b.EndTime, &b.Status); err != nil {
+			return nil, fmt.Errorf("scan occupied booking failed: %w", err)
+		}
+		byResource[b.ResourceID] = append(byResource[b.ResourceID], &b)
+	}
+	return byResource, rows.Err()
+}
+
 // mapOverlapError translates the database-level overlap exclusion violation
 // (raised by the bookings_no_overlap constraint) into ErrTimeConflict. This is
 // the final guard against double-booking when concurrent requests both pass the
@@ -76,7 +186,7 @@ func selectBookings(extra ...string) squirrel.SelectBuilder {
 	cols := append([]string{
 		"b.id", "b.resource_id", "r.name", "r.sport_id", "b.user_id", "COALESCE(u.display_name, u.username)",
 		"l.id", "l.name", "o.id", "o.name",
-		"b.start_time", "b.end_time", "b.status", "b.payment_status", "b.created_at", "b.updated_at",
+		"b.start_time", "b.end_time", "b.status", "b.payment_status", "b.booking_series_id", "b.created_at", "b.updated_at",
 	}, extra...)
 	return squirrel.StatementBuilder.PlaceholderFormat(squirrel.Dollar).Select(cols...).
 		From("public.bookings b").
@@ -91,7 +201,7 @@ func scanBookingInto(b *Booking, extra ...any) []any {
 	return append([]any{
 		&b.ID, &b.ResourceID, &b.ResourceName, &b.SportID, &b.UserID, &b.UserName,
 		&b.LocationID, &b.LocationName, &b.OrganizationID, &b.OrganizationName,
-		&b.StartTime, &b.EndTime, &b.Status, &b.PaymentStatus, &b.CreatedAt, &b.UpdatedAt,
+		&b.StartTime, &b.EndTime, &b.Status, &b.PaymentStatus, &b.BookingSeriesID, &b.CreatedAt, &b.UpdatedAt,
 	}, extra...)
 }
 

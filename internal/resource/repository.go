@@ -17,6 +17,8 @@ type Repository interface {
 	Create(ctx context.Context, res *Resource) error
 	GetByID(ctx context.Context, id string) (*Resource, error)
 	List(ctx context.Context, filter Filter) ([]*Resource, int, error)
+	// ListByLocation returns every resource of a location, unpaginated, ordered by name.
+	ListByLocation(ctx context.Context, locationID string) ([]*Resource, error)
 	Update(ctx context.Context, res *Resource) error
 	SetCover(ctx context.Context, id string, cover *string) (*string, error)
 	Delete(ctx context.Context, id string) error
@@ -129,6 +131,31 @@ func (r *pgxRepository) List(ctx context.Context, filter Filter) ([]*Resource, i
 		}
 		return &res, nil
 	})
+}
+
+func (r *pgxRepository) ListByLocation(ctx context.Context, locationID string) ([]*Resource, error) {
+	query, args, err := selectResources().
+		Where(squirrel.Eq{"r.location_id": locationID}).
+		OrderBy("r.name ASC", "r.id ASC").
+		ToSql()
+	if err != nil {
+		return nil, fmt.Errorf("build list resources by location query failed: %w", err)
+	}
+	rows, err := r.pool.Query(ctx, query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("list resources by location failed: %w", err)
+	}
+	defer rows.Close()
+
+	var resources []*Resource
+	for rows.Next() {
+		var res Resource
+		if err := rows.Scan(scanResourceInto(&res)...); err != nil {
+			return nil, fmt.Errorf("scan resource failed: %w", err)
+		}
+		resources = append(resources, &res)
+	}
+	return resources, rows.Err()
 }
 
 func (r *pgxRepository) Update(ctx context.Context, res *Resource) error {

@@ -35,6 +35,11 @@ BookingResponse:
     updated_at:
       type: string
       format: date-time
+    booking_series_id:
+      type: string
+      format: uuid
+      nullable: true
+      description: "季租 (Booking Series) 建立的預約會帶有同一個 ID；一般單次預約為 null。"
   required:
     - id
     - resource
@@ -80,3 +85,100 @@ UpdateBookingRequest:
       type: string
       enum: [done, pending, failed]
       description: "僅管理員 (系統管理員 / 組織管理員) 可變更"
+
+CreateBookingSeriesRequest:
+  type: object
+  description: "季租：固定 Resource、固定星期與固定時段，一次建立整個租期內的所有預約。日期與時間皆以 Resource 所屬 Location 的 timezone 為準。"
+  properties:
+    resource_id:
+      type: string
+      format: uuid
+    term_months:
+      type: integer
+      enum: [3, 6, 12]
+    start_date:
+      type: string
+      format: date
+      example: "2026-11-02"
+      description: "租期第一天 (Location 當地日期)；租期為 [start_date, start_date + term_months 個月)。"
+    weekdays:
+      type: array
+      minItems: 1
+      maxItems: 7
+      items:
+        type: integer
+        minimum: 0
+        maximum: 6
+      description: "0 = 週日 ... 6 = 週六"
+    start_time:
+      type: string
+      example: "08:00"
+      description: "每日開始時間 (HH:MM)"
+    end_time:
+      type: string
+      example: "09:00"
+  required: [resource_id, term_months, start_date, weekdays, start_time, end_time]
+
+BookingSeriesResponse:
+  type: object
+  properties:
+    id:
+      type: string
+      format: uuid
+    user:
+      $ref: "./user.yml#/UserTag"
+    resource:
+      $ref: "./resource.yml#/ResourceTag"
+    term_months:
+      type: integer
+    created_at:
+      type: string
+      format: date-time
+    bookings:
+      type: array
+      items:
+        $ref: "#/BookingResponse"
+
+BookingSeriesConflictResponse:
+  type: object
+  properties:
+    error:
+      type: string
+      example: booking series contains conflicting occurrences
+    conflicts:
+      type: array
+      items:
+        type: object
+        properties:
+          start_time:
+            type: string
+            format: date-time
+            description: "以 Location timezone 的 offset 表示"
+          end_time:
+            type: string
+            format: date-time
+
+LocationAvailabilityResponse:
+  type: object
+  properties:
+    date:
+      type: string
+      example: "2026-10-10"
+    resources:
+      type: array
+      items:
+        type: object
+        properties:
+          resource:
+            $ref: "./resource.yml#/ResourceTag"
+          slots:
+            type: array
+            items:
+              type: object
+              properties:
+                start_time:
+                  type: string
+                  format: date-time
+                end_time:
+                  type: string
+                  format: date-time

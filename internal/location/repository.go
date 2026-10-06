@@ -48,11 +48,13 @@ func (r *pgxRepository) Create(ctx context.Context, loc *Location) error {
 			"organization_id", "name", "capacity", "opening_hours_start", "opening_hours_end", "timezone",
 			"location_info", "opening", "rule", "facility", "description", "longitude", "latitude", "cover",
 			"parking_name", "parking_latitude", "parking_longitude",
+			"minimum_booking_notice_minutes", "maximum_booking_advance_days",
 		).
 		Values(
 			loc.OrganizationID, loc.Name, loc.Capacity, loc.OpeningHoursStart, loc.OpeningHoursEnd, loc.Timezone,
 			loc.LocationInfo, loc.Opening, loc.Rule, loc.Facility, loc.Description, loc.Longitude, loc.Latitude, loc.Cover,
 			loc.ParkingName, loc.ParkingLatitude, loc.ParkingLongitude,
+			loc.MinimumBookingNoticeMinutes, loc.MaximumBookingAdvanceDays,
 		).
 		Suffix("RETURNING id, created_at").
 		ToSql()
@@ -78,6 +80,7 @@ func selectLocations(extra ...string) squirrel.SelectBuilder {
 		"l.opening_hours_start::text", "l.opening_hours_end::text", "l.timezone",
 		"l.location_info", "l.opening", "l.rule", "l.facility", "l.description", "l.longitude", "l.latitude", "l.cover",
 		"l.parking_name", "l.parking_latitude", "l.parking_longitude",
+		"l.minimum_booking_notice_minutes", "l.maximum_booking_advance_days",
 	}, extra...)
 	return squirrel.StatementBuilder.PlaceholderFormat(squirrel.Dollar).Select(cols...).
 		From("public.locations l").
@@ -91,6 +94,7 @@ func scanLocationInto(l *Location, extra ...any) []any {
 		&l.OpeningHoursStart, &l.OpeningHoursEnd, &l.Timezone,
 		&l.LocationInfo, &l.Opening, &l.Rule, &l.Facility, &l.Description, &l.Longitude, &l.Latitude, &l.Cover,
 		&l.ParkingName, &l.ParkingLatitude, &l.ParkingLongitude,
+		&l.MinimumBookingNoticeMinutes, &l.MaximumBookingAdvanceDays,
 	}, extra...)
 }
 
@@ -191,6 +195,8 @@ func (r *pgxRepository) Update(ctx context.Context, loc *Location) error {
 		Set("parking_latitude", loc.ParkingLatitude).
 		Set("parking_longitude", loc.ParkingLongitude).
 		Set("cover", loc.Cover).
+		Set("minimum_booking_notice_minutes", loc.MinimumBookingNoticeMinutes).
+		Set("maximum_booking_advance_days", loc.MaximumBookingAdvanceDays).
 		Where(squirrel.Eq{"id": loc.ID}).
 		ToSql()
 	if err != nil {

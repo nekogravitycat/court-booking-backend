@@ -72,6 +72,15 @@ PickupGroupResponse:
     updated_at:
       type: string
       format: date-time
+    social:
+      type: string
+      nullable: true
+      description: "任意聯絡資訊文字 (LINE、Instagram、Discord ...)，最多 500 字；純空白視為 null。"
+    pickup_group_series_id:
+      type: string
+      format: uuid
+      nullable: true
+      description: "由 POST /pickup-group-series 批次建立時，同一批共用的 Series ID；單獨建立為 null。"
   required:
     - id
     - host
@@ -210,6 +219,11 @@ CreatePickupGroupRequest:
       type: boolean
       default: true
       description: "啟用狀態"
+    social:
+      type: string
+      nullable: true
+      maxLength: 500
+      description: "任意聯絡資訊文字，最多 500 字；純空白視為 null。PATCH 時：省略 = 不修改、字串 = 設定、null = 清除。"
   required:
     - title
     - start_time
@@ -266,6 +280,11 @@ UpdatePickupGroupRequest:
       enum: [active, cancelled, completed]
     enable:
       type: boolean
+    social:
+      type: string
+      nullable: true
+      maxLength: 500
+      description: "任意聯絡資訊文字，最多 500 字；純空白視為 null。PATCH 時：省略 = 不修改、字串 = 設定、null = 清除。"
 
 PickupOrderResponse:
   type: object
@@ -311,6 +330,19 @@ PickupOrderResponse:
     updated_at:
       type: string
       format: date-time
+    attendance_status:
+      type: string
+      enum: [absent]
+      nullable: true
+      description: "null = 未標記缺席；absent = 缺席"
+    attendance_marked_by:
+      type: string
+      format: uuid
+      nullable: true
+    attendance_marked_at:
+      type: string
+      format: date-time
+      nullable: true
   required:
     - id
     - pickup_group_id
@@ -452,3 +484,102 @@ ParticipantStatsResponse:
     - genders
     - age_groups
     - skill_levels
+
+PickupOccurrence:
+  type: object
+  properties:
+    start_time:
+      type: string
+      format: date-time
+    end_time:
+      type: string
+      format: date-time
+  required: [start_time, end_time]
+
+CreatePickupGroupSeriesRequest:
+  type: object
+  description: "後端不處理 recurrence rule，前端需先把規則展開成實際 occurrences。各場共用下列欄位。"
+  properties:
+    title:
+      type: string
+    description:
+      type: string
+      nullable: true
+      maxLength: 100
+    social:
+      type: string
+      nullable: true
+      maxLength: 500
+    fee:
+      type: integer
+    capacity:
+      type: integer
+    location_id:
+      type: string
+      format: uuid
+    sport_id:
+      type: string
+      format: uuid
+    min_skill_level:
+      type: integer
+      minimum: 1
+    max_skill_level:
+      type: integer
+      minimum: 1
+      nullable: true
+    enable:
+      type: boolean
+    registration_deadline_minutes_before_start:
+      type: integer
+      minimum: 0
+      description: "每場 registration_deadline = start_time - 此分鐘數；計算結果須符合單團規則 (不得為過去、不得晚於開始時間)。"
+    occurrences:
+      type: array
+      minItems: 1
+      maxItems: 64
+      description: "最多 64 場；每場 start_time 不得為過去且不得超過現在起 90 天。"
+      items:
+        $ref: "#/PickupOccurrence"
+  required:
+    - title
+    - capacity
+    - location_id
+    - sport_id
+    - min_skill_level
+    - registration_deadline_minutes_before_start
+    - occurrences
+
+PickupGroupSeriesResponse:
+  type: object
+  properties:
+    id:
+      type: string
+      format: uuid
+    host_id:
+      type: string
+      format: uuid
+    created_at:
+      type: string
+      format: date-time
+    groups:
+      type: array
+      items:
+        $ref: "#/PickupGroupResponse"
+
+UserPickupStatsResponse:
+  type: object
+  properties:
+    user_id:
+      type: string
+      format: uuid
+    pickup_participation_count:
+      type: integer
+      description: "已結束、未取消的臨打團中，使用者有 confirmed 訂單的團數 (同團只算一次，不受 party_size 影響)。"
+    pickup_absence_count:
+      type: integer
+      description: "上述集合中被標記為 absent 的團數。"
+    pickup_absence_rate:
+      type: number
+      format: double
+      nullable: true
+      description: "absence_count / participation_count (0~1)；participation_count 為 0 時為 null。"

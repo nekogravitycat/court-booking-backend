@@ -36,7 +36,30 @@ var (
 	ErrDistanceNeedsOrigin         = apperror.New(http.StatusBadRequest, "latitude and longitude are required to sort by distance")
 	ErrFollowedNeedsAuth           = apperror.New(http.StatusUnauthorized, "authentication is required to filter by followed hosts")
 	ErrTimeConflict                = apperror.New(http.StatusConflict, "time_conflict")
+	ErrSocialTooLong               = apperror.New(http.StatusBadRequest, "social must be at most 500 characters")
+
+	ErrSeriesNoOccurrences      = apperror.New(http.StatusBadRequest, "occurrences must contain at least one entry")
+	ErrSeriesTooManyOccurrences = apperror.New(http.StatusBadRequest, "too many occurrences in one request")
+	ErrOccurrenceOutsideHorizon = apperror.New(http.StatusBadRequest, "occurrence start_time must not be in the past or beyond the allowed horizon")
+	ErrSeriesNotFound           = apperror.New(http.StatusNotFound, "pickup group series not found")
+
+	ErrAttendanceNotYetAllowed = apperror.New(http.StatusConflict, "attendance can only be marked after the pickup group has ended")
+	ErrAttendanceGroupCanceled = apperror.New(http.StatusConflict, "attendance cannot be marked on a cancelled pickup group")
+	ErrAttendanceNotConfirmed  = apperror.New(http.StatusConflict, "only confirmed orders can be marked absent")
 )
+
+// Limits on a Pickup Group Series created in one request.
+const (
+	// MaxPickupSeriesHorizon is how far ahead an occurrence may start.
+	MaxPickupSeriesHorizon = 90 * 24 * time.Hour
+	// MaxPickupGroupsPerSeries caps the occurrences of one request.
+	MaxPickupGroupsPerSeries = 64
+	// MaxSocialLength is the maximum length of a group social field, in characters.
+	MaxSocialLength = 500
+)
+
+// AttendanceAbsent is the only recorded attendance status; NULL means unmarked.
+const AttendanceAbsent = "absent"
 
 type GroupStatus string
 
@@ -90,10 +113,13 @@ func (s OrderStatus) IsValid() bool {
 const EnrolledStatusFree = "free"
 
 type PickupGroup struct {
-	ID                   string
-	HostID               string
-	Title                string
-	Description          *string
+	ID          string
+	HostID      string
+	Title       string
+	Description *string
+	Social      *string
+	// PickupGroupSeriesID is nil for a group created on its own.
+	PickupGroupSeriesID  *string
 	StartTime            time.Time
 	RegistrationDeadline time.Time
 	EndTime              time.Time
@@ -147,9 +173,29 @@ type PickupOrder struct {
 	PartySize int
 	// Members lists the anonymous seats of a party order (PartySize entries,
 	// organizer included). It is empty for a single enrollment.
-	Members   []OrderMember
+	Members []OrderMember
+	// AttendanceStatus is nil (not marked) or AttendanceAbsent.
+	AttendanceStatus   *string
+	AttendanceMarkedBy *string
+	AttendanceMarkedAt *time.Time
+	CreatedAt          time.Time
+	UpdatedAt          time.Time
+}
+
+// GroupSeries is a set of pickup groups created together by one batch request.
+type GroupSeries struct {
+	ID        string
+	HostID    string
 	CreatedAt time.Time
-	UpdatedAt time.Time
+	Groups    []*PickupGroup
+}
+
+// UserPickupStats summarizes a user's pickup participation history.
+type UserPickupStats struct {
+	ParticipationCount int
+	AbsenceCount       int
+	// AbsenceRate is nil when ParticipationCount is 0.
+	AbsenceRate *float64
 }
 
 // OrderMember is one anonymous seat of a party order.

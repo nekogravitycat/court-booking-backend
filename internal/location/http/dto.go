@@ -31,6 +31,9 @@ type LocationResponse struct {
 	ParkingLongitude  *float64                `json:"parking_longitude"`
 	Cover             *string                 `json:"cover"`           // URL to cover image
 	CoverThumbnail    *string                 `json:"cover_thumbnail"` // URL to cover thumbnail
+
+	MinimumBookingNoticeMinutes int `json:"minimum_booking_notice_minutes"`
+	MaximumBookingAdvanceDays   int `json:"maximum_booking_advance_days"`
 }
 
 // LocationTag is a brief representation of a location.
@@ -63,6 +66,9 @@ func NewLocationResponse(l *location.Location) LocationResponse {
 		ParkingLongitude:  l.ParkingLongitude,
 		Cover:             coverURL,
 		CoverThumbnail:    coverThumbnailURL,
+
+		MinimumBookingNoticeMinutes: l.MinimumBookingNoticeMinutes,
+		MaximumBookingAdvanceDays:   l.MaximumBookingAdvanceDays,
 	}
 }
 
@@ -101,6 +107,9 @@ type CreateLocationRequest struct {
 	ParkingName       *string  `json:"parking_name" binding:"omitempty,min=1,max=100"`
 	ParkingLatitude   *float64 `json:"parking_latitude" binding:"omitempty,min=-90,max=90"`
 	ParkingLongitude  *float64 `json:"parking_longitude" binding:"omitempty,min=-180,max=180"`
+
+	MinimumBookingNoticeMinutes *int `json:"minimum_booking_notice_minutes" binding:"omitempty,min=0"`
+	MaximumBookingAdvanceDays   *int `json:"maximum_booking_advance_days" binding:"omitempty,min=1,max=90"`
 }
 
 type UpdateLocationRequest struct {
@@ -120,6 +129,9 @@ type UpdateLocationRequest struct {
 	ParkingLatitude   *float64 `json:"parking_latitude" binding:"omitempty,min=-90,max=90"`
 	ParkingLongitude  *float64 `json:"parking_longitude" binding:"omitempty,min=-180,max=180"`
 	RemoveParking     bool     `json:"remove_parking"`
+
+	MinimumBookingNoticeMinutes *int `json:"minimum_booking_notice_minutes" binding:"omitempty,min=0"`
+	MaximumBookingAdvanceDays   *int `json:"maximum_booking_advance_days" binding:"omitempty,min=1,max=90"`
 }
 
 type ListLocationsRequest struct {

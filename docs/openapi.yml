@@ -163,6 +163,24 @@ components:
     UpdateBookingRequest:
       $ref: "./components/schemas/booking.yml#/UpdateBookingRequest"
 
+    CreateBookingSeriesRequest:
+      $ref: "./components/schemas/booking.yml#/CreateBookingSeriesRequest"
+
+    BookingSeriesResponse:
+      $ref: "./components/schemas/booking.yml#/BookingSeriesResponse"
+
+    LocationAvailabilityResponse:
+      $ref: "./components/schemas/booking.yml#/LocationAvailabilityResponse"
+
+    CreatePickupGroupSeriesRequest:
+      $ref: "./components/schemas/pickup.yml#/CreatePickupGroupSeriesRequest"
+
+    PickupGroupSeriesResponse:
+      $ref: "./components/schemas/pickup.yml#/PickupGroupSeriesResponse"
+
+    UserPickupStatsResponse:
+      $ref: "./components/schemas/pickup.yml#/UserPickupStatsResponse"
+
     # --------------------------
     # Announcement Models
     # --------------------------
@@ -356,6 +374,9 @@ paths:
   /locations/{id}:
     $ref: "./paths/locations.yml#/locationDetail"
 
+  /locations/{id}/availability:
+    $ref: "./paths/bookings.yml#/locationAvailability"
+
   /locations/{id}/cover:
     $ref: "./paths/locations.yml#/uploadCover"
 
@@ -391,6 +412,12 @@ paths:
 
   /bookings/{id}:
     $ref: "./paths/bookings.yml#/bookingDetail"
+
+  /booking-series:
+    $ref: "./paths/bookings.yml#/createBookingSeries"
+
+  /booking-series/{id}:
+    $ref: "./paths/bookings.yml#/bookingSeriesDetail"
 
   # ============================
   # Announcements
@@ -439,6 +466,15 @@ paths:
 
   /pickup-groups/{id}/orders:
     $ref: "./paths/pickup.yml#/pickupGroupOrders"
+
+  /pickup-group-series:
+    $ref: "./paths/pickup.yml#/pickupGroupSeries"
+
+  /pickup-groups/{id}/orders/{order_id}/absence:
+    $ref: "./paths/pickup.yml#/pickupOrderAbsence"
+
+  /users/{id}/pickup-stats:
+    $ref: "./paths/pickup.yml#/userPickupStats"
 
   /pickup-groups/{id}/party-orders:
     $ref: "./paths/pickup.yml#/pickupGroupPartyOrders"

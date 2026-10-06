@@ -29,6 +29,8 @@ type Service interface {
 	Create(ctx context.Context, req CreateRequest) (*Resource, error)
 	GetByID(ctx context.Context, id string) (*Resource, error)
 	List(ctx context.Context, filter Filter) ([]*Resource, int, error)
+	// ListByLocation returns every resource of a location, unpaginated.
+	ListByLocation(ctx context.Context, locationID string) ([]*Resource, error)
 	Update(ctx context.Context, id string, req UpdateRequest) (*Resource, error)
 	UpdateCover(ctx context.Context, id string, fileID string) error
 	RemoveCover(ctx context.Context, id string) error
@@ -104,6 +106,10 @@ func (s *service) GetByID(ctx context.Context, id string) (*Resource, error) {
 
 func (s *service) List(ctx context.Context, filter Filter) ([]*Resource, int, error) {
 	return s.repo.List(ctx, filter)
+}
+
+func (s *service) ListByLocation(ctx context.Context, locationID string) ([]*Resource, error) {
+	return s.repo.ListByLocation(ctx, locationID)
 }
 
 func (s *service) Update(ctx context.Context, id string, req UpdateRequest) (*Resource, error) {

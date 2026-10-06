@@ -64,6 +64,7 @@ type HostGroupsURI struct {
 type CreateGroupBody struct {
 	Title                string    `json:"title" binding:"required,min=1,max=100"`
 	Description          *string   `json:"description" binding:"omitempty,max=100"`
+	Social               *string   `json:"social" binding:"omitempty,max=500"`
 	StartTime            time.Time `json:"start_time" binding:"required"`
 	RegistrationDeadline time.Time `json:"registration_deadline" binding:"required"`
 	EndTime              time.Time `json:"end_time" binding:"required"`
@@ -94,15 +95,18 @@ type UpdateOrderBody struct {
 }
 
 type UpdateGroupBody struct {
-	Title                *string    `json:"title" binding:"omitempty,min=1,max=100"`
-	Description          *string    `json:"description" binding:"omitempty,max=100"`
-	StartTime            *time.Time `json:"start_time"`
-	RegistrationDeadline *time.Time `json:"registration_deadline"`
-	EndTime              *time.Time `json:"end_time"`
-	Fee                  *int       `json:"fee" binding:"omitempty,min=0,max=100000"`
-	Capacity             *int       `json:"capacity" binding:"omitempty,min=1,max=200"`
-	LocationID           *string    `json:"location_id" binding:"omitempty,uuid"`
-	SportID              *string    `json:"sport_id" binding:"omitempty,uuid"`
+	Title       *string `json:"title" binding:"omitempty,min=1,max=100"`
+	Description *string `json:"description" binding:"omitempty,max=100"`
+	// Social: absent leaves it unchanged, null clears it, a string replaces it
+	// (blank text is stored as null; the length limit is enforced by the service).
+	Social               request.Nullable[string] `json:"social,omitzero"`
+	StartTime            *time.Time               `json:"start_time"`
+	RegistrationDeadline *time.Time               `json:"registration_deadline"`
+	EndTime              *time.Time               `json:"end_time"`
+	Fee                  *int                     `json:"fee" binding:"omitempty,min=0,max=100000"`
+	Capacity             *int                     `json:"capacity" binding:"omitempty,min=1,max=200"`
+	LocationID           *string                  `json:"location_id" binding:"omitempty,uuid"`
+	SportID              *string                  `json:"sport_id" binding:"omitempty,uuid"`
 	// MinSkillLevel may not be cleared (the group always has a lower bound).
 	// MaxSkillLevel may be raised, lowered, or set (but not cleared back to
 	// null once set, same as the other optional fields on this endpoint).
@@ -125,8 +129,12 @@ type PickupOrderResponse struct {
 	SkillLevel    int               `json:"skill_level"`
 	PartySize     int               `json:"party_size"`
 	Members       []OrderMemberBody `json:"members,omitempty"`
-	CreatedAt     time.Time         `json:"created_at"`
-	UpdatedAt     time.Time         `json:"updated_at"`
+	// AttendanceStatus is null (not marked) or "absent".
+	AttendanceStatus   *string    `json:"attendance_status"`
+	AttendanceMarkedBy *string    `json:"attendance_marked_by"`
+	AttendanceMarkedAt *time.Time `json:"attendance_marked_at"`
+	CreatedAt          time.Time  `json:"created_at"`
+	UpdatedAt          time.Time  `json:"updated_at"`
 }
 
 func NewPickupOrderResponse(o *pickup.PickupOrder) PickupOrderResponse {
@@ -146,9 +154,21 @@ func NewPickupOrderResponse(o *pickup.PickupOrder) PickupOrderResponse {
 		SkillLevel:    o.SkillLevel,
 		PartySize:     o.PartySize,
 		Members:       members,
-		CreatedAt:     o.CreatedAt.UTC(),
-		UpdatedAt:     o.UpdatedAt.UTC(),
+
+		AttendanceStatus:   o.AttendanceStatus,
+		AttendanceMarkedBy: o.AttendanceMarkedBy,
+		AttendanceMarkedAt: utcPtr(o.AttendanceMarkedAt),
+		CreatedAt:          o.CreatedAt.UTC(),
+		UpdatedAt:          o.UpdatedAt.UTC(),
 	}
+}
+
+func utcPtr(t *time.Time) *time.Time {
+	if t == nil {
+		return nil
+	}
+	u := t.UTC()
+	return &u
 }
 
 // PickupHostTag is the host representation embedded in pickup group responses.
@@ -224,6 +244,8 @@ type PickupGroupResponse struct {
 	Host                 PickupHostTag            `json:"host"`
 	Title                string                   `json:"title"`
 	Description          *string                  `json:"description"`
+	Social               *string                  `json:"social"`
+	PickupGroupSeriesID  *string                  `json:"pickup_group_series_id"`
 	StartTime            time.Time                `json:"start_time"`
 	RegistrationDeadline time.Time                `json:"registration_deadline"`
 	EndTime              time.Time                `json:"end_time"`
@@ -249,6 +271,8 @@ func NewPickupGroupResponse(g *pickup.PickupGroup, orders []*pickup.PickupOrder)
 		Host:                 PickupHostTag{ID: g.HostID, Username: g.HostUsername, DisplayName: g.HostDisplayName, Phone: g.HostPhone},
 		Title:                g.Title,
 		Description:          g.Description,
+		Social:               g.Social,
+		PickupGroupSeriesID:  g.PickupGroupSeriesID,
 		StartTime:            g.StartTime.UTC(),
 		RegistrationDeadline: g.RegistrationDeadline.UTC(),
 		EndTime:              g.EndTime.UTC(),
@@ -337,4 +361,71 @@ func NewParticipantStatsResponse(s *pickup.ParticipantStats) ParticipantStatsRes
 		resp.SkillLevels[i] = SkillLevelCountResponse{Level: l.Level, Label: l.Label, Count: l.Count}
 	}
 	return resp
+}
+
+// --- Pickup Group Series ---
+
+// OccurrenceBody is one already-expanded session of a batch create.
+type OccurrenceBody struct {
+	StartTime time.Time `json:"start_time" binding:"required"`
+	EndTime   time.Time `json:"end_time" binding:"required"`
+}
+
+// CreateGroupSeriesBody is the body of POST /pickup-group-series. The group
+// fields are shared by every occurrence; the number of occurrences and the
+// horizon are limited by the service.
+type CreateGroupSeriesBody struct {
+	Title         string  `json:"title" binding:"required,min=1,max=100"`
+	Description   *string `json:"description" binding:"omitempty,max=100"`
+	Social        *string `json:"social" binding:"omitempty,max=500"`
+	Fee           int     `json:"fee" binding:"min=0,max=100000"`
+	Capacity      int     `json:"capacity" binding:"required,min=1,max=200"`
+	LocationID    string  `json:"location_id" binding:"required,uuid"`
+	SportID       string  `json:"sport_id" binding:"required,uuid"`
+	MinSkillLevel int     `json:"min_skill_level" binding:"required,min=1,max=100"`
+	MaxSkillLevel *int    `json:"max_skill_level" binding:"omitempty,min=1,max=100"`
+	Enable        *bool   `json:"enable"`
+	// RegistrationDeadlineMinutesBeforeStart gives each group
+	// registration_deadline = start_time - this many minutes.
+	RegistrationDeadlineMinutesBeforeStart *int             `json:"registration_deadline_minutes_before_start" binding:"required,min=0"`
+	Occurrences                            []OccurrenceBody `json:"occurrences" binding:"required,min=1,dive"`
+}
+
+func (r *CreateGroupSeriesBody) Validate() error {
+	if r.MaxSkillLevel != nil && *r.MaxSkillLevel < r.MinSkillLevel {
+		return pickup.ErrInvalidSkillLevelRange
+	}
+	return nil
+}
+
+// PickupGroupSeriesResponse is a batch of independent groups created together.
+type PickupGroupSeriesResponse struct {
+	ID        string                `json:"id"`
+	HostID    string                `json:"host_id"`
+	CreatedAt time.Time             `json:"created_at"`
+	Groups    []PickupGroupResponse `json:"groups"`
+}
+
+func NewPickupGroupSeriesResponse(s *pickup.GroupSeries) PickupGroupSeriesResponse {
+	resp := PickupGroupSeriesResponse{
+		ID:        s.ID,
+		HostID:    s.HostID,
+		CreatedAt: s.CreatedAt.UTC(),
+		Groups:    make([]PickupGroupResponse, len(s.Groups)),
+	}
+	for i, g := range s.Groups {
+		resp.Groups[i] = NewPickupGroupResponse(g, nil)
+	}
+	return resp
+}
+
+// --- User pickup statistics ---
+
+// UserPickupStatsResponse reports a user's finished-group participation. The
+// absence rate is null when the user has no participation yet.
+type UserPickupStatsResponse struct {
+	UserID                   string   `json:"user_id"`
+	PickupParticipationCount int      `json:"pickup_participation_count"`
+	PickupAbsenceCount       int      `json:"pickup_absence_count"`
+	PickupAbsenceRate        *float64 `json:"pickup_absence_rate"`
 }

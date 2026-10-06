@@ -26,7 +26,15 @@ func RegisterRoutes(g *gin.RouterGroup, h *Handler, authMiddleware, optionalAuth
 		groupsGroup.POST("/:id/orders", h.CreateOrder)
 		groupsGroup.POST("/:id/party-orders", h.CreatePartyOrder)
 		groupsGroup.GET("/:id/orders", h.ListGroupOrders)
+		groupsGroup.PUT("/:id/orders/:order_id/absence", h.MarkAbsence)
+		groupsGroup.DELETE("/:id/orders/:order_id/absence", h.ClearAbsence)
 	}
+
+	// Batch creation of independent pickup groups (one per occurrence)
+	g.POST("/pickup-group-series", authMiddleware, h.CreateGroupSeries)
+
+	// Pickup participation statistics of a user (any authenticated user)
+	g.GET("/users/:id/pickup-stats", authMiddleware, h.GetUserStats)
 
 	// Pickup order routes
 	ordersGroup := g.Group("/pickup-orders")

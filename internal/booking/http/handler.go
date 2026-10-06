@@ -1,8 +1,11 @@
 package http
 
 import (
+	"errors"
+	resHttp "github.com/nekogravitycat/court-booking-backend/internal/resource/http"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/nekogravitycat/court-booking-backend/internal/auth"
@@ -174,4 +177,88 @@ func (h *Handler) Delete(c *gin.Context) {
 	}
 
 	c.Status(http.StatusNoContent)
+}
+
+func (h *Handler) CreateSeries(c *gin.Context) {
+	var body CreateBookingSeriesRequest
+	if !request.BindJSON(c, &body) {
+		return
+	}
+
+	startDate, err := time.Parse("2006-01-02", body.StartDate)
+	if err != nil {
+		response.BadRequest(c, "invalid start_date, expected YYYY-MM-DD")
+		return
+	}
+	weekdays := make([]time.Weekday, len(body.Weekdays))
+	for i, d := range body.Weekdays {
+		weekdays[i] = time.Weekday(d)
+	}
+
+	series, err := h.service.CreateSeries(c.Request.Context(), booking.CreateSeriesRequest{
+		UserID:     auth.GetUserID(c),
+		ResourceID: body.ResourceID,
+		TermMonths: body.TermMonths,
+		StartDate:  startDate,
+		Weekdays:   weekdays,
+		StartClock: body.StartTime,
+		EndClock:   body.EndTime,
+	})
+	if err != nil {
+		var conflict *booking.SeriesConflictError
+		if errors.As(err, &conflict) {
+			slots := make([]resHttp.TimeSlot, len(conflict.Conflicts))
+			for i, s := range conflict.Conflicts {
+				// Keep the location offset so the client sees the wall-clock time it asked for.
+				slots[i] = resHttp.TimeSlot{StartTime: s.StartTime, EndTime: s.EndTime}
+			}
+			c.JSON(http.StatusConflict, ConflictResponse{Error: conflict.Error(), Conflicts: slots})
+			return
+		}
+		response.Error(c, err)
+		return
+	}
+
+	c.JSON(http.StatusCreated, NewBookingSeriesResponse(series))
+}
+
+func (h *Handler) GetSeries(c *gin.Context) {
+	var req request.ByIDRequest
+	if !request.BindURI(c, &req) {
+		return
+	}
+
+	series, err := h.service.GetSeriesForViewer(c.Request.Context(), req.ID, auth.GetUserID(c), auth.IsSystemAdmin(c))
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+
+	c.JSON(http.StatusOK, NewBookingSeriesResponse(series))
+}
+
+// GetLocationAvailability returns the availability of every resource of a location for one date.
+func (h *Handler) GetLocationAvailability(c *gin.Context) {
+	var uri request.ByIDRequest
+	if !request.BindURI(c, &uri) {
+		return
+	}
+
+	date := time.Now()
+	if dateStr := c.Query("date"); dateStr != "" {
+		var err error
+		date, err = time.Parse("2006-01-02", dateStr)
+		if err != nil {
+			response.BadRequest(c, "invalid date format, expected YYYY-MM-DD")
+			return
+		}
+	}
+
+	items, err := h.service.GetLocationAvailability(c.Request.Context(), uri.ID, date)
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+
+	c.JSON(http.StatusOK, NewLocationAvailabilityResponse(date, items))
 }

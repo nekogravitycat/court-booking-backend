@@ -20,6 +20,14 @@ type Repository interface {
 	WithGroupLock(ctx context.Context, id string, fn func(Repository) error) error
 	WithOrderLock(ctx context.Context, id string, fn func(Repository) error) error
 	CreateGroup(ctx context.Context, group *PickupGroup) error
+	// CreateGroupSeries creates the series and all of its groups in one transaction.
+	CreateGroupSeries(ctx context.Context, hostID string, groups []*PickupGroup) (*GroupSeries, error)
+	GetGroupSeriesByID(ctx context.Context, id string) (*GroupSeries, error)
+	// SetOrderAttendance sets (status non-nil) or clears (nil) the order's attendance mark.
+	SetOrderAttendance(ctx context.Context, orderID string, status *string, markedBy string) error
+	// GetUserPickupStats counts the user's finished, non-cancelled groups with a confirmed order,
+	// and how many of those orders are marked absent.
+	GetUserPickupStats(ctx context.Context, userID string) (*UserPickupStats, error)
 	GetGroupByID(ctx context.Context, id string) (*PickupGroup, error)
 	ListGroups(ctx context.Context, filter GroupFilter) ([]*PickupGroup, int, error)
 	UpdateGroup(ctx context.Context, group *PickupGroup) error
@@ -143,7 +151,7 @@ func (r *pgxRepository) WithOrderLock(ctx context.Context, id string, fn func(Re
 // order the scanners below expect. Host, sport, and skill-level display fields
 // are resolved via JOIN rather than snapshotted on pickup_groups.
 var groupSelectColumns = []string{
-	"pg.id", "pg.host_id", "pg.title", "pg.description", "pg.start_time", "pg.registration_deadline", "pg.end_time", "pg.fee",
+	"pg.id", "pg.host_id", "pg.title", "pg.description", "pg.social", "pg.pickup_group_series_id", "pg.start_time", "pg.registration_deadline", "pg.end_time", "pg.fee",
 	"pg.capacity", "pg.location_id", "pg.sport_id", "s.code", "s.name",
 	"pg.min_skill_level", "COALESCE(sl_min.label, '')", "pg.max_skill_level", "sl_max.label",
 	"u.username", "u.display_name", "u.phone",
@@ -169,7 +177,7 @@ func groupJoins(b squirrel.SelectBuilder) squirrel.SelectBuilder {
 // scan targets (e.g. enrolled_status, total_count) are appended by callers.
 func scanGroupInto(g *PickupGroup, extra ...any) []any {
 	targets := []any{
-		&g.ID, &g.HostID, &g.Title, &g.Description, &g.StartTime, &g.RegistrationDeadline, &g.EndTime, &g.Fee,
+		&g.ID, &g.HostID, &g.Title, &g.Description, &g.Social, &g.PickupGroupSeriesID, &g.StartTime, &g.RegistrationDeadline, &g.EndTime, &g.Fee,
 		&g.Capacity, &g.LocationID, &g.SportID, &g.SportCode, &g.SportName,
 		&g.MinSkillLevel, &g.MinSkillLevelLabel, &g.MaxSkillLevel, &g.MaxSkillLevelLabel,
 		&g.HostUsername, &g.HostDisplayName, &g.HostPhone,
@@ -190,9 +198,9 @@ func mapLocationFKError(err error, msg string) error {
 func (r *pgxRepository) CreateGroup(ctx context.Context, g *PickupGroup) error {
 	psql := squirrel.StatementBuilder.PlaceholderFormat(squirrel.Dollar)
 	query, args, err := psql.Insert("public.pickup_groups").
-		Columns("host_id", "title", "description", "start_time", "registration_deadline", "end_time",
+		Columns("host_id", "title", "description", "social", "pickup_group_series_id", "start_time", "registration_deadline", "end_time",
 			"fee", "capacity", "location_id", "sport_id", "min_skill_level", "max_skill_level", "status", "enable").
-		Values(g.HostID, g.Title, g.Description, g.StartTime, g.RegistrationDeadline, g.EndTime,
+		Values(g.HostID, g.Title, g.Description, g.Social, g.PickupGroupSeriesID, g.StartTime, g.RegistrationDeadline, g.EndTime,
 			g.Fee, g.Capacity, g.LocationID, g.SportID, g.MinSkillLevel, g.MaxSkillLevel, g.Status, g.Enable).
 		Suffix("RETURNING id, created_at, updated_at").
 		ToSql()
@@ -204,6 +212,113 @@ func (r *pgxRepository) CreateGroup(ctx context.Context, g *PickupGroup) error {
 		return mapLocationFKError(err, "create pickup group failed")
 	}
 	return nil
+}
+
+func (r *pgxRepository) CreateGroupSeries(ctx context.Context, hostID string, groups []*PickupGroup) (*GroupSeries, error) {
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer tx.Rollback(ctx)
+
+	var seriesID string
+	if err := tx.QueryRow(ctx,
+		"INSERT INTO public.pickup_group_series (host_id) VALUES ($1) RETURNING id", hostID,
+	).Scan(&seriesID); err != nil {
+		return nil, fmt.Errorf("create pickup group series failed: %w", err)
+	}
+
+	txRepo := &pgxRepository{pool: tx}
+	for _, g := range groups {
+		g.PickupGroupSeriesID = &seriesID
+		if err := txRepo.CreateGroup(ctx, g); err != nil {
+			return nil, err
+		}
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return nil, fmt.Errorf("commit pickup group series failed: %w", err)
+	}
+	return r.GetGroupSeriesByID(ctx, seriesID)
+}
+
+func (r *pgxRepository) GetGroupSeriesByID(ctx context.Context, id string) (*GroupSeries, error) {
+	var series GroupSeries
+	if err := r.pool.QueryRow(ctx,
+		"SELECT id, host_id, created_at FROM public.pickup_group_series WHERE id = $1", id,
+	).Scan(&series.ID, &series.HostID, &series.CreatedAt); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, ErrSeriesNotFound
+		}
+		return nil, fmt.Errorf("get pickup group series failed: %w", err)
+	}
+
+	psql := squirrel.StatementBuilder.PlaceholderFormat(squirrel.Dollar)
+	query, args, err := groupJoins(psql.Select(groupSelectColumns...)).
+		Where(squirrel.Eq{"pg.pickup_group_series_id": id}).
+		OrderBy("pg.start_time ASC", "pg.id ASC").
+		ToSql()
+	if err != nil {
+		return nil, fmt.Errorf("build list series groups query failed: %w", err)
+	}
+	rows, err := r.pool.Query(ctx, query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("list series groups failed: %w", err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var g PickupGroup
+		if err := rows.Scan(scanGroupInto(&g)...); err != nil {
+			return nil, fmt.Errorf("scan series group failed: %w", err)
+		}
+		series.Groups = append(series.Groups, &g)
+	}
+	return &series, rows.Err()
+}
+
+func (r *pgxRepository) SetOrderAttendance(ctx context.Context, orderID string, status *string, markedBy string) error {
+	var by *string
+	var at any
+	if status != nil {
+		by = &markedBy
+		at = squirrel.Expr("now()")
+	}
+	psql := squirrel.StatementBuilder.PlaceholderFormat(squirrel.Dollar)
+	query, args, err := psql.Update("public.pickup_orders").
+		Set("attendance_status", status).
+		Set("attendance_marked_by", by).
+		Set("attendance_marked_at", at).
+		Where(squirrel.Eq{"id": orderID}).
+		ToSql()
+	if err != nil {
+		return fmt.Errorf("build set attendance query failed: %w", err)
+	}
+	ct, err := r.pool.Exec(ctx, query, args...)
+	if err != nil {
+		return fmt.Errorf("set order attendance failed: %w", err)
+	}
+	if ct.RowsAffected() == 0 {
+		return ErrOrderNotFound
+	}
+	return nil
+}
+
+func (r *pgxRepository) GetUserPickupStats(ctx context.Context, userID string) (*UserPickupStats, error) {
+	var stats UserPickupStats
+	// DISTINCT group ids keep a user to one count per group.
+	if err := r.pool.QueryRow(ctx,
+		`SELECT count(DISTINCT pg.id), count(DISTINCT pg.id) FILTER (WHERE po.attendance_status = 'absent')
+		 FROM public.pickup_orders po
+		 JOIN public.pickup_groups pg ON pg.id = po.pickup_group_id
+		 WHERE po.user_id = $1 AND po.status = 'confirmed' AND pg.status <> 'cancelled' AND pg.end_time <= now()`,
+		userID,
+	).Scan(&stats.ParticipationCount, &stats.AbsenceCount); err != nil {
+		return nil, fmt.Errorf("get user pickup stats failed: %w", err)
+	}
+	if stats.ParticipationCount > 0 {
+		rate := float64(stats.AbsenceCount) / float64(stats.ParticipationCount)
+		stats.AbsenceRate = &rate
+	}
+	return &stats, nil
 }
 
 func (r *pgxRepository) GetGroupByID(ctx context.Context, id string) (*PickupGroup, error) {
@@ -351,6 +466,7 @@ func (r *pgxRepository) UpdateGroup(ctx context.Context, g *PickupGroup) error {
 	query, args, err := psql.Update("public.pickup_groups").
 		Set("title", g.Title).
 		Set("description", g.Description).
+		Set("social", g.Social).
 		Set("start_time", g.StartTime).
 		Set("registration_deadline", g.RegistrationDeadline).
 		Set("end_time", g.EndTime).
@@ -563,13 +679,15 @@ func (r *pgxRepository) CreateOrder(ctx context.Context, order *PickupOrder) err
 // in the order scanOrderInto expects.
 var orderColumns = []string{
 	"id", "pickup_group_id", "user_id", "booker_name", "booker_phone",
-	"status", "payment_status", "skill_level", "party_size", "created_at", "updated_at",
+	"status", "payment_status", "skill_level", "party_size",
+	"attendance_status", "attendance_marked_by", "attendance_marked_at", "created_at", "updated_at",
 }
 
 func scanOrderInto(o *PickupOrder) []any {
 	return []any{
 		&o.ID, &o.PickupGroupID, &o.UserID, &o.BookerName, &o.BookerPhone,
-		&o.Status, &o.PaymentStatus, &o.SkillLevel, &o.PartySize, &o.CreatedAt, &o.UpdatedAt,
+		&o.Status, &o.PaymentStatus, &o.SkillLevel, &o.PartySize,
+		&o.AttendanceStatus, &o.AttendanceMarkedBy, &o.AttendanceMarkedAt, &o.CreatedAt, &o.UpdatedAt,
 	}
 }
 

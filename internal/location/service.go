@@ -32,6 +32,9 @@ type CreateLocationRequest struct {
 	ParkingName       *string
 	ParkingLatitude   *float64
 	ParkingLongitude  *float64
+	// Booking window; nil selects the default.
+	MinimumBookingNoticeMinutes *int
+	MaximumBookingAdvanceDays   *int
 }
 
 // UpdateLocationRequest carries data for partial updates.
@@ -53,6 +56,9 @@ type UpdateLocationRequest struct {
 	ParkingLongitude  *float64
 	// RemoveParking clears the parking lot. It cannot be combined with parking fields.
 	RemoveParking bool
+
+	MinimumBookingNoticeMinutes *int
+	MaximumBookingAdvanceDays   *int
 }
 
 type Service interface {
@@ -135,6 +141,13 @@ func validateLocation(loc *Location) error {
 		return ErrInvalidTimezone
 	}
 
+	// 5. Validate the booking window.
+	if loc.MinimumBookingNoticeMinutes < 0 ||
+		loc.MaximumBookingAdvanceDays < 1 || loc.MaximumBookingAdvanceDays > MaxBookingAdvanceDays ||
+		loc.MinimumBookingNoticeMinutes > loc.MaximumBookingAdvanceDays*24*60 {
+		return ErrInvalidBookingWindow
+	}
+
 	return nil
 }
 
@@ -168,6 +181,15 @@ func (s *service) Create(ctx context.Context, req CreateLocationRequest) (*Locat
 		Description:       req.Description,
 		Longitude:         req.Longitude,
 		Latitude:          req.Latitude,
+
+		MinimumBookingNoticeMinutes: DefaultMinimumBookingNoticeMinutes,
+		MaximumBookingAdvanceDays:   DefaultMaximumBookingAdvanceDays,
+	}
+	if req.MinimumBookingNoticeMinutes != nil {
+		loc.MinimumBookingNoticeMinutes = *req.MinimumBookingNoticeMinutes
+	}
+	if req.MaximumBookingAdvanceDays != nil {
+		loc.MaximumBookingAdvanceDays = *req.MaximumBookingAdvanceDays
 	}
 
 	if err := applyParking(loc, req.ParkingName, req.ParkingLatitude, req.ParkingLongitude, false); err != nil {
@@ -239,6 +261,12 @@ func (s *service) Update(ctx context.Context, id string, req UpdateLocationReque
 	}
 	if req.Latitude != nil {
 		loc.Latitude = *req.Latitude
+	}
+	if req.MinimumBookingNoticeMinutes != nil {
+		loc.MinimumBookingNoticeMinutes = *req.MinimumBookingNoticeMinutes
+	}
+	if req.MaximumBookingAdvanceDays != nil {
+		loc.MaximumBookingAdvanceDays = *req.MaximumBookingAdvanceDays
 	}
 	if err := applyParking(loc, req.ParkingName, req.ParkingLatitude, req.ParkingLongitude, req.RemoveParking); err != nil {
 		return nil, err

@@ -27,7 +27,30 @@ var (
 	ErrOutsideOpeningHours = apperror.New(http.StatusBadRequest, "booking must fall within the location's opening hours")
 	ErrBookingTooLong      = apperror.New(http.StatusBadRequest, "booking duration exceeds the maximum allowed")
 	ErrInvalidTimezone     = apperror.New(http.StatusInternalServerError, "location has an invalid timezone")
+	ErrTooSoon             = apperror.New(http.StatusBadRequest, "booking start is earlier than the location's minimum booking notice")
+
+	ErrSeriesNotFound        = apperror.New(http.StatusNotFound, "booking series not found")
+	ErrInvalidTermMonths     = apperror.New(http.StatusBadRequest, "term_months must be 3, 6 or 12")
+	ErrInvalidSeriesInput    = apperror.New(http.StatusBadRequest, "invalid booking series: weekdays must be 0-6 and the daily time slot must be valid")
+	ErrSeriesNoOccurrences   = apperror.New(http.StatusBadRequest, "booking series has no matching dates in the term")
+	ErrSeriesTooManyBookings = apperror.New(http.StatusBadRequest, "booking series expands to too many bookings")
 )
+
+// SeriesConflictError reports the occurrences of a booking series that overlap
+// existing bookings. It maps to 409 with the conflicts listed.
+type SeriesConflictError struct {
+	Conflicts []TimeSlot
+}
+
+func (e *SeriesConflictError) Error() string {
+	return "booking series contains conflicting occurrences"
+}
+
+// SeriesTermMonths lists the allowed Booking Series terms, in months.
+var SeriesTermMonths = []int{3, 6, 12}
+
+// MaxSeriesBookings is a defensive cap on how many bookings one series may create.
+const MaxSeriesBookings = 7 * 53
 
 // MaxBookingDuration is a defensive upper bound on the length of a single
 // booking. It prevents accidental or abusive multi-day/multi-month reservations
@@ -37,8 +60,6 @@ const MaxBookingDuration = 24 * time.Hour
 
 // Anti-abuse limits on bookings.
 const (
-	// MaxAdvanceBooking is how far ahead a booking may start.
-	MaxAdvanceBooking = 90 * 24 * time.Hour
 	// BookingSlotGranularity is the boundary (in the location's local clock)
 	// that booking start and end times must align to.
 	BookingSlotGranularity = 30 * time.Minute
@@ -96,8 +117,20 @@ type Booking struct {
 	EndTime          time.Time
 	Status           Status
 	PaymentStatus    PaymentStatus
+	BookingSeriesID  *string // nil for an ordinary single booking
 	CreatedAt        time.Time
 	UpdatedAt        time.Time
+}
+
+// BookingSeries is a seasonal rental: bookings of one resource that were
+// created together by a single request.
+type BookingSeries struct {
+	ID         string
+	UserID     string
+	ResourceID string
+	TermMonths int
+	CreatedAt  time.Time
+	Bookings   []*Booking
 }
 
 type Filter struct {

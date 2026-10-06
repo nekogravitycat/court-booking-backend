@@ -40,6 +40,12 @@ type Service interface {
 	Update(ctx context.Context, id string, req UpdateRequest, updaterUserID string, isSysAdmin bool) (*Booking, error)
 	Delete(ctx context.Context, id string, deleterUserID string, isSysAdmin bool) error
 	GetAvailability(ctx context.Context, resourceID string, date time.Time) ([]TimeSlot, error)
+	// GetLocationAvailability returns the availability of every resource of a location for one date.
+	GetLocationAvailability(ctx context.Context, locationID string, date time.Time) ([]ResourceAvailability, error)
+	// CreateSeries creates a Booking Series (seasonal rental) all-or-nothing.
+	CreateSeries(ctx context.Context, req CreateSeriesRequest) (*BookingSeries, error)
+	// GetSeriesForViewer returns the series if the viewer owns it, manages its organization, or is a system admin.
+	GetSeriesForViewer(ctx context.Context, id string, viewerID string, isSysAdmin bool) (*BookingSeries, error)
 	// OnUserDeactivated cancels a deactivated user's upcoming bookings.
 	OnUserDeactivated(ctx context.Context, userID string) error
 }
@@ -326,26 +332,18 @@ func (s *service) GetAvailability(ctx context.Context, resourceID string, date t
 		return nil, err
 	}
 
-	// Resolve the location timezone so the day window and opening hours are
-	// computed against local wall-clock time rather than UTC.
 	tz, err := loadLocationTZ(loc.Timezone)
 	if err != nil {
 		return nil, err
 	}
+	from, to := dayRange(date, tz)
 
-	// List Bookings for the day
-	// We need bookings that overlap with the day:
-	// Start < EndOfDay AND End > StartOfDay
-	startOfDay := time.Date(date.Year(), date.Month(), date.Day(), 0, 0, 0, 0, tz)
-	endOfDay := startOfDay.Add(24 * time.Hour)
-
-	bookings, err := s.repo.ListOccupied(ctx, resourceID, startOfDay, endOfDay)
+	bookings, err := s.repo.ListOccupied(ctx, resourceID, from, to)
 	if err != nil {
 		return nil, err
 	}
 
-	// Calculate Slots
-	return CalculateAvailability(date, tz, loc.OpeningHoursStart, loc.OpeningHoursEnd, bookings)
+	return ComputeAvailability(date, tz, loc, bookings, time.Now())
 }
 
 // loadLocationTZ resolves an IANA timezone name to a *time.Location. An empty
@@ -371,13 +369,42 @@ func parseOpeningTime(s string) (time.Time, error) {
 	return time.Parse(layout, s)
 }
 
-// validateBookingWindow enforces the location's operating constraints on a
-// proposed booking time range:
+// validateBookingWindow enforces every constraint on an ordinary single booking:
+// the occurrence rules (validateOccurrence) plus the location's booking window
+// (validateAdvanceWindow).
+func validateBookingWindow(loc *location.Location, start, end time.Time) error {
+	if err := validateOccurrence(loc, start, end); err != nil {
+		return err
+	}
+	return validateAdvanceWindow(loc, start, time.Now())
+}
+
+// validateAdvanceWindow enforces the location's booking window: the start must
+// be at least minimum_booking_notice after now and at most
+// maximum_booking_advance after now. It is shared in spirit with
+// ComputeAvailability, which derives the same bounds from bookingWindowBounds.
+// Booking Series do not use it.
+func validateAdvanceWindow(loc *location.Location, start, now time.Time) error {
+	if start.Before(now) {
+		return ErrStartTimePast
+	}
+	if start.Before(now.Add(noticeOf(loc))) {
+		return ErrTooSoon
+	}
+	if start.After(now.Add(advanceOf(loc))) {
+		return ErrTooFarInAdvance
+	}
+	return nil
+}
+
+// validateOccurrence enforces the location's operating constraints on one time
+// range, independent of when it is booked:
 //   - the location must currently be open for business;
 //   - the duration must not exceed MaxBookingDuration;
+//   - start and end must align to BookingSlotGranularity;
 //   - the range must fall within the daily opening hours, interpreted in the
 //     location's timezone (so non-UTC venues are handled correctly).
-func validateBookingWindow(loc *location.Location, start, end time.Time) error {
+func validateOccurrence(loc *location.Location, start, end time.Time) error {
 	if !loc.Opening {
 		return ErrLocationClosed
 	}
@@ -397,10 +424,6 @@ func validateBookingWindow(loc *location.Location, start, end time.Time) error {
 	closeT, err := parseOpeningTime(loc.OpeningHoursEnd)
 	if err != nil {
 		return ErrInvalidTimeRange
-	}
-
-	if start.After(time.Now().Add(MaxAdvanceBooking)) {
-		return ErrTooFarInAdvance
 	}
 
 	startLocal := start.In(tz)
