@@ -467,6 +467,9 @@ paths:
   /pickup-groups/{id}/orders:
     $ref: "./paths/pickup.yml#/pickupGroupOrders"
 
+  /pickup-groups/{id}/notifications:
+    $ref: "./paths/pickup.yml#/pickupGroupNotifications"
+
   /pickup-group-series:
     $ref: "./paths/pickup.yml#/pickupGroupSeries"
 

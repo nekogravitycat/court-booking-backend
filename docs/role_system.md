@@ -27,7 +27,7 @@
 | 角色 | 判定依據 | 授予方式 |
 | --- | --- | --- |
 | **System Admin（系統管理員）** | `users.is_system_admin = true` | 由既有 System Admin 透過 `PATCH /v1/users/:id` 設定；系統初始化時以 `set_admin.sh` 腳本直接寫入資料庫（bootstrap） |
-| **Pickup Host（臨打團主）** | `pickup_hosts` 表中有該 `user_id` | 僅 System Admin 可透過 `POST /v1/pickup-hosts` 授予、`DELETE /v1/pickup-hosts/:id` 撤銷 |
+| **Pickup Host（臨打團主）** | `pickup_hosts` 表中有該 `user_id` | 成功創建臨打團（`POST /v1/pickup-groups`、`POST /v1/pickup-group-series`）時自動授予，之後不會因團結束而消失；System Admin 也可透過 `POST /v1/pickup-hosts` 授予、`DELETE /v1/pickup-hosts/:id` 撤銷（撤銷後再次開團會重新授予） |
 | **Authenticated User（一般已登入使用者）** | 持有有效 JWT 且 `users.is_active = true` | `POST /v1/auth/register` 自行註冊 |
 | **Guest（未登入訪客）** | 無 Authorization header | — |
 
@@ -359,6 +359,7 @@ flowchart TD
 | `POST /v1/pickup-groups` | — | ✔ | ✔ | ✔ | ✔ |
 | `PATCH /v1/pickup-groups/:id` | — | — | — | ✔（限自己的團） | ✔ |
 | `DELETE /v1/pickup-groups/:id` | — | — | — | — | ✔ |
+| `POST /:id/notifications`（傳訊息給報名者） | — | — | — | ✔（限自己的團） | ✔ |
 | `POST /:id/orders`（報名） | — | ✔ | — | ✔ | ✔ |
 | `GET /:id/orders`（看報名名單） | — | — | — | ✔（限自己的團） | ✔ |
 | `GET /v1/pickup-orders`（我的報名） | — | ✔（只有自己的） | ✔ | ✔ | ✔ |
@@ -368,7 +369,7 @@ flowchart TD
 
 兩個公開列表端點套用 `AuthOptional` middleware：未登入也能瀏覽，但**帶了有效 token 時會額外回傳個人化的 `enrolled_status`**（見 [pickup/http/route.go](../internal/pickup/http/route.go)）。
 
-所有登入且啟用的使用者皆可創團，且可管理自己創建的團；不需也不會自動取得 Pickup Host 全域角色。
+所有登入且啟用的使用者皆可創團，且可管理自己創建的團；不需 Pickup Host 角色，但成功創團時會自動取得該角色（與團的存續無關）。
 報名前須先透過 `PUT /v1/me/skill-levels/:sport_id` 設定該運動的程度。
 單人報名不需 body，伺服器保存帳號程度快照；多人報名的第一位亦使用帳號程度，匿名同行者仍自行填程度。
 

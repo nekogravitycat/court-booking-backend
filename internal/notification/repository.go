@@ -12,6 +12,10 @@ import (
 
 type Repository interface {
 	CreateManual(ctx context.Context, senderID string, userIDs []string, title, content string) error
+	// CreateGroupMessage delivers a host message about one pickup group to the
+	// given recipients atomically, subject to the per-sender rate limit. The
+	// caller has already authorized the sender and resolved the recipients.
+	CreateGroupMessage(ctx context.Context, senderID, groupID string, userIDs []string, title, content string) error
 	Create(ctx context.Context, n *Notification) error
 	CreateMany(ctx context.Context, ns []*Notification) error
 	List(ctx context.Context, filter Filter) ([]*Notification, int, error)
@@ -129,8 +133,8 @@ func (r *pgxRepository) CreateManual(ctx context.Context, senderID string, userI
 		return err
 	}
 	defer tx.Rollback(ctx)
-	// Serialize per-admin sends so concurrent requests cannot bypass the limit.
-	if _, err := tx.Exec(ctx, "SELECT pg_advisory_xact_lock(hashtextextended($1, 9010))", senderID); err != nil {
+	// Serialize per-sender sends so concurrent requests cannot bypass the limit.
+	if err := lockSender(ctx, tx, senderID); err != nil {
 		return err
 	}
 	var allowed bool
@@ -143,12 +147,8 @@ func (r *pgxRepository) CreateManual(ctx context.Context, senderID string, userI
 	if !allowed {
 		return ErrManualSendForbidden
 	}
-	var recent int
-	if err := tx.QueryRow(ctx, "SELECT count(*) FROM public.manual_notification_sends WHERE sender_id = $1 AND created_at > clock_timestamp() - interval '1 minute'", senderID).Scan(&recent); err != nil {
+	if err := checkSendRate(ctx, tx, senderID); err != nil {
 		return err
-	}
-	if recent >= 10 {
-		return ErrSendRateLimited
 	}
 	rows, err := tx.Query(ctx, "SELECT id FROM public.users WHERE id = ANY($1::uuid[]) AND is_active = true ORDER BY id FOR SHARE", userIDs)
 	if err != nil {
@@ -173,4 +173,47 @@ func (r *pgxRepository) CreateManual(ctx context.Context, senderID string, userI
 		return err
 	}
 	return tx.Commit(ctx)
+}
+
+// CreateGroupMessage delivers one host message to the recipients of a pickup group.
+func (r *pgxRepository) CreateGroupMessage(ctx context.Context, senderID, groupID string, userIDs []string, title, content string) error {
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback(ctx)
+	if err := lockSender(ctx, tx, senderID); err != nil {
+		return err
+	}
+	if err := checkSendRate(ctx, tx, senderID); err != nil {
+		return err
+	}
+	if _, err := tx.Exec(ctx,
+		"INSERT INTO public.notifications (user_id, type, title, content, pickup_group_id) SELECT unnest($1::uuid[]), $2, $3, $4, $5",
+		userIDs, TypeHostMessage, title, content, groupID); err != nil {
+		return fmt.Errorf("create host message failed: %w", err)
+	}
+	if _, err := tx.Exec(ctx, "INSERT INTO public.manual_notification_sends (sender_id, recipient_count) VALUES ($1, $2)", senderID, len(userIDs)); err != nil {
+		return err
+	}
+	return tx.Commit(ctx)
+}
+
+// lockSender serializes manual sends of one sender for the rest of the transaction.
+func lockSender(ctx context.Context, tx pgx.Tx, senderID string) error {
+	_, err := tx.Exec(ctx, "SELECT pg_advisory_xact_lock(hashtextextended($1, 9010))", senderID)
+	return err
+}
+
+// checkSendRate returns ErrSendRateLimited once the sender reached the
+// per-minute limit. The caller must hold the sender lock.
+func checkSendRate(ctx context.Context, tx pgx.Tx, senderID string) error {
+	var recent int
+	if err := tx.QueryRow(ctx, "SELECT count(*) FROM public.manual_notification_sends WHERE sender_id = $1 AND created_at > clock_timestamp() - interval '1 minute'", senderID).Scan(&recent); err != nil {
+		return err
+	}
+	if recent >= 10 {
+		return ErrSendRateLimited
+	}
+	return nil
 }

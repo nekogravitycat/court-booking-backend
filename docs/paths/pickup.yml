@@ -315,6 +315,73 @@ pickupGroupOrders:
             schema:
               $ref: "../components/schemas/common.yml#/ErrorResponse"
 
+pickupGroupNotifications:
+  post:
+    tags:
+      - Pickup Groups
+    summary: "團主傳訊息給報名者"
+    description: |
+      團主 (或 System Admin) 傳送站內通知給該臨打團的報名者。收件者的通知型別為 host_message，並帶有 pickup_group_id。
+
+      收件對象為該團任何狀態 (pending / confirmed / cancel_request / cancelled / rejected) 的訂單擁有者，
+      不含團主本人與已停用帳號。省略或給空的 user_ids 表示發送給全部報名者；
+      指定 user_ids 時，每個 ID 都必須是該團的報名者，否則回傳 400。
+
+      title 1-100 字、content 1-2000 字 (前後空白會被移除)。
+      與 POST /notifications 共用每位寄件者每分鐘 10 次的限制，超過回傳 429。
+
+      **權限 Access Control**:
+      - **Login Required**: 僅該團的團主或 System Admin，其他人回傳 403。
+    security:
+      - bearerAuth: []
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [title, content]
+            properties:
+              user_ids:
+                type: array
+                maxItems: 1000
+                items:
+                  type: string
+                  format: uuid
+                description: "選填；省略表示發送給全部報名者"
+              title:
+                type: string
+                maxLength: 100
+              content:
+                type: string
+                maxLength: 2000
+    responses:
+      "201":
+        description: Sent
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                sent:
+                  type: integer
+                  description: "實際收到訊息的人數"
+      "400":
+        description: Invalid body, a recipient is not a participant, or the group has no participants.
+      "403":
+        description: Only the group host or a system administrator may send.
+      "404":
+        description: Pickup group not found.
+      "429":
+        description: Send limit exceeded.
+
 pickupOrderDetail:
   patch:
     tags:

@@ -47,6 +47,10 @@ type Repository interface {
 	// (pending, confirmed, cancel_request) in the group.
 	ListOccupyingUserIDs(ctx context.Context, groupID string) ([]string, error)
 
+	// ListGroupMessageRecipientIDs returns the distinct active users holding an
+	// order of any status in the group, excluding the host.
+	ListGroupMessageRecipientIDs(ctx context.Context, groupID string) ([]string, error)
+
 	// ListParticipantSeats returns one entry per pending/confirmed seat of the
 	// group (party members expanded), along with the IANA timezone of the group's
 	// location. It returns ErrGroupNotFound when the group does not exist.
@@ -208,8 +212,24 @@ func (r *pgxRepository) CreateGroup(ctx context.Context, g *PickupGroup) error {
 		return fmt.Errorf("build create pickup group query failed: %w", err)
 	}
 
-	if err := r.pool.QueryRow(ctx, query, args...).Scan(&g.ID, &g.CreatedAt, &g.UpdatedAt); err != nil {
+	// Creating a group also grants the pickup host role, atomically. Nested
+	// inside a series transaction this becomes a savepoint.
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("begin create pickup group failed: %w", err)
+	}
+	defer tx.Rollback(ctx)
+
+	if err := tx.QueryRow(ctx, query, args...).Scan(&g.ID, &g.CreatedAt, &g.UpdatedAt); err != nil {
 		return mapLocationFKError(err, "create pickup group failed")
+	}
+	if _, err := tx.Exec(ctx,
+		"INSERT INTO public.pickup_hosts (user_id) VALUES ($1) ON CONFLICT (user_id) DO NOTHING", g.HostID,
+	); err != nil {
+		return fmt.Errorf("grant pickup host role failed: %w", err)
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return fmt.Errorf("commit create pickup group failed: %w", err)
 	}
 	return nil
 }
@@ -976,6 +996,29 @@ func (r *pgxRepository) ListOccupyingUserIDs(ctx context.Context, groupID string
 		var id string
 		if err := rows.Scan(&id); err != nil {
 			return nil, fmt.Errorf("scan occupying user failed: %w", err)
+		}
+		ids = append(ids, id)
+	}
+	return ids, rows.Err()
+}
+
+func (r *pgxRepository) ListGroupMessageRecipientIDs(ctx context.Context, groupID string) ([]string, error) {
+	rows, err := r.pool.Query(ctx,
+		`SELECT DISTINCT o.user_id::text FROM public.pickup_orders o
+		 JOIN public.pickup_groups pg ON pg.id = o.pickup_group_id
+		 JOIN public.users u ON u.id = o.user_id
+		 WHERE o.pickup_group_id = $1 AND u.is_active AND o.user_id <> pg.host_id`,
+		groupID)
+	if err != nil {
+		return nil, fmt.Errorf("list group message recipients failed: %w", err)
+	}
+	defer rows.Close()
+
+	var ids []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, fmt.Errorf("scan group message recipient failed: %w", err)
 		}
 		ids = append(ids, id)
 	}

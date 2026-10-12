@@ -394,6 +394,27 @@ func (h *Handler) ListGroupOrders(c *gin.Context) {
 	c.JSON(http.StatusOK, items)
 }
 
+// SendGroupMessage delivers a message from the group host (or a system admin)
+// to the group's participants.
+func (h *Handler) SendGroupMessage(c *gin.Context) {
+	var uri request.ByIDRequest
+	if !request.BindURI(c, &uri) {
+		return
+	}
+	var body SendGroupMessageBody
+	if !request.BindJSON(c, &body) {
+		return
+	}
+
+	sent, err := h.service.SendGroupMessage(c.Request.Context(), uri.ID, auth.GetUserID(c), auth.IsSystemAdmin(c), body.UserIDs, body.Title, body.Content)
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+
+	c.JSON(http.StatusCreated, SendGroupMessageResponse{Sent: sent})
+}
+
 func (h *Handler) ListMyOrders(c *gin.Context) {
 	userID := auth.GetUserID(c)
 	orders, err := h.service.GetOrdersByUserID(c.Request.Context(), userID)

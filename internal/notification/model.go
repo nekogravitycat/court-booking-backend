@@ -12,13 +12,18 @@ var (
 	ErrInvalidManualNotification = apperror.New(http.StatusBadRequest, "provide 1-100 unique user IDs, a title of 1-100 characters, and content of 1-2000 characters")
 	ErrInvalidRecipients         = apperror.New(http.StatusBadRequest, "all recipients must be active users")
 	ErrSendRateLimited           = apperror.New(http.StatusTooManyRequests, "manual notification limit exceeded; try again later")
+	ErrInvalidGroupMessage       = apperror.New(http.StatusBadRequest, "provide a title of 1-100 characters and content of 1-2000 characters")
 	ErrNotFound                  = apperror.New(http.StatusNotFound, "notification not found")
 )
+
+// MaxGroupMessageRecipients bounds one host message to a pickup group.
+const MaxGroupMessageRecipients = 1000
 
 // Notification types. The type is a stable machine key the client can use to
 // pick an icon or deep link; title and content are ready-to-display text.
 const (
 	TypeAdminMessage               = "admin_message"
+	TypeHostMessage                = "host_message"                   // To an enrolled user: free-form message from the group host
 	TypePickupOrderCreated         = "pickup_order_created"           // To the host: someone enrolled
 	TypePickupOrderConfirmed       = "pickup_order_confirmed"         // To the booker: host confirmed
 	TypePickupOrderRejected        = "pickup_order_rejected"          // To the booker: host rejected

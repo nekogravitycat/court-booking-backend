@@ -14,6 +14,9 @@ type Service interface {
 	Notify(ctx context.Context, n *Notification) error
 	// NotifyMany delivers several notifications at once.
 	NotifyMany(ctx context.Context, ns []*Notification) error
+	// SendGroupMessage delivers a host message about a pickup group. The caller
+	// must already have authorized the sender and resolved the recipients.
+	SendGroupMessage(ctx context.Context, senderID, groupID string, userIDs []string, title, content string) error
 	List(ctx context.Context, filter Filter) ([]*Notification, int, error)
 	CountUnread(ctx context.Context, userID string) (int, error)
 	MarkRead(ctx context.Context, userID, id string) error
@@ -68,4 +71,15 @@ func (s *service) SendManual(ctx context.Context, senderID string, userIDs []str
 		seen[ids[i]] = true
 	}
 	return s.repo.CreateManual(ctx, senderID, ids, title, content)
+}
+
+func (s *service) SendGroupMessage(ctx context.Context, senderID, groupID string, userIDs []string, title, content string) error {
+	title, content = strings.TrimSpace(title), strings.TrimSpace(content)
+	if utf8.RuneCountInString(title) < 1 || utf8.RuneCountInString(title) > 100 || utf8.RuneCountInString(content) < 1 || utf8.RuneCountInString(content) > 2000 {
+		return ErrInvalidGroupMessage
+	}
+	if len(userIDs) < 1 || len(userIDs) > MaxGroupMessageRecipients {
+		return ErrInvalidManualNotification
+	}
+	return s.repo.CreateGroupMessage(ctx, senderID, groupID, userIDs, title, content)
 }

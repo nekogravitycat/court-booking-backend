@@ -61,6 +61,19 @@ type HostGroupsURI struct {
 	HostID string `uri:"host_id" binding:"required,uuid"`
 }
 
+// SendGroupMessageBody delivers a message to the participants of one group.
+// An omitted or empty user_ids targets every participant.
+type SendGroupMessageBody struct {
+	UserIDs []string `json:"user_ids" binding:"omitempty,max=1000,unique,dive,uuid"`
+	Title   string   `json:"title" binding:"required,max=100"`
+	Content string   `json:"content" binding:"required,max=2000"`
+}
+
+// SendGroupMessageResponse reports how many participants received the message.
+type SendGroupMessageResponse struct {
+	Sent int `json:"sent"`
+}
+
 type CreateGroupBody struct {
 	Title                string    `json:"title" binding:"required,min=1,max=100"`
 	Description          *string   `json:"description" binding:"omitempty,max=100"`

@@ -98,6 +98,10 @@ type Service interface {
 	DeleteGroup(ctx context.Context, id string) error
 
 	GetOrdersByGroupID(ctx context.Context, groupID, requesterID string, isSysAdmin bool) ([]*PickupOrder, error)
+	// SendGroupMessage delivers a message from the group host (or a system admin)
+	// to the group's participants of any order status. An empty userIDs targets
+	// every participant. It returns the number of recipients.
+	SendGroupMessage(ctx context.Context, groupID, senderID string, isSysAdmin bool, userIDs []string, title, content string) (int, error)
 	GetOrdersByUserID(ctx context.Context, userID string) ([]*PickupOrder, error)
 
 	CreateOrder(ctx context.Context, req CreateOrderRequest) (*PickupOrder, error)
@@ -451,6 +455,48 @@ func (s *service) GetOrdersByGroupID(ctx context.Context, groupID, requesterID s
 		return nil, ErrOrdersForbidden
 	}
 	return s.repo.GetOrdersByGroupID(ctx, groupID)
+}
+
+func (s *service) SendGroupMessage(ctx context.Context, groupID, senderID string, isSysAdmin bool, userIDs []string, title, content string) (int, error) {
+	group, err := s.repo.GetGroupByID(ctx, groupID)
+	if err != nil {
+		return 0, err
+	}
+	if group.HostID != senderID && !isSysAdmin {
+		return 0, ErrMessageForbidden
+	}
+
+	participants, err := s.repo.ListGroupMessageRecipientIDs(ctx, groupID)
+	if err != nil {
+		return 0, err
+	}
+	if len(participants) == 0 {
+		return 0, ErrNoMessageRecipients
+	}
+
+	recipients := participants
+	if len(userIDs) > 0 {
+		allowed := make(map[string]bool, len(participants))
+		for _, id := range participants {
+			allowed[id] = true
+		}
+		recipients = make([]string, 0, len(userIDs))
+		seen := make(map[string]bool, len(userIDs))
+		for _, id := range userIDs {
+			if !allowed[id] {
+				return 0, ErrRecipientNotParticipant
+			}
+			if !seen[id] {
+				seen[id] = true
+				recipients = append(recipients, id)
+			}
+		}
+	}
+
+	if err := s.notifier.SendGroupMessage(ctx, senderID, groupID, recipients, title, content); err != nil {
+		return 0, err
+	}
+	return len(recipients), nil
 }
 
 func (s *service) GetOrdersByUserID(ctx context.Context, userID string) ([]*PickupOrder, error) {

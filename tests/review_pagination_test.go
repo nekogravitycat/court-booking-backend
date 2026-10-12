@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"github.com/nekogravitycat/court-booking-backend/internal/notification"
-	"github.com/nekogravitycat/court-booking-backend/internal/user"
 	"github.com/stretchr/testify/require"
 )
 
@@ -36,7 +35,7 @@ func TestReviewPaginationTotals(t *testing.T) {
 	_, err = testPool.Exec(ctx, "INSERT INTO public.organization_managers (organization_id, user_id) VALUES ($1,$2)", orgID, player.ID)
 	require.NoError(t, err)
 	require.NoError(t, notification.NewPgxRepository(testPool).Create(ctx, &notification.Notification{UserID: host.ID, Type: notification.TypePickupOrderCreated, Title: "Pagination", Content: "Content"}))
-	require.NoError(t, user.NewPgxRepository(testPool).AddPickupHost(ctx, host.ID))
+	// Creating the group above already granted the pickup host role.
 	paths := []string{"/v1/users?sort_by=name", "/v1/pickup-hosts", "/v1/organizations", "/v1/locations?organization_id=" + orgID,
 		"/v1/resources?location_id=" + locationID, "/v1/bookings", "/v1/pickup-groups?sport_id=" + sportID,
 		"/v1/sports", "/v1/skill-levels?sport_id=" + sportID, "/v1/announcements", "/v1/notifications?unread_only=true",
