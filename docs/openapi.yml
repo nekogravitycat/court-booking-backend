@@ -470,6 +470,9 @@ paths:
   /pickup-groups/{id}/notifications:
     $ref: "./paths/pickup.yml#/pickupGroupNotifications"
 
+  /pickup-groups/{id}/host-messages:
+    $ref: "./paths/pickup.yml#/pickupGroupHostMessages"
+
   /pickup-group-series:
     $ref: "./paths/pickup.yml#/pickupGroupSeries"
 

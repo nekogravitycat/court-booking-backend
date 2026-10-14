@@ -100,8 +100,11 @@ type Service interface {
 	GetOrdersByGroupID(ctx context.Context, groupID, requesterID string, isSysAdmin bool) ([]*PickupOrder, error)
 	// SendGroupMessage delivers a message from the group host (or a system admin)
 	// to the group's participants of any order status. An empty userIDs targets
-	// every participant. It returns the number of recipients.
+	// every participant; explicit userIDs may also name users who previously
+	// messaged the host about this group. It returns the number of recipients.
 	SendGroupMessage(ctx context.Context, groupID, senderID string, isSysAdmin bool, userIDs []string, title, content string) (int, error)
+	// SendMessageToHost delivers a message from any user to the host of the group.
+	SendMessageToHost(ctx context.Context, groupID, senderID, title, content string) error
 	GetOrdersByUserID(ctx context.Context, userID string) ([]*PickupOrder, error)
 
 	CreateOrder(ctx context.Context, req CreateOrderRequest) (*PickupOrder, error)
@@ -476,8 +479,16 @@ func (s *service) SendGroupMessage(ctx context.Context, groupID, senderID string
 
 	recipients := participants
 	if len(userIDs) > 0 {
-		allowed := make(map[string]bool, len(participants))
+		// Replies are allowed to users who messaged the host, enrolled or not.
+		senders, err := s.repo.ListGroupMessageSenderIDs(ctx, groupID)
+		if err != nil {
+			return 0, err
+		}
+		allowed := make(map[string]bool, len(participants)+len(senders))
 		for _, id := range participants {
+			allowed[id] = true
+		}
+		for _, id := range senders {
 			allowed[id] = true
 		}
 		recipients = make([]string, 0, len(userIDs))
@@ -493,10 +504,21 @@ func (s *service) SendGroupMessage(ctx context.Context, groupID, senderID string
 		}
 	}
 
-	if err := s.notifier.SendGroupMessage(ctx, senderID, groupID, recipients, title, content); err != nil {
+	if err := s.notifier.SendGroupMessage(ctx, senderID, groupID, recipients, notification.TypeHostMessage, title, content); err != nil {
 		return 0, err
 	}
 	return len(recipients), nil
+}
+
+func (s *service) SendMessageToHost(ctx context.Context, groupID, senderID, title, content string) error {
+	group, err := s.repo.GetGroupByID(ctx, groupID)
+	if err != nil {
+		return err
+	}
+	if group.HostID == senderID {
+		return ErrMessageSelf
+	}
+	return s.notifier.SendGroupMessage(ctx, senderID, groupID, []string{group.HostID}, notification.TypeParticipantMessage, title, content)
 }
 
 func (s *service) GetOrdersByUserID(ctx context.Context, userID string) ([]*PickupOrder, error) {

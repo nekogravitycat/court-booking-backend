@@ -12,10 +12,11 @@ import (
 
 type Repository interface {
 	CreateManual(ctx context.Context, senderID string, userIDs []string, title, content string) error
-	// CreateGroupMessage delivers a host message about one pickup group to the
-	// given recipients atomically, subject to the per-sender rate limit. The
-	// caller has already authorized the sender and resolved the recipients.
-	CreateGroupMessage(ctx context.Context, senderID, groupID string, userIDs []string, title, content string) error
+	// CreateGroupMessage delivers a user-to-user message of the given type about
+	// one pickup group to the recipients atomically, subject to the per-sender
+	// rate limit. The caller has already authorized the sender and resolved the
+	// recipients.
+	CreateGroupMessage(ctx context.Context, senderID, groupID string, userIDs []string, msgType, title, content string) error
 	Create(ctx context.Context, n *Notification) error
 	CreateMany(ctx context.Context, ns []*Notification) error
 	List(ctx context.Context, filter Filter) ([]*Notification, int, error)
@@ -70,21 +71,23 @@ func (r *pgxRepository) CreateMany(ctx context.Context, ns []*Notification) erro
 func (r *pgxRepository) List(ctx context.Context, filter Filter) ([]*Notification, int, error) {
 	psql := squirrel.StatementBuilder.PlaceholderFormat(squirrel.Dollar)
 	query := psql.Select(
-		"id", "user_id", "type", "title", "content", "pickup_group_id", "pickup_order_id", "is_read", "created_at",
+		"n.id", "n.user_id", "n.type", "n.title", "n.content", "n.pickup_group_id", "n.pickup_order_id",
+		"n.sender_id", "u.display_name", "n.is_read", "n.created_at",
 		"count(*) OVER() AS total_count",
 	).
-		From("public.notifications").
-		Where(squirrel.Eq{"user_id": filter.UserID}).
-		OrderBy("created_at DESC", "id DESC")
+		From("public.notifications n").
+		LeftJoin("public.users u ON u.id = n.sender_id").
+		Where(squirrel.Eq{"n.user_id": filter.UserID}).
+		OrderBy("n.created_at DESC", "n.id DESC")
 
 	if filter.UnreadOnly {
-		query = query.Where(squirrel.Eq{"is_read": false})
+		query = query.Where(squirrel.Eq{"n.is_read": false})
 	}
 
 	return pagination.Collect(ctx, r.pool, query, filter.Page, filter.PageSize, "notification", func(rows pgx.Rows, total *int) (*Notification, error) {
 		var n Notification
 		if err := rows.Scan(
-			&n.ID, &n.UserID, &n.Type, &n.Title, &n.Content, &n.PickupGroupID, &n.PickupOrderID, &n.IsRead, &n.CreatedAt,
+			&n.ID, &n.UserID, &n.Type, &n.Title, &n.Content, &n.PickupGroupID, &n.PickupOrderID, &n.SenderID, &n.SenderName, &n.IsRead, &n.CreatedAt,
 			total,
 		); err != nil {
 			return nil, fmt.Errorf("scan notification failed: %w", err)
@@ -176,7 +179,7 @@ func (r *pgxRepository) CreateManual(ctx context.Context, senderID string, userI
 }
 
 // CreateGroupMessage delivers one host message to the recipients of a pickup group.
-func (r *pgxRepository) CreateGroupMessage(ctx context.Context, senderID, groupID string, userIDs []string, title, content string) error {
+func (r *pgxRepository) CreateGroupMessage(ctx context.Context, senderID, groupID string, userIDs []string, msgType, title, content string) error {
 	tx, err := r.pool.Begin(ctx)
 	if err != nil {
 		return err
@@ -189,9 +192,9 @@ func (r *pgxRepository) CreateGroupMessage(ctx context.Context, senderID, groupI
 		return err
 	}
 	if _, err := tx.Exec(ctx,
-		"INSERT INTO public.notifications (user_id, type, title, content, pickup_group_id) SELECT unnest($1::uuid[]), $2, $3, $4, $5",
-		userIDs, TypeHostMessage, title, content, groupID); err != nil {
-		return fmt.Errorf("create host message failed: %w", err)
+		"INSERT INTO public.notifications (user_id, type, title, content, pickup_group_id, sender_id) SELECT unnest($1::uuid[]), $2, $3, $4, $5, $6",
+		userIDs, msgType, title, content, groupID, senderID); err != nil {
+		return fmt.Errorf("create group message failed: %w", err)
 	}
 	if _, err := tx.Exec(ctx, "INSERT INTO public.manual_notification_sends (sender_id, recipient_count) VALUES ($1, $2)", senderID, len(userIDs)); err != nil {
 		return err

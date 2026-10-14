@@ -112,3 +112,56 @@ func TestHostMessageToParticipants(t *testing.T) {
 		assert.Equal(t, http.StatusNotFound, w.Code)
 	})
 }
+
+func TestMessageToHostAndReply(t *testing.T) {
+	clearTables()
+	host := createTestUser(t, "rhost@pickup.com", "pass", false)
+	asker := createTestUser(t, "rasker@pickup.com", "pass", false)
+	stranger := createTestUser(t, "rstranger@pickup.com", "pass", false)
+
+	hostToken := generateToken(host.ID)
+	locationID := setupTestLocation(t, hostToken, host.ID)
+	sportID, _ := getSportSkill(t, "BADMINTON", "A")
+	start := time.Now().Add(24 * time.Hour)
+	group := createGroup(t, hostToken, locationID, sportID, 1, 8, 0, start, start.Add(2*time.Hour))
+	enroll(t, generateToken(stranger.ID), group.ID, 1)
+
+	toHost := "/v1/pickup-groups/" + group.ID + "/host-messages"
+	toUsers := "/v1/pickup-groups/" + group.ID + "/notifications"
+	body := map[string]any{"title": "Question", "content": "Is parking available?"}
+
+	assert.Equal(t, http.StatusUnauthorized, executeRequest("POST", toHost, body, "").Code)
+	assert.Equal(t, http.StatusBadRequest, executeRequest("POST", toHost, body, hostToken).Code)
+	assert.Equal(t, http.StatusBadRequest, executeRequest("POST", toHost, map[string]any{"title": "x"}, generateToken(asker.ID)).Code)
+	assert.Equal(t, http.StatusNotFound, executeRequest("POST", "/v1/pickup-groups/"+uuid.NewString()+"/host-messages", body, generateToken(asker.ID)).Code)
+
+	// The host cannot reply to a non-participant who has not written first.
+	reply := map[string]any{"title": "Re", "content": "Yes", "user_ids": []string{asker.ID}}
+	assert.Equal(t, http.StatusBadRequest, executeRequest("POST", toUsers, reply, hostToken).Code)
+
+	require.Equal(t, http.StatusCreated, executeRequest("POST", toHost, body, generateToken(asker.ID)).Code)
+
+	var found bool
+	for _, n := range listNotifications(t, hostToken, "").Items {
+		if n.Type == "participant_message" {
+			found = true
+			require.NotNil(t, n.PickupGroupID)
+			assert.Equal(t, group.ID, *n.PickupGroupID)
+			require.NotNil(t, n.SenderID)
+			assert.Equal(t, asker.ID, *n.SenderID)
+		}
+	}
+	assert.True(t, found, "host should receive the message")
+
+	// Now the host can reply, and a broadcast still only reaches participants.
+	assert.Equal(t, http.StatusCreated, executeRequest("POST", toUsers, reply, hostToken).Code)
+	var got bool
+	for _, n := range listNotifications(t, generateToken(asker.ID), "").Items {
+		if n.Type == "host_message" {
+			got = true
+			require.NotNil(t, n.SenderID)
+			assert.Equal(t, host.ID, *n.SenderID)
+		}
+	}
+	assert.True(t, got, "asker should receive the reply")
+}

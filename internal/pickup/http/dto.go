@@ -69,6 +69,12 @@ type SendGroupMessageBody struct {
 	Content string   `json:"content" binding:"required,max=2000"`
 }
 
+// SendHostMessageBody delivers a message to the host of one group.
+type SendHostMessageBody struct {
+	Title   string `json:"title" binding:"required,max=100"`
+	Content string `json:"content" binding:"required,max=2000"`
+}
+
 // SendGroupMessageResponse reports how many participants received the message.
 type SendGroupMessageResponse struct {
 	Sent int `json:"sent"`

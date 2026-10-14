@@ -415,6 +415,26 @@ func (h *Handler) SendGroupMessage(c *gin.Context) {
 	c.JSON(http.StatusCreated, SendGroupMessageResponse{Sent: sent})
 }
 
+// SendHostMessage delivers a message from the authenticated user to the host
+// of the group.
+func (h *Handler) SendHostMessage(c *gin.Context) {
+	var uri request.ByIDRequest
+	if !request.BindURI(c, &uri) {
+		return
+	}
+	var body SendHostMessageBody
+	if !request.BindJSON(c, &body) {
+		return
+	}
+
+	if err := h.service.SendMessageToHost(c.Request.Context(), uri.ID, auth.GetUserID(c), body.Title, body.Content); err != nil {
+		response.Error(c, err)
+		return
+	}
+
+	c.Status(http.StatusCreated)
+}
+
 func (h *Handler) ListMyOrders(c *gin.Context) {
 	userID := auth.GetUserID(c)
 	orders, err := h.service.GetOrdersByUserID(c.Request.Context(), userID)

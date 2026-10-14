@@ -51,6 +51,10 @@ type Repository interface {
 	// order of any status in the group, excluding the host.
 	ListGroupMessageRecipientIDs(ctx context.Context, groupID string) ([]string, error)
 
+	// ListGroupMessageSenderIDs returns the distinct active users who sent a
+	// participant_message about the group, excluding the host.
+	ListGroupMessageSenderIDs(ctx context.Context, groupID string) ([]string, error)
+
 	// ListParticipantSeats returns one entry per pending/confirmed seat of the
 	// group (party members expanded), along with the IANA timezone of the group's
 	// location. It returns ErrGroupNotFound when the group does not exist.
@@ -1019,6 +1023,30 @@ func (r *pgxRepository) ListGroupMessageRecipientIDs(ctx context.Context, groupI
 		var id string
 		if err := rows.Scan(&id); err != nil {
 			return nil, fmt.Errorf("scan group message recipient failed: %w", err)
+		}
+		ids = append(ids, id)
+	}
+	return ids, rows.Err()
+}
+
+func (r *pgxRepository) ListGroupMessageSenderIDs(ctx context.Context, groupID string) ([]string, error) {
+	rows, err := r.pool.Query(ctx,
+		`SELECT DISTINCT n.sender_id::text FROM public.notifications n
+		 JOIN public.pickup_groups pg ON pg.id = n.pickup_group_id
+		 JOIN public.users u ON u.id = n.sender_id
+		 WHERE n.pickup_group_id = $1 AND n.type = 'participant_message'
+		   AND u.is_active AND n.sender_id <> pg.host_id`,
+		groupID)
+	if err != nil {
+		return nil, fmt.Errorf("list group message senders failed: %w", err)
+	}
+	defer rows.Close()
+
+	var ids []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, fmt.Errorf("scan group message sender failed: %w", err)
 		}
 		ids = append(ids, id)
 	}

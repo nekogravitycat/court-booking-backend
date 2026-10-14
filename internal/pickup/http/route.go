@@ -27,6 +27,7 @@ func RegisterRoutes(g *gin.RouterGroup, h *Handler, authMiddleware, optionalAuth
 		groupsGroup.POST("/:id/party-orders", h.CreatePartyOrder)
 		groupsGroup.GET("/:id/orders", h.ListGroupOrders)
 		groupsGroup.POST("/:id/notifications", h.SendGroupMessage)
+		groupsGroup.POST("/:id/host-messages", h.SendHostMessage)
 		groupsGroup.PUT("/:id/orders/:order_id/absence", h.MarkAbsence)
 		groupsGroup.DELETE("/:id/orders/:order_id/absence", h.ClearAbsence)
 	}

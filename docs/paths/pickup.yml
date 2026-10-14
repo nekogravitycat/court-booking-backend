@@ -325,7 +325,8 @@ pickupGroupNotifications:
 
       收件對象為該團任何狀態 (pending / confirmed / cancel_request / cancelled / rejected) 的訂單擁有者，
       不含團主本人與已停用帳號。省略或給空的 user_ids 表示發送給全部報名者；
-      指定 user_ids 時，每個 ID 都必須是該團的報名者，否則回傳 400。
+      指定 user_ids 時，每個 ID 都必須是該團的報名者，或曾傳訊息給團主 (participant_message) 的使用者，
+      否則回傳 400；因此團主可回覆未報名者的詢問。
 
       title 1-100 字、content 1-2000 字 (前後空白會被移除)。
       與 POST /notifications 共用每位寄件者每分鐘 10 次的限制，超過回傳 429。
@@ -377,6 +378,55 @@ pickupGroupNotifications:
         description: Invalid body, a recipient is not a participant, or the group has no participants.
       "403":
         description: Only the group host or a system administrator may send.
+      "404":
+        description: Pickup group not found.
+      "429":
+        description: Send limit exceeded.
+
+pickupGroupHostMessages:
+  post:
+    tags:
+      - Pickup Groups
+    summary: "傳訊息給團主"
+    description: |
+      任何登入使用者傳送站內通知給該臨打團的團主。團主收到的通知型別為 participant_message，
+      帶有 pickup_group_id 與 sender_id / sender_name；團主可透過 POST /pickup-groups/{id}/notifications
+      以 user_ids 指定 sender_id 回覆。
+
+      title 1-100 字、content 1-2000 字 (前後空白會被移除)。
+      與 POST /notifications 共用每位寄件者每分鐘 10 次的限制，超過回傳 429。
+      團主不可傳給自己 (400)。
+
+      **權限 Access Control**:
+      - **Login Required**: 任何登入使用者。
+    security:
+      - bearerAuth: []
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [title, content]
+            properties:
+              title:
+                type: string
+                maxLength: 100
+              content:
+                type: string
+                maxLength: 2000
+    responses:
+      "201":
+        description: Sent
+      "400":
+        description: Invalid body, or the sender is the group host.
       "404":
         description: Pickup group not found.
       "429":

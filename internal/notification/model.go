@@ -16,7 +16,7 @@ var (
 	ErrNotFound                  = apperror.New(http.StatusNotFound, "notification not found")
 )
 
-// MaxGroupMessageRecipients bounds one host message to a pickup group.
+// MaxGroupMessageRecipients bounds one group message to a pickup group.
 const MaxGroupMessageRecipients = 1000
 
 // Notification types. The type is a stable machine key the client can use to
@@ -24,6 +24,7 @@ const MaxGroupMessageRecipients = 1000
 const (
 	TypeAdminMessage               = "admin_message"
 	TypeHostMessage                = "host_message"                   // To an enrolled user: free-form message from the group host
+	TypeParticipantMessage         = "participant_message"            // To the host: free-form message from a user
 	TypePickupOrderCreated         = "pickup_order_created"           // To the host: someone enrolled
 	TypePickupOrderConfirmed       = "pickup_order_confirmed"         // To the booker: host confirmed
 	TypePickupOrderRejected        = "pickup_order_rejected"          // To the booker: host rejected
@@ -45,6 +46,8 @@ type Notification struct {
 	Content       string
 	PickupGroupID *string
 	PickupOrderID *string
+	SenderID      *string // Set for user-to-user messages only
+	SenderName    *string // Sender's display name, populated on List
 	IsRead        bool
 	CreatedAt     time.Time
 }

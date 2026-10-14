@@ -20,6 +20,8 @@ type NotificationResponse struct {
 	Content       string    `json:"content"`
 	PickupGroupID *string   `json:"pickup_group_id"`
 	PickupOrderID *string   `json:"pickup_order_id"`
+	SenderID      *string   `json:"sender_id"`
+	SenderName    *string   `json:"sender_name"`
 	IsRead        bool      `json:"is_read"`
 	CreatedAt     time.Time `json:"created_at"`
 }
@@ -32,6 +34,8 @@ func NewNotificationResponse(n *notification.Notification) NotificationResponse 
 		Content:       n.Content,
 		PickupGroupID: n.PickupGroupID,
 		PickupOrderID: n.PickupOrderID,
+		SenderID:      n.SenderID,
+		SenderName:    n.SenderName,
 		IsRead:        n.IsRead,
 		CreatedAt:     n.CreatedAt.UTC(),
 	}

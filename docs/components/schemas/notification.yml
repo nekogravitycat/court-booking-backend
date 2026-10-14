@@ -11,6 +11,7 @@ NotificationResponse:
       enum:
         - admin_message
         - host_message
+        - participant_message
         - pickup_order_created
         - pickup_order_confirmed
         - pickup_order_rejected
@@ -34,6 +35,15 @@ NotificationResponse:
       type: string
       format: uuid
       nullable: true
+    sender_id:
+      type: string
+      format: uuid
+      nullable: true
+      description: "寄件者；僅 host_message / participant_message 有值，可作為回覆對象"
+    sender_name:
+      type: string
+      nullable: true
+      description: "寄件者的顯示名稱 (未設定時為 null)"
     is_read:
       type: boolean
     created_at:
