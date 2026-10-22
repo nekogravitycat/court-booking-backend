@@ -91,7 +91,12 @@ func TestAccountSkillLevelsAndUserHostedGroups(t *testing.T) {
 		groupPath := "/v1/pickup-groups/" + group.ID
 		assert.Equal(t, http.StatusOK, executeRequest("PATCH", groupPath, pickupHttp.UpdateGroupBody{Title: &title}, hostToken).Code)
 		assert.Equal(t, http.StatusForbidden, executeRequest("PATCH", groupPath, pickupHttp.UpdateGroupBody{Title: &title}, otherToken).Code)
-		assert.Equal(t, http.StatusForbidden, executeRequest("DELETE", groupPath, nil, hostToken).Code)
+		assert.Equal(t, http.StatusForbidden, executeRequest("DELETE", groupPath, nil, otherToken).Code)
+		// The creator may delete their own group, but not while it has enrollments.
+		assert.Equal(t, http.StatusConflict, executeRequest("DELETE", groupPath, nil, hostToken).Code)
+		empty := createGroup(t, hostToken, locationID, sportID, 2, 8, 100, start, start.Add(time.Hour))
+		assert.Equal(t, http.StatusForbidden, executeRequest("DELETE", "/v1/pickup-groups/"+empty.ID, nil, otherToken).Code)
+		assert.Equal(t, http.StatusNoContent, executeRequest("DELETE", "/v1/pickup-groups/"+empty.ID, nil, hostToken).Code)
 		assert.Equal(t, http.StatusForbidden, executeRequest("GET", orderPath, nil, otherToken).Code)
 		w := executeRequest("GET", orderPath, nil, hostToken)
 		require.Equal(t, http.StatusOK, w.Code)

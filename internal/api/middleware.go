@@ -24,3 +24,19 @@ func RequireSystemAdmin() gin.HandlerFunc {
 		c.Next()
 	}
 }
+
+// RequireAllowedOrigin is the CSRF guard for endpoints authenticated by the
+// session cookie (which the browser attaches automatically): the request's
+// Origin header must be an allowed frontend origin. A missing Origin is
+// rejected only when requireOrigin is set (production), since browsers always
+// send Origin on cross-origin POSTs and non-browser clients carry no cookie.
+func RequireAllowedOrigin(allowed func(origin string) bool, requireOrigin bool) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		origin := c.GetHeader("Origin")
+		if (origin == "" && requireOrigin) || (origin != "" && !allowed(origin)) {
+			c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "origin not allowed"})
+			return
+		}
+		c.Next()
+	}
+}

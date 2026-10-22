@@ -304,6 +304,10 @@ paths:
 
   /auth/login:
     $ref: "./paths/auth.yml#/login"
+  /auth/refresh:
+    $ref: "./paths/auth.yml#/refresh"
+  /auth/logout:
+    $ref: "./paths/auth.yml#/logout"
 
   # ============================
   # Me

@@ -67,3 +67,63 @@ login:
           application/json:
             schema:
               $ref: "../components/schemas/common.yml#/ErrorResponse"
+
+refresh:
+  post:
+    tags:
+      - Auth
+    summary: "以登入 Cookie 換取 Access Token"
+    description: |
+      前台與後台共用同一個 API 時，登入狀態透過 `session` Cookie（production 為 `__Host-session`）共享：
+      登入成功時 API 會設定此 Cookie（HttpOnly、Secure、SameSite=Lax、不含 Domain，有效期預設 30 天），
+      另一個前端啟動時呼叫此端點即可取得 Access Token 與使用者資訊，無需再次登入。
+
+      前端需以 `credentials: "include"` 呼叫，且來源必須在後端允許的 Origin 清單內（否則 `403`）。
+
+      **權限 Access Control**:
+      - **Public**: 以 Cookie 驗證，不需要 Authorization header。
+    operationId: refreshSession
+    responses:
+      "200":
+        description: Success - 回傳新的 Access Token 與使用者資訊
+        content:
+          application/json:
+            schema:
+              $ref: "../components/schemas/user.yml#/LoginResponse"
+      "401":
+        description: 沒有 Cookie，或 session 已登出、過期、帳號已停用（Cookie 會一併清除）
+        content:
+          application/json:
+            schema:
+              $ref: "../components/schemas/common.yml#/ErrorResponse"
+      "403":
+        description: Origin 不在允許清單內
+        content:
+          application/json:
+            schema:
+              $ref: "../components/schemas/common.yml#/ErrorResponse"
+
+logout:
+  post:
+    tags:
+      - Auth
+    summary: "登出"
+    description: |
+      撤銷目前的 session 並清除 Cookie。同一 session 簽發的所有 Access Token（包含另一個前端持有的）
+      會立即失效，所有共用此 API 的前端因此一併登出。可重複呼叫。
+
+      以 Cookie 識別 session；沒有 Cookie 時，若帶有 Bearer Access Token，則撤銷該 token 所屬的 session。
+      需以 `credentials: "include"` 呼叫，且來源必須在後端允許的 Origin 清單內。
+
+      **權限 Access Control**:
+      - **Public**: 無需登入即可呼叫。
+    operationId: logoutUser
+    responses:
+      "204":
+        description: No Content - 已登出
+      "403":
+        description: Origin 不在允許清單內
+        content:
+          application/json:
+            schema:
+              $ref: "../components/schemas/common.yml#/ErrorResponse"

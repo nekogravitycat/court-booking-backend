@@ -14,22 +14,27 @@ import (
 	filehttp "github.com/nekogravitycat/court-booking-backend/internal/file/http"
 	"github.com/nekogravitycat/court-booking-backend/internal/pkg/request"
 	"github.com/nekogravitycat/court-booking-backend/internal/pkg/response"
+	"github.com/nekogravitycat/court-booking-backend/internal/session"
 	"github.com/nekogravitycat/court-booking-backend/internal/user"
 )
 
 type UserHandler struct {
-	userService user.Service
-	jwtManager  *auth.JWTManager
-	fileService file.Service
-	fileHandler *filehttp.Handler
+	userService    user.Service
+	sessionService session.Service
+	sessionCookie  auth.SessionCookie
+	jwtManager     *auth.JWTManager
+	fileService    file.Service
+	fileHandler    *filehttp.Handler
 }
 
-func NewHandler(userService user.Service, jwtManager *auth.JWTManager, fileService file.Service, fileHandler *filehttp.Handler) *UserHandler {
+func NewHandler(userService user.Service, sessionService session.Service, sessionCookie auth.SessionCookie, jwtManager *auth.JWTManager, fileService file.Service, fileHandler *filehttp.Handler) *UserHandler {
 	return &UserHandler{
-		userService: userService,
-		jwtManager:  jwtManager,
-		fileService: fileService,
-		fileHandler: fileHandler,
+		userService:    userService,
+		sessionService: sessionService,
+		sessionCookie:  sessionCookie,
+		jwtManager:     jwtManager,
+		fileService:    fileService,
+		fileHandler:    fileHandler,
 	}
 }
 
@@ -103,8 +108,21 @@ func (h *UserHandler) Login(c *gin.Context) {
 		return
 	}
 
-	// Generate JWT using the injected jwtManager
-	token, err := h.jwtManager.GenerateAccessToken(u.ID)
+	// Start a server-side session; its cookie is how the other frontends sharing
+	// this API pick up the login.
+	sess, rawToken, err := h.sessionService.Create(ctx, u.ID)
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+	h.sessionCookie.Set(c, rawToken)
+
+	h.respondWithAccessToken(c, u, sess.ID)
+}
+
+// respondWithAccessToken issues an access token bound to the session and writes the login response.
+func (h *UserHandler) respondWithAccessToken(c *gin.Context, u *user.User, sessionID string) {
+	token, err := h.jwtManager.GenerateAccessToken(u.ID, sessionID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"error": "failed to generate token",
@@ -112,12 +130,73 @@ func (h *UserHandler) Login(c *gin.Context) {
 		return
 	}
 
-	resp := LoginResponse{
+	c.JSON(http.StatusOK, LoginResponse{
 		AccessToken: token,
 		User:        NewUserResponse(u),
+	})
+}
+
+// Refresh exchanges the session cookie for a fresh access token. A frontend
+// calls it on startup (and when its access token expires) to pick up a login
+// made on any other frontend sharing this API.
+func (h *UserHandler) Refresh(c *gin.Context) {
+	rawToken := h.sessionCookie.Token(c)
+	if rawToken == "" {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "not logged in"})
+		return
 	}
 
-	c.JSON(http.StatusOK, resp)
+	ctx := c.Request.Context()
+
+	sess, err := h.sessionService.Resolve(ctx, rawToken)
+	if err != nil {
+		if errors.Is(err, session.ErrInvalidSession) {
+			h.sessionCookie.Clear(c)
+		}
+		response.Error(c, err)
+		return
+	}
+
+	u, err := h.userService.GetByID(ctx, sess.UserID)
+	if err != nil && !errors.Is(err, user.ErrNotFound) {
+		response.Error(c, err)
+		return
+	}
+	if err != nil || !u.IsActive {
+		h.sessionCookie.Clear(c)
+		response.Error(c, session.ErrInvalidSession)
+		return
+	}
+
+	h.respondWithAccessToken(c, u, sess.ID)
+}
+
+// Logout revokes the caller's session, which also invalidates its access
+// tokens on every frontend, and clears the session cookie. It is idempotent.
+func (h *UserHandler) Logout(c *gin.Context) {
+	ctx := c.Request.Context()
+
+	if rawToken := h.sessionCookie.Token(c); rawToken != "" {
+		if sess, err := h.sessionService.Resolve(ctx, rawToken); err == nil {
+			if err := h.sessionService.Revoke(ctx, sess.ID); err != nil {
+				response.Error(c, err)
+				return
+			}
+		}
+	}
+
+	// A Bearer client without the cookie can still end its own session.
+	if header := c.GetHeader("Authorization"); strings.HasPrefix(strings.ToLower(header), "bearer ") {
+		if claims, err := h.jwtManager.ParseAndValidate(header[len("bearer "):]); err == nil {
+			if err := h.sessionService.Revoke(ctx, claims.SessionID); err != nil {
+				response.Error(c, err)
+				return
+			}
+		}
+	}
+
+	h.sessionCookie.Clear(c)
+	c.Status(http.StatusNoContent)
 }
 
 // Me retrieves the profile of the currently authenticated user.

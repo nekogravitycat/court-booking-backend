@@ -27,6 +27,7 @@ import (
 	pickupHttp "github.com/nekogravitycat/court-booking-backend/internal/pickup/http"
 	"github.com/nekogravitycat/court-booking-backend/internal/resource"
 	resHttp "github.com/nekogravitycat/court-booking-backend/internal/resource/http"
+	"github.com/nekogravitycat/court-booking-backend/internal/session"
 	"github.com/nekogravitycat/court-booking-backend/internal/skilllevel"
 	skillHttp "github.com/nekogravitycat/court-booking-backend/internal/skilllevel/http"
 	"github.com/nekogravitycat/court-booking-backend/internal/skillrating"
@@ -54,6 +55,8 @@ type Config struct {
 	NotificationService notification.Service
 	FavoriteService     favorite.Service
 	FileService         file.Service
+	SessionService      session.Service
+	SessionCookie       auth.SessionCookie
 	JWTManager          *auth.JWTManager
 }
 
@@ -91,23 +94,42 @@ func NewRouter(cfg Config) *gin.Engine {
 		}
 	}
 
+	var originAllowed func(origin string) bool
 	if cfg.IsProduction {
 		// Production: Strict mode, only allow exact domain match
 		config.AllowOrigins = allowedOrigins
+		originAllowed = func(origin string) bool {
+			for _, o := range allowedOrigins {
+				if o == origin {
+					return true
+				}
+			}
+			return false
+		}
 	} else {
 		// Dev / Local: Allow all origins
-		config.AllowOriginFunc = func(origin string) bool {
-			return true
-		}
+		originAllowed = func(origin string) bool { return true }
+		config.AllowOriginFunc = originAllowed
 	}
+	// Frontends authenticate with the session cookie, so credentialed requests
+	// must be allowed (cors rejects this together with wildcard origins).
+	config.AllowCredentials = true
 
 	config.AllowMethods = []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"}
 	config.AllowHeaders = []string{"Origin", "Content-Type", "Authorization"}
 	r.Use(cors.New(config))
 
-	// Auth Middleware. The active-status check runs on every authenticated
-	// request so suspended / soft-deleted accounts lose access immediately.
-	lookupAccount := func(ctx context.Context, userID string) (auth.Account, error) {
+	// Auth Middleware. The session and active-status checks run on every
+	// authenticated request so logged-out sessions and suspended / soft-deleted
+	// accounts lose access immediately.
+	lookupAccount := func(ctx context.Context, userID, sessionID string) (auth.Account, error) {
+		live, err := cfg.SessionService.IsActive(ctx, sessionID, userID)
+		if err != nil {
+			return auth.Account{}, err
+		}
+		if !live {
+			return auth.Account{}, session.ErrInvalidSession
+		}
 		a, err := cfg.UserService.GetAccount(ctx, userID)
 		if err != nil {
 			return auth.Account{}, err
@@ -122,7 +144,7 @@ func NewRouter(cfg Config) *gin.Engine {
 
 	// Initialize Handlers (Injecting Services from cfg)
 	fileHandler := fileHttp.NewHandler(cfg.FileService)
-	userHandler := userHttp.NewHandler(cfg.UserService, cfg.JWTManager, cfg.FileService, fileHandler)
+	userHandler := userHttp.NewHandler(cfg.UserService, cfg.SessionService, cfg.SessionCookie, cfg.JWTManager, cfg.FileService, fileHandler)
 	orgHandler := orgHttp.NewHandler(cfg.OrgService, cfg.FileService, fileHandler)
 	locHandler := locHttp.NewHandler(cfg.LocService, cfg.OrgService, cfg.FileService, fileHandler)
 	resHandler := resHttp.NewHandler(cfg.ResService, cfg.LocService, cfg.OrgService, cfg.BookingService, cfg.FileService, fileHandler)
@@ -141,7 +163,7 @@ func NewRouter(cfg Config) *gin.Engine {
 		v1.GET("/version", VersionInfo)
 
 		fileHttp.RegisterRoutes(v1, fileHandler, authMiddleware)
-		userHttp.RegisterRoutes(v1, userHandler, authMiddleware, sysAdminMiddleware)
+		userHttp.RegisterRoutes(v1, userHandler, authMiddleware, sysAdminMiddleware, RequireAllowedOrigin(originAllowed, cfg.IsProduction))
 		orgHttp.RegisterRoutes(v1, orgHandler, authMiddleware, sysAdminMiddleware)
 		locHttp.RegisterRoutes(v1, locHandler, authMiddleware)
 		resHttp.RegisterRoutes(v1, resHandler, authMiddleware)

@@ -15,10 +15,11 @@ type Account struct {
 }
 
 // AccountLookupFunc loads the given user's current account state (the user is
-// not suspended or soft-deleted, and whether they are a system admin). It is
+// not suspended or soft-deleted, the access token's session is still live, and
+// whether they are a system admin). It is
 // injected as a function so the auth package does not need to import the user
 // package (which would create an import cycle, since user already depends on auth).
-type AccountLookupFunc func(ctx context.Context, userID string) (Account, error)
+type AccountLookupFunc func(ctx context.Context, userID, sessionID string) (Account, error)
 
 // setIdentity stores the authenticated identity into the Gin context.
 func setIdentity(c *gin.Context, userID string, a Account) {
@@ -31,7 +32,7 @@ func setIdentity(c *gin.Context, userID string, a Account) {
 // When lookup is non-nil it additionally verifies, on every request, that the
 // account is still active. This ensures suspended / soft-deleted users lose
 // access immediately instead of remaining authorized until their access token
-// expires (there is otherwise no token revocation mechanism).
+// expires. The lookup also rejects tokens whose session was revoked (logout).
 func AuthRequired(jwtManager *JWTManager, lookup AccountLookupFunc) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		header := c.GetHeader("Authorization")
@@ -64,10 +65,10 @@ func AuthRequired(jwtManager *JWTManager, lookup AccountLookupFunc) gin.HandlerF
 		// soft-deleted. Treat lookup errors (including "not found") as unauthorized.
 		var account Account
 		if lookup != nil {
-			account, err = lookup(c.Request.Context(), claims.Subject)
+			account, err = lookup(c.Request.Context(), claims.Subject, claims.SessionID)
 			if err != nil || !account.IsActive {
 				c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{
-					"error": "account is inactive or no longer exists",
+					"error": "session or account is no longer valid",
 				})
 				return
 			}
@@ -112,7 +113,7 @@ func AuthOptional(jwtManager *JWTManager, lookup AccountLookupFunc) gin.HandlerF
 
 		var account Account
 		if lookup != nil {
-			account, err = lookup(c.Request.Context(), claims.Subject)
+			account, err = lookup(c.Request.Context(), claims.Subject, claims.SessionID)
 			if err != nil || !account.IsActive {
 				c.Next()
 				return

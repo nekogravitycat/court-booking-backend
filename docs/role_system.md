@@ -420,7 +420,7 @@ sequenceDiagram
 
 幾個值得注意的機制：
 
-1. **即時停權**：`AuthRequired` 在每個請求都會查詢 `users.is_active`。系統沒有 token 撤銷機制，因此改用「每次請求驗活躍狀態」來確保被停權或軟刪除的帳號**立即**失效，而不是等 token 過期（[auth/middleware.go:53-61](../internal/auth/middleware.go#L53-L61)）。
+1. **即時停權**：`AuthRequired` 在每個請求都會查詢 `users.is_active`。Access token 綁定 `sessions` 表的 session（登出即撤銷），中介層每次請求同時驗證 session 與活躍狀態，確保登出、被停權或軟刪除的帳號**立即**失效，而不是等 token 過期（[auth/middleware.go:53-61](../internal/auth/middleware.go#L53-L61)）。
 
 2. **權限檢查的兩個層次**：
    - **Route 層**：`RequireSystemAdmin` middleware，用於整組 System Admin 專屬路由（`/users`、`/pickup-hosts`、`/announcements` 的寫入、`/sports`、`/skill-levels` 的寫入、組織的建立/更新/刪除）。

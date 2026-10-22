@@ -5,12 +5,14 @@ import (
 )
 
 // RegisterRoutes registers all user-related routes (including Auth).
-func RegisterRoutes(g *gin.RouterGroup, h *UserHandler, authMiddleware, adminMiddleware gin.HandlerFunc) {
+func RegisterRoutes(g *gin.RouterGroup, h *UserHandler, authMiddleware, adminMiddleware, originCheck gin.HandlerFunc) {
 	// === Public Routes (Auth) ===
 	authGroup := g.Group("/auth")
 	{
-		authGroup.POST("/register", h.Register) // Register new user
-		authGroup.POST("/login", h.Login)       // Login and get token
+		authGroup.POST("/register", h.Register)            // Register new user
+		authGroup.POST("/login", h.Login)                  // Login and get token
+		authGroup.POST("/refresh", originCheck, h.Refresh) // Exchange the session cookie for an access token
+		authGroup.POST("/logout", originCheck, h.Logout)   // Revoke the session
 	}
 
 	// === Authenticated Routes ===

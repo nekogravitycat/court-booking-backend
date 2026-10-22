@@ -59,6 +59,7 @@ func TestMain(m *testing.M) {
 		DBPool:     testPool,
 		JWTSecret:  testSecret,
 		JWTTTL:     30 * time.Minute,
+		SessionTTL: 24 * time.Hour,
 		BcryptCost: 4, // Lower cost for testing purposes
 	})
 
@@ -168,8 +169,17 @@ func createTestUser(t *testing.T, email, password string, isAdmin bool) *user.Us
 	return savedUser
 }
 
+// generateToken returns an access token backed by a fresh live session, as login would issue.
 func generateToken(userID string) string {
-	token, _ := jwtManager.GenerateAccessToken(userID)
+	var sessionID string
+	err := testPool.QueryRow(context.Background(),
+		`INSERT INTO public.sessions (user_id, token_hash, expires_at)
+		 VALUES ($1, md5(random()::text || clock_timestamp()::text), now() + interval '1 day')
+		 RETURNING id`, userID).Scan(&sessionID)
+	if err != nil {
+		panic(err)
+	}
+	token, _ := jwtManager.GenerateAccessToken(userID, sessionID)
 	return token
 }
 

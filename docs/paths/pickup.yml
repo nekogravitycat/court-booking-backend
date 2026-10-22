@@ -212,12 +212,14 @@ pickupGroupDetail:
   delete:
     tags:
       - Pickup Groups
-    summary: "刪除臨打團 (僅限系統管理員)"
+    summary: "刪除臨打團 (團主或系統管理員)"
     description: |
-      刪除臨打團。注意：若該臨打團尚有訂單存在，刪除操作將會因資料庫限制而失敗。
-      
+      刪除臨打團。若該臨打團尚有報名訂單，回傳 409；請先將團改為 cancelled。
+
       **權限 Access Control**:
-      - **System Admin Required**: 僅系統管理員身分的使用者可存取。
+      - **團主 (創建者)**: 可刪除自己的團。
+      - **System Admin**: 可刪除任何團。
+      - 其他人回傳 403。
     security:
       - bearerAuth: []
     parameters:

@@ -17,6 +17,7 @@ import (
 	"github.com/nekogravitycat/court-booking-backend/internal/pickup"
 	"github.com/nekogravitycat/court-booking-backend/internal/pkg/storage"
 	"github.com/nekogravitycat/court-booking-backend/internal/resource"
+	"github.com/nekogravitycat/court-booking-backend/internal/session"
 	"github.com/nekogravitycat/court-booking-backend/internal/skilllevel"
 	"github.com/nekogravitycat/court-booking-backend/internal/skillrating"
 	"github.com/nekogravitycat/court-booking-backend/internal/sports"
@@ -30,13 +31,15 @@ type Config struct {
 	DBPool       *pgxpool.Pool
 	JWTSecret    string
 	JWTTTL       time.Duration
+	SessionTTL   time.Duration
 	BcryptCost   int
 }
 
 // Container holds the initialized components that are needed externally.
 type Container struct {
-	Router     *gin.Engine
-	JWTManager *auth.JWTManager
+	Router         *gin.Engine
+	JWTManager     *auth.JWTManager
+	SessionService session.Service
 }
 
 // NewContainer initializes all modules and returns the container.
@@ -44,6 +47,7 @@ func NewContainer(cfg Config) *Container {
 	// Init Components
 	passwordHasher := auth.NewBcryptPasswordHasherWithCost(cfg.BcryptCost)
 	jwtManager := auth.NewJWTManager(cfg.JWTSecret, cfg.JWTTTL)
+	sessionService := session.NewService(session.NewPgxRepository(cfg.DBPool), cfg.SessionTTL)
 
 	// File Module
 	store, err := storage.NewLocalStorage("storage")
@@ -122,6 +126,8 @@ func NewContainer(cfg Config) *Container {
 		NotificationService: notificationService,
 		FavoriteService:     favoriteService,
 		FileService:         fileService,
+		SessionService:      sessionService,
+		SessionCookie:       auth.NewSessionCookie(cfg.IsProduction, cfg.SessionTTL),
 		JWTManager:          jwtManager,
 	}
 
@@ -129,7 +135,8 @@ func NewContainer(cfg Config) *Container {
 	router := api.NewRouter(routerParams)
 
 	return &Container{
-		Router:     router,
-		JWTManager: jwtManager,
+		Router:         router,
+		JWTManager:     jwtManager,
+		SessionService: sessionService,
 	}
 }

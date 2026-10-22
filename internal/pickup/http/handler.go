@@ -270,9 +270,18 @@ func (h *Handler) DeleteGroup(c *gin.Context) {
 		return
 	}
 
+	// System admins may delete any group; its creator may delete only their
+	// own groups.
 	if !auth.IsSystemAdmin(c) {
-		c.JSON(http.StatusForbidden, gin.H{"error": "only system admin can delete pickup groups"})
-		return
+		group, err := h.service.GetGroupByID(c.Request.Context(), uri.ID)
+		if err != nil {
+			response.Error(c, err)
+			return
+		}
+		if group.HostID != auth.GetUserID(c) {
+			c.JSON(http.StatusForbidden, gin.H{"error": "only the pickup host or a system admin can delete this pickup group"})
+			return
+		}
 	}
 
 	if err := h.service.DeleteGroup(c.Request.Context(), uri.ID); err != nil {

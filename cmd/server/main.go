@@ -53,6 +53,7 @@ func main() {
 		DBPool:       pool,
 		JWTSecret:    cfg.JWTSecret,
 		JWTTTL:       cfg.JWTAccessTokenTTL,
+		SessionTTL:   cfg.SessionTTL,
 		BcryptCost:   cfg.BcryptCost,
 	})
 

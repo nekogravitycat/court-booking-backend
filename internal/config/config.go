@@ -30,6 +30,7 @@ type Config struct {
 	DBDSN             string
 	JWTSecret         string
 	JWTAccessTokenTTL time.Duration
+	SessionTTL        time.Duration
 	BcryptCost        int
 }
 
@@ -85,6 +86,13 @@ func Load() (*Config, error) {
 		return nil, fmt.Errorf("invalid JWT_ACCESS_TOKEN_TTL: %w", err)
 	}
 	cfg.JWTAccessTokenTTL = ttl
+
+	// Login session lifetime, parse as time.Duration (default: 30 days).
+	sessionTTL, err := time.ParseDuration(getEnv("SESSION_TTL", "720h"))
+	if err != nil || sessionTTL <= 0 {
+		return nil, fmt.Errorf("invalid SESSION_TTL %q: must be a positive duration", getEnv("SESSION_TTL", ""))
+	}
+	cfg.SessionTTL = sessionTTL
 
 	// Bcrypt cost for password hashing (default: 12)
 	cfg.BcryptCost, err = getEnvAsInt("BCRYPT_COST", 12)
