@@ -1,6 +1,6 @@
 module github.com/nekogravitycat/court-booking-backend
 
-go 1.25.1
+go 1.26.10
 
 require (
 	github.com/gin-gonic/gin v1.12.0
