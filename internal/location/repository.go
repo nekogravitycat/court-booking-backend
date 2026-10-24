@@ -327,7 +327,7 @@ func (r *pgxRepository) IsLocationManager(ctx context.Context, locationID string
 
 func (r *pgxRepository) ListLocationManagers(ctx context.Context, locationID string, params request.ListParams) ([]*user.User, int, error) {
 	psql := squirrel.StatementBuilder.PlaceholderFormat(squirrel.Dollar)
-	query := psql.Select("u.id", "u.email", "u.display_name", "u.created_at", "u.is_active", "count(*) OVER() as total_count").
+	query := psql.Select("u.id", "COALESCE(u.email, '')", "u.display_name", "u.created_at", "u.is_active", "count(*) OVER() as total_count").
 		From("public.location_managers lm").
 		Join("public.users u ON lm.user_id = u.id").
 		Where(squirrel.Eq{"lm.location_id": locationID})

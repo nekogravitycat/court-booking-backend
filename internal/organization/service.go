@@ -44,7 +44,8 @@ type Service interface {
 	RemoveOrganizationManager(ctx context.Context, orgID string, userID string) error
 	ListOrganizationManagers(ctx context.Context, orgID string, filter ManagerFilter) ([]*user.User, int, error)
 	// Organization Member methods
-	AddMember(ctx context.Context, orgID string, email string) error
+	// AddMember looks the user up by username when given, otherwise by email.
+	AddMember(ctx context.Context, orgID string, email, username string) error
 	RemoveMember(ctx context.Context, orgID string, userID string) error
 	ListMembers(ctx context.Context, orgID string, filter ManagerFilter) ([]*user.User, int, error)
 	// Permission methods
@@ -250,15 +251,20 @@ func (s *service) ListOrganizationManagers(ctx context.Context, orgID string, fi
 //   Organization Member methods
 // -----------------------------
 
-func (s *service) AddMember(ctx context.Context, orgID string, email string) error {
+func (s *service) AddMember(ctx context.Context, orgID string, email, username string) error {
 	// Verify organization exists
 	org, err := s.repo.GetByID(ctx, orgID)
 	if err != nil {
 		return err
 	}
 
-	// Lookup user by email
-	foundUser, err := s.userService.GetByEmail(ctx, email)
+	// Lookup user by email, or by username for accounts that have no email
+	var foundUser *user.User
+	if username != "" {
+		foundUser, err = s.userService.GetByUsername(ctx, username)
+	} else {
+		foundUser, err = s.userService.GetByEmail(ctx, email)
+	}
 	if err != nil {
 		if errors.Is(err, user.ErrNotFound) {
 			return ErrUserNotFound

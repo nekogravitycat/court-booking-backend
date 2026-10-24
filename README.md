@@ -62,6 +62,7 @@
 
 - **使用者系統 (User System)**
   - 註冊／登入 (JWT Token)。
+  - LINE 登入／註冊：與 email/密碼並行。第一次以 LINE 登入會自動建立帳號並帶入名稱、大頭貼（與授權時提供的 email），不需另外填寫 email 或密碼；之後可綁定／解除綁定 LINE，或補設密碼。
   - 系統管理員 (System Admin) 與一般使用者區分。
 - **多租戶組織架構 (Organizations)**
   - 支援建立多個組織 (Organization)。
@@ -105,6 +106,16 @@
     DB_DSN=postgres://user:password@localhost:5432/court_booking?sslmode=disable
     JWT_SECRET=<至少 32 bytes 的隨機字串，例如 openssl rand -base64 48 的輸出>
     ```
+
+    若要啟用 LINE 登入，在 [LINE Developers Console](https://developers.line.biz/) 建立 LINE Login channel，設定 callback URL，並在 `.env` 加上（三項需一起設定，未設定時 `POST /v1/auth/line` 回 `404`）：
+
+    ```dotenv
+    LINE_CHANNEL_ID=<Channel ID>
+    LINE_CHANNEL_SECRET=<Channel secret>
+    LINE_REDIRECT_URIS=https://app.example.com/line/callback   # 逗號分隔的 callback URL 允許清單
+    ```
+
+    要取得使用者的 email，需另在 channel 設定中申請 Email address permission，並讓前端授權時帶 `email` scope；沒有 email 的 LINE 帳號仍可正常註冊。
 
     若要透過 Cloudflare Tunnel 對外發佈服務，另需設定 `CLOUDFLARE_TUNNEL_TOKEN`（見下方「對外發佈」一節）。
 
@@ -161,6 +172,7 @@
 - **初始化與變更**：schema 由 migration 管理，內嵌於 binary。應用程式與測試啟動時自動套用尚未執行的 migration，毋需手動執行。版本記錄於 `schema_migrations` 表。
 - **核心表格**：
   - `users`：平台使用者。
+  - `user_identities`：外部登入（目前為 LINE）與使用者的對應；`users.email` 與 `password_hash` 可為空（僅以 LINE 註冊的帳號）。
   - `organizations`：頂層組織單位。
   - `organization_members` / `managers`：組織成員與權限管理。
   - `locations`：實體場館。

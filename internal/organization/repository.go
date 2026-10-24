@@ -242,7 +242,7 @@ func (r *pgxRepository) IsOrganizationManager(ctx context.Context, orgID string,
 func (r *pgxRepository) ListOrganizationManagers(ctx context.Context, orgID string, filter ManagerFilter) ([]*user.User, int, error) {
 	psql := squirrel.StatementBuilder.PlaceholderFormat(squirrel.Dollar)
 	queryBuilder := psql.Select(
-		"u.id", "u.email", "u.display_name", "u.created_at", "u.is_active", "count(*) OVER() AS total_count",
+		"u.id", "COALESCE(u.email, '')", "u.display_name", "u.created_at", "u.is_active", "count(*) OVER() AS total_count",
 	).
 		From("public.organization_managers om").
 		Join("public.users u ON om.user_id = u.id").
@@ -356,7 +356,7 @@ func (r *pgxRepository) IsMember(ctx context.Context, orgID string, userID strin
 func (r *pgxRepository) ListMembers(ctx context.Context, orgID string, filter ManagerFilter) ([]*user.User, int, error) {
 	psql := squirrel.StatementBuilder.PlaceholderFormat(squirrel.Dollar)
 	queryBuilder := psql.Select(
-		"u.id", "u.email", "u.display_name", "u.created_at", "u.is_active", "count(*) OVER() AS total_count",
+		"u.id", "COALESCE(u.email, '')", "u.display_name", "u.created_at", "u.is_active", "count(*) OVER() AS total_count",
 	).
 		From("public.organization_members om").
 		Join("public.users u ON om.user_id = u.id").

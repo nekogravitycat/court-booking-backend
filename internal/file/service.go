@@ -26,6 +26,7 @@ type UploadInput struct {
 
 type Service interface {
 	Upload(ctx context.Context, input UploadInput) (*File, error)
+	UploadBytes(ctx context.Context, input UploadBytesInput) (*File, error)
 	Delete(ctx context.Context, id string) error
 	Get(ctx context.Context, id string) (*File, error)
 	Download(ctx context.Context, id string) (io.ReadCloser, *File, error)
@@ -133,6 +134,53 @@ func (s *service) Upload(ctx context.Context, input UploadInput) (*File, error) 
 		return nil, ErrSizeMismatch
 	}
 
+	return s.processAndStore(ctx, processInput{
+		UserID:             input.UserID,
+		Filename:           header.Filename,
+		ClaimedContentType: header.Header.Get("Content-Type"),
+		AllowedTypes:       input.AllowedTypes,
+		ResizeImage:        input.ResizeImage,
+	}, fileBytes)
+}
+
+// UploadBytesInput describes a file whose content is already in memory, such as
+// an image fetched from an external service.
+type UploadBytesInput struct {
+	UserID       string
+	Filename     string
+	Data         []byte
+	MaxSizeBytes int64    // Maximum file size in bytes (0 = no limit)
+	AllowedTypes []string // Allowed MIME types (empty = allow all)
+	ResizeImage  bool     // See UploadInput.ResizeImage
+}
+
+// UploadBytes validates and stores in-memory content like Upload. The content
+// type is detected from the bytes since there is no client-declared one.
+func (s *service) UploadBytes(ctx context.Context, input UploadBytesInput) (*File, error) {
+	if input.MaxSizeBytes > 0 && int64(len(input.Data)) > input.MaxSizeBytes {
+		return nil, ErrSizeExceeded
+	}
+	return s.processAndStore(ctx, processInput{
+		UserID:       input.UserID,
+		Filename:     input.Filename,
+		AllowedTypes: input.AllowedTypes,
+		ResizeImage:  input.ResizeImage,
+	}, input.Data)
+}
+
+// processInput is the validated-so-far upload shared by Upload and UploadBytes.
+type processInput struct {
+	UserID             string
+	Filename           string
+	ClaimedContentType string // Empty skips the claimed-vs-detected check
+	AllowedTypes       []string
+	ResizeImage        bool
+}
+
+// processAndStore checks the content type of fileBytes, then saves the file and its thumbnail.
+func (s *service) processAndStore(ctx context.Context, input processInput, fileBytes []byte) (*File, error) {
+	actualSize := int64(len(fileBytes))
+
 	// === Validate file content type ===
 
 	// Detect actual content type from file bytes
@@ -144,8 +192,7 @@ func (s *service) Upload(ctx context.Context, input UploadInput) (*File, error) 
 	}
 
 	// Ensure claimed type matches actual type
-	claimedContentType := normalizeContentType(header.Header.Get("Content-Type"))
-	if claimedContentType != actualContentType {
+	if input.ClaimedContentType != "" && normalizeContentType(input.ClaimedContentType) != actualContentType {
 		return nil, ErrContentTypeMismatch
 	}
 
@@ -198,7 +245,7 @@ func (s *service) Upload(ctx context.Context, input UploadInput) (*File, error) 
 	f := &File{
 		ID:            fileID,
 		UserID:        input.UserID,
-		Filename:      header.Filename,
+		Filename:      input.Filename,
 		StoragePath:   storagePath,
 		ThumbnailPath: thumbnailPath,
 		ContentType:   actualContentType,

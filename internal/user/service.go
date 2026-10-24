@@ -53,6 +53,18 @@ type Service interface {
 	// GetAccount returns only the account flags; prefer it over GetByID for authorization checks.
 	GetAccount(ctx context.Context, id string) (*Account, error)
 	GetByEmail(ctx context.Context, email string) (*User, error)
+	GetByUsername(ctx context.Context, username string) (*User, error)
+
+	// LoginWithIdentity signs in the account linked to an external identity,
+	// creating one from the provider's profile when none exists. The bool reports
+	// whether the account was just created.
+	LoginWithIdentity(ctx context.Context, p IdentityProfile) (*User, bool, error)
+	// LinkIdentity attaches an external identity to an existing account.
+	LinkIdentity(ctx context.Context, userID string, p IdentityProfile) error
+	// UnlinkIdentity detaches a provider, keeping at least one way to sign in.
+	UnlinkIdentity(ctx context.Context, userID, provider string) error
+	// SetPassword gives a password-less account a password (and an email, if it has none).
+	SetPassword(ctx context.Context, userID, email, password string) error
 
 	List(ctx context.Context, filter UserFilter) ([]*User, int, error)
 	Update(ctx context.Context, id string, req UpdateUserRequest, actingUserID string) (*User, error)
@@ -224,6 +236,12 @@ func (s *service) Login(ctx context.Context, email, password string) (*User, err
 
 	if !u.IsActive {
 		return nil, ErrInactiveUser
+	}
+
+	// An account without a password (external login only) takes as long as a wrong password.
+	if !u.HasPassword() {
+		_ = s.hasher.Compare(s.dummyPasswordHash, password)
+		return nil, ErrInvalidCredentials
 	}
 
 	// Compare password hash.

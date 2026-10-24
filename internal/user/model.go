@@ -1,6 +1,7 @@
 package user
 
 import (
+	"context"
 	"net/http"
 	"regexp"
 	"time"
@@ -36,7 +37,37 @@ var (
 	ErrLastSystemAdmin      = apperror.New(http.StatusConflict, "cannot deactivate the last active system admin")
 	ErrInvalidGender        = apperror.New(http.StatusBadRequest, "gender must be one of male, female, other")
 	ErrInvalidBirthDate     = apperror.New(http.StatusBadRequest, "birth_date must be a past date on or after 1900-01-01")
+
+	ErrIdentityNotFound      = apperror.New(http.StatusNotFound, "identity is not linked to this account")
+	ErrIdentityAlreadyLinked = apperror.New(http.StatusConflict, "this external account is already linked to a user")
+	ErrProviderAlreadyLinked = apperror.New(http.StatusConflict, "this account already has an identity for this provider")
+	ErrLastLoginMethod       = apperror.New(http.StatusConflict, "cannot unlink the only remaining login method; set a password first")
+	ErrPasswordAlreadySet    = apperror.New(http.StatusConflict, "password is already set")
+	ErrUnsupportedProvider   = apperror.New(http.StatusBadRequest, "unsupported identity provider")
+	ErrLineLoginDisabled     = apperror.New(http.StatusNotFound, "LINE login is not enabled")
 )
+
+// Identity providers accepted for external login.
+const ProviderLine = "line"
+
+// IdentityProfile is what an external provider tells us about a signed-in person.
+// Only Provider and Subject are required; the rest fill a new account's profile.
+type IdentityProfile struct {
+	Provider    string
+	Subject     string // Stable provider-side user ID
+	DisplayName string
+	Email       string // Empty when the provider did not share one
+	// FetchAvatar lazily downloads the provider's profile picture. It is called
+	// only when a new account is created. May be nil.
+	FetchAvatar func(ctx context.Context) ([]byte, error)
+}
+
+// Identity is one external login linked to a user.
+type Identity struct {
+	Provider  string
+	Subject   string
+	CreatedAt time.Time
+}
 
 // SportSkillLevel is an account's self-reported level, separate from host ratings.
 type SportSkillLevel struct {
@@ -51,9 +82,9 @@ type SportSkillLevel struct {
 // User represents a user in the system.
 type User struct {
 	ID            string // UUID
-	Email         string
+	Email         string // Empty for accounts created through an external login that shared none
 	Username      string // Unique, immutable handle (lowercase letters, digits, underscore)
-	PasswordHash  string
+	PasswordHash  string // Empty when the account has no password
 	DisplayName   *string
 	Phone         *string
 	Gender        *string    // One of the Gender* constants; nil when not provided
@@ -66,7 +97,20 @@ type User struct {
 	IsSystemAdmin bool
 	IsPickupHost  bool
 	Organizations []UserOrganizationBrief
+	// LinkedProviders lists the external identity providers linked to the account.
+	LinkedProviders []string
 }
+
+// EmailPtr returns the email, or nil for an account without one (rendered as JSON null).
+func (u *User) EmailPtr() *string {
+	if u.Email == "" {
+		return nil
+	}
+	return &u.Email
+}
+
+// HasPassword reports whether the account can sign in with email and password.
+func (u *User) HasPassword() bool { return u.PasswordHash != "" }
 
 // UserFilter defines filter options for listing users.
 type UserFilter struct {

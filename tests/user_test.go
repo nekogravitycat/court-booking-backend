@@ -147,7 +147,8 @@ func TestUserManagementPermissions(t *testing.T) {
 
 		// Should only return 1 admin user
 		assert.Equal(t, 1, resp.Total)
-		assert.Equal(t, "admin@example.com", resp.Items[0].Email)
+		require.NotNil(t, resp.Items[0].Email)
+		assert.Equal(t, "admin@example.com", *resp.Items[0].Email)
 	})
 
 	t.Run("Admin List Users Filtered By IDs", func(t *testing.T) {

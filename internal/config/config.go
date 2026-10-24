@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/joho/godotenv"
+	"github.com/nekogravitycat/court-booking-backend/internal/lineauth"
 )
 
 const PROD_STRING = "prod"
@@ -32,6 +33,9 @@ type Config struct {
 	JWTAccessTokenTTL time.Duration
 	SessionTTL        time.Duration
 	BcryptCost        int
+
+	// Line is nil when LINE Login is not configured.
+	Line *lineauth.Config
 }
 
 // Load loads configuration from .env (optional) and environment variables.
@@ -100,7 +104,33 @@ func Load() (*Config, error) {
 		return nil, fmt.Errorf("invalid BCRYPT_COST: %w", err)
 	}
 
+	cfg.Line, err = loadLineConfig()
+	if err != nil {
+		return nil, err
+	}
+
 	return cfg, nil
+}
+
+// loadLineConfig reads the optional LINE Login settings. Setting none of them
+// disables LINE Login; setting any requires all of them.
+func loadLineConfig() (*lineauth.Config, error) {
+	channelID := strings.TrimSpace(os.Getenv("LINE_CHANNEL_ID"))
+	channelSecret := strings.TrimSpace(os.Getenv("LINE_CHANNEL_SECRET"))
+	var redirectURIs []string
+	for _, uri := range strings.Split(os.Getenv("LINE_REDIRECT_URIS"), ",") {
+		if uri = strings.TrimSpace(uri); uri != "" {
+			redirectURIs = append(redirectURIs, uri)
+		}
+	}
+
+	if channelID == "" && channelSecret == "" && len(redirectURIs) == 0 {
+		return nil, nil
+	}
+	if channelID == "" || channelSecret == "" || len(redirectURIs) == 0 {
+		return nil, fmt.Errorf("LINE_CHANNEL_ID, LINE_CHANNEL_SECRET and LINE_REDIRECT_URIS must be set together")
+	}
+	return &lineauth.Config{ChannelID: channelID, ChannelSecret: channelSecret, RedirectURIs: redirectURIs}, nil
 }
 
 // getEnv returns the value of the environment variable if set,

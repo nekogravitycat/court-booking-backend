@@ -27,8 +27,10 @@ func (r *ListUsersRequest) Validate() error {
 // UserResponse is the shape of user data returned in API responses.
 type UserResponse struct {
 	ID              string                      `json:"id"`
-	Email           string                      `json:"email"`
+	Email           *string                     `json:"email"` // null for accounts created through LINE without an email
 	Username        string                      `json:"username"`
+	HasPassword     bool                        `json:"has_password"`
+	LinkedProviders []string                    `json:"linked_providers"`
 	DisplayName     *string                     `json:"display_name"`
 	Phone           *string                     `json:"phone"`
 	Gender          *string                     `json:"gender"`
@@ -89,10 +91,17 @@ func NewUserResponse(u *user.User) UserResponse {
 		age = &a
 	}
 
+	linkedProviders := u.LinkedProviders
+	if linkedProviders == nil {
+		linkedProviders = []string{}
+	}
+
 	return UserResponse{
 		ID:              u.ID,
-		Email:           u.Email,
+		Email:           u.EmailPtr(),
 		Username:        u.Username,
+		HasPassword:     u.HasPassword(),
+		LinkedProviders: linkedProviders,
 		DisplayName:     u.DisplayName,
 		Phone:           u.Phone,
 		LineID:          u.LineID,
@@ -163,6 +172,24 @@ type AddPickupHostRequest struct {
 type LoginResponse struct {
 	AccessToken string       `json:"access_token"`
 	User        UserResponse `json:"user"`
+	// IsNewUser is set only by LINE login: true when the call created the account.
+	IsNewUser *bool `json:"is_new_user,omitempty"`
+}
+
+// LineAuthRequest carries the result of the LINE authorization redirect. It is
+// used both to sign in and to link LINE to the signed-in account.
+type LineAuthRequest struct {
+	Code         string `json:"code" binding:"required,max=512"`
+	RedirectURI  string `json:"redirect_uri" binding:"required,max=2048"`
+	CodeVerifier string `json:"code_verifier" binding:"required,min=43,max=128"`
+	Nonce        string `json:"nonce" binding:"required,max=255"`
+}
+
+// SetPasswordRequest adds a password to an account that has none. Email is
+// required only when the account has no email yet.
+type SetPasswordRequest struct {
+	Email    string `json:"email" binding:"omitempty,email,max=254"`
+	Password string `json:"password" binding:"required,min=8,max=72"`
 }
 
 // MeResponse returns the current user info.

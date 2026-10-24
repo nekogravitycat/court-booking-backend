@@ -12,6 +12,7 @@ import (
 	"github.com/nekogravitycat/court-booking-backend/internal/app"
 	"github.com/nekogravitycat/court-booking-backend/internal/config"
 	"github.com/nekogravitycat/court-booking-backend/internal/db"
+	"github.com/nekogravitycat/court-booking-backend/internal/lineauth"
 )
 
 const SERVER_SHUTDOWN_TIMEOUT = 5 * time.Second
@@ -46,8 +47,15 @@ func main() {
 	}
 	defer pool.Close()
 
+	var lineClient lineauth.Client
+	if cfg.Line != nil {
+		lineClient = lineauth.NewClient(*cfg.Line)
+		log.Printf("LINE login enabled")
+	}
+
 	// Initialize App Container
 	appContainer := app.NewContainer(app.Config{
+		LineClient:   lineClient,
 		IsProduction: cfg.IsProduction,
 		ProdOrigins:  cfg.ProdOrigins,
 		DBPool:       pool,

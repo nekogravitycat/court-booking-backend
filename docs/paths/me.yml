@@ -172,3 +172,106 @@ me:
               $ref: "../components/schemas/common.yml#/ErrorResponse"
       "401":
         description: Unauthorized - Token 無效或過期
+
+lineIdentity:
+  post:
+    tags:
+      - Me
+    summary: "綁定 LINE 帳號"
+    description: |
+      將 LINE 帳號綁定到目前登入的帳號，之後可用 LINE 登入。request body 與 `/auth/line` 相同。
+      一個帳號只能綁一個 LINE，一個 LINE 也只能綁一個帳號。不會因 email 相同而自動合併帳號。
+
+      **權限 Access Control**:
+      - **Login Required**: 任何已登入的使用者。
+    operationId: linkLineIdentity
+    security:
+      - bearerAuth: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: "../components/schemas/user.yml#/LineAuthRequest"
+    responses:
+      "200":
+        description: 綁定成功 - 回傳更新後的使用者資訊
+        content:
+          application/json:
+            schema:
+              $ref: "../components/schemas/user.yml#/MeResponse"
+      "400":
+        description: Invalid request 或 redirect_uri 不在允許清單內
+      "401":
+        description: Unauthorized，或 LINE 授權失敗
+      "404":
+        description: 此部署未啟用 LINE 登入
+      "409":
+        description: 此帳號已綁定 LINE，或此 LINE 帳號已綁定其他使用者
+        content:
+          application/json:
+            schema:
+              $ref: "../components/schemas/common.yml#/ErrorResponse"
+  delete:
+    tags:
+      - Me
+    summary: "解除綁定 LINE 帳號"
+    description: |
+      解除目前帳號的 LINE 綁定。至少要保留一種登入方式：只有 LINE 而沒有密碼的帳號必須先呼叫 `PUT /me/password`。
+
+      **權限 Access Control**:
+      - **Login Required**: 任何已登入的使用者。
+    operationId: unlinkLineIdentity
+    security:
+      - bearerAuth: []
+    responses:
+      "204":
+        description: No Content - 已解除綁定
+      "401":
+        description: Unauthorized
+      "404":
+        description: 此帳號未綁定 LINE
+      "409":
+        description: 這是唯一的登入方式，需先設定密碼
+        content:
+          application/json:
+            schema:
+              $ref: "../components/schemas/common.yml#/ErrorResponse"
+
+password:
+  put:
+    tags:
+      - Me
+    summary: "為沒有密碼的帳號設定密碼"
+    description: |
+      讓以 LINE 註冊的帳號補上 email/密碼登入。不需要舊密碼，且每個帳號只能設定一次
+      （已有密碼時回 `409`）。帳號尚無 email 時必須提供 `email`；已有 email 時忽略此欄位。
+
+      **權限 Access Control**:
+      - **Login Required**: 任何已登入的使用者。
+    operationId: setPassword
+    security:
+      - bearerAuth: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: "../components/schemas/user.yml#/SetPasswordRequest"
+    responses:
+      "204":
+        description: No Content - 已設定
+      "400":
+        description: 密碼長度不符，或帳號沒有 email 且未提供
+        content:
+          application/json:
+            schema:
+              $ref: "../components/schemas/common.yml#/ErrorResponse"
+      "401":
+        description: Unauthorized
+      "409":
+        description: 已設定過密碼，或 email 已被其他帳號使用
+        content:
+          application/json:
+            schema:
+              $ref: "../components/schemas/common.yml#/ErrorResponse"

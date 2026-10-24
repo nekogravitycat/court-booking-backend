@@ -374,7 +374,7 @@ func (h *OrganizationHandler) AddMember(c *gin.Context) {
 		return
 	}
 
-	if err := h.service.AddMember(c.Request.Context(), uri.ID, body.Email); err != nil {
+	if err := h.service.AddMember(c.Request.Context(), uri.ID, body.Email, body.Username); err != nil {
 		response.Error(c, err)
 		return
 	}

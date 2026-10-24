@@ -17,6 +17,7 @@ import (
 	favoriteHttp "github.com/nekogravitycat/court-booking-backend/internal/favorite/http"
 	"github.com/nekogravitycat/court-booking-backend/internal/file"
 	fileHttp "github.com/nekogravitycat/court-booking-backend/internal/file/http"
+	"github.com/nekogravitycat/court-booking-backend/internal/lineauth"
 	"github.com/nekogravitycat/court-booking-backend/internal/location"
 	locHttp "github.com/nekogravitycat/court-booking-backend/internal/location/http"
 	"github.com/nekogravitycat/court-booking-backend/internal/notification"
@@ -58,6 +59,7 @@ type Config struct {
 	SessionService      session.Service
 	SessionCookie       auth.SessionCookie
 	JWTManager          *auth.JWTManager
+	LineClient          lineauth.Client // nil disables LINE login
 }
 
 // maxRequestBodyBytes caps the size of any incoming request body. It must
@@ -144,7 +146,7 @@ func NewRouter(cfg Config) *gin.Engine {
 
 	// Initialize Handlers (Injecting Services from cfg)
 	fileHandler := fileHttp.NewHandler(cfg.FileService)
-	userHandler := userHttp.NewHandler(cfg.UserService, cfg.SessionService, cfg.SessionCookie, cfg.JWTManager, cfg.FileService, fileHandler)
+	userHandler := userHttp.NewHandler(cfg.UserService, cfg.SessionService, cfg.SessionCookie, cfg.JWTManager, cfg.FileService, fileHandler, cfg.LineClient)
 	orgHandler := orgHttp.NewHandler(cfg.OrgService, cfg.FileService, fileHandler)
 	locHandler := locHttp.NewHandler(cfg.LocService, cfg.OrgService, cfg.FileService, fileHandler)
 	resHandler := resHttp.NewHandler(cfg.ResService, cfg.LocService, cfg.OrgService, cfg.BookingService, cfg.FileService, fileHandler)

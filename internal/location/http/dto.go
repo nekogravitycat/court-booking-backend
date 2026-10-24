@@ -74,7 +74,7 @@ func NewLocationResponse(l *location.Location) LocationResponse {
 
 type ManagerResponse struct {
 	ID          string    `json:"id"`
-	Email       string    `json:"email"`
+	Email       *string   `json:"email"`
 	DisplayName *string   `json:"display_name"`
 	CreatedAt   time.Time `json:"created_at"`
 	IsActive    bool      `json:"is_active"`
@@ -83,7 +83,7 @@ type ManagerResponse struct {
 func NewManagerResponse(u *user.User) ManagerResponse {
 	return ManagerResponse{
 		ID:          u.ID,
-		Email:       u.Email,
+		Email:       u.EmailPtr(),
 		DisplayName: u.DisplayName,
 		CreatedAt:   u.CreatedAt.UTC(),
 		IsActive:    u.IsActive,

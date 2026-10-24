@@ -24,9 +24,18 @@ type Repository interface {
 	SetSkillLevel(ctx context.Context, userID, sportID string, level int) (*SportSkillLevel, error)
 	DeleteSkillLevel(ctx context.Context, userID, sportID string) error
 	GetByEmail(ctx context.Context, email string) (*User, error)
+	GetByUsername(ctx context.Context, username string) (*User, error)
+	GetByIdentity(ctx context.Context, provider, subject string) (*User, error)
 	GetByID(ctx context.Context, id string) (*User, error)
 	GetAccount(ctx context.Context, id string) (*Account, error)
 	Create(ctx context.Context, u *User) error
+	// CreateWithIdentity inserts the user and its first external identity atomically.
+	CreateWithIdentity(ctx context.Context, u *User, provider, subject string) error
+	AddIdentity(ctx context.Context, userID, provider, subject string) error
+	// RemoveIdentity unlinks a provider, refusing to remove the account's last login method.
+	RemoveIdentity(ctx context.Context, userID, provider string) error
+	// SetCredentials gives a password-less account a password and, if it has none, an email.
+	SetCredentials(ctx context.Context, userID string, email *string, passwordHash string) error
 	UpdateLastLogin(ctx context.Context, id string, t time.Time) error
 	List(ctx context.Context, filter UserFilter) ([]*User, int, error)
 	Update(ctx context.Context, id string, req UpdateUserRequest) error
@@ -55,9 +64,10 @@ func NewPgxRepository(pool *pgxpool.Pool) Repository {
 
 // userColumns are the user columns shared by every user query; scanUser scans them in this order.
 var userColumns = []string{
-	"u.id", "u.email", "u.username", "u.password_hash", "u.display_name", "u.phone", "u.gender", "u.birth_date", "u.line_id", "u.avatar", "u.created_at",
+	"u.id", "COALESCE(u.email, '')", "u.username", "COALESCE(u.password_hash, '')", "u.display_name", "u.phone", "u.gender", "u.birth_date", "u.line_id", "u.avatar", "u.created_at",
 	"u.last_login_at", "u.is_active", "u.is_system_admin",
 	"EXISTS(SELECT 1 FROM public.pickup_hosts ph WHERE ph.user_id = u.id) AS is_pickup_host",
+	"ARRAY(SELECT i.provider FROM public.user_identities i WHERE i.user_id = u.id ORDER BY i.provider) AS linked_providers",
 }
 
 // userOrganizationsColumn aggregates the user's active organizations and roles as JSON.
@@ -85,6 +95,7 @@ func scanUser(row pgx.Row, extra ...any) (*User, error) {
 	dest := []any{
 		&u.ID, &u.Email, &u.Username, &u.PasswordHash, &u.DisplayName, &u.Phone, &u.Gender, &u.BirthDate,
 		&u.LineID, &u.Avatar, &u.CreatedAt, &u.LastLoginAt, &u.IsActive, &u.IsSystemAdmin, &u.IsPickupHost,
+		&u.LinkedProviders,
 	}
 	dest = append(dest, extra...)
 	dest = append(dest, &orgsJSON)
@@ -115,10 +126,14 @@ func (r *pgxUserRepository) GetAccount(ctx context.Context, id string) (*Account
 }
 
 func (r *pgxUserRepository) getBy(ctx context.Context, column string, value any, caller string) (*User, error) {
+	return r.getByWhere(ctx, squirrel.Eq{column: value}, caller)
+}
+
+func (r *pgxUserRepository) getByWhere(ctx context.Context, where squirrel.Sqlizer, caller string) (*User, error) {
 	psql := squirrel.StatementBuilder.PlaceholderFormat(squirrel.Dollar)
 	query, args, err := psql.Select(append(append([]string{}, userColumns...), userOrganizationsColumn)...).
 		From("public.users u").
-		Where(squirrel.Eq{column: value}).
+		Where(where).
 		ToSql()
 	if err != nil {
 		return nil, fmt.Errorf("build %s query failed: %w", caller, err)
@@ -138,22 +153,45 @@ func (r *pgxUserRepository) GetByEmail(ctx context.Context, email string) (*User
 	return r.getBy(ctx, "u.email", email, "GetByEmail")
 }
 
+func (r *pgxUserRepository) GetByUsername(ctx context.Context, username string) (*User, error) {
+	return r.getBy(ctx, "u.username", username, "GetByUsername")
+}
+
+func (r *pgxUserRepository) GetByIdentity(ctx context.Context, provider, subject string) (*User, error) {
+	return r.getByWhere(ctx, squirrel.Expr(
+		"u.id = (SELECT i.user_id FROM public.user_identities i WHERE i.provider = ? AND i.provider_subject = ?)",
+		provider, subject), "GetByIdentity")
+}
+
 func (r *pgxUserRepository) GetByID(ctx context.Context, id string) (*User, error) {
 	return r.getBy(ctx, "u.id", id, "GetByID")
 }
 
-func (r *pgxUserRepository) Create(ctx context.Context, u *User) error {
+// rowQuerier is the part of pgx shared by the pool and a transaction.
+type rowQuerier interface {
+	QueryRow(ctx context.Context, sql string, args ...any) pgx.Row
+}
+
+// nullIfEmpty stores an empty password hash as NULL.
+func nullIfEmpty(s string) *string {
+	if s == "" {
+		return nil
+	}
+	return &s
+}
+
+func insertUser(ctx context.Context, q rowQuerier, u *User) error {
 	psql := squirrel.StatementBuilder.PlaceholderFormat(squirrel.Dollar)
 	query, args, err := psql.Insert("public.users").
 		Columns("email", "username", "password_hash", "display_name", "gender", "birth_date", "line_id", "is_active", "is_system_admin").
-		Values(u.Email, u.Username, u.PasswordHash, u.DisplayName, u.Gender, u.BirthDate, u.LineID, u.IsActive, u.IsSystemAdmin).
+		Values(nullIfEmpty(u.Email), u.Username, nullIfEmpty(u.PasswordHash), u.DisplayName, u.Gender, u.BirthDate, u.LineID, u.IsActive, u.IsSystemAdmin).
 		Suffix("RETURNING id, created_at").
 		ToSql()
 	if err != nil {
 		return fmt.Errorf("build create user query failed: %w", err)
 	}
 
-	if err := r.pool.QueryRow(ctx, query, args...).Scan(&u.ID, &u.CreatedAt); err != nil {
+	if err := q.QueryRow(ctx, query, args...).Scan(&u.ID, &u.CreatedAt); err != nil {
 		var e *pgconn.PgError
 		if errors.As(err, &e) && e.Code == pgerrcode.UniqueViolation {
 			if e.ConstraintName == "users_username_key" {
@@ -164,6 +202,126 @@ func (r *pgxUserRepository) Create(ctx context.Context, u *User) error {
 		return fmt.Errorf("Create user failed: %w", err)
 	}
 
+	return nil
+}
+
+func (r *pgxUserRepository) Create(ctx context.Context, u *User) error {
+	return insertUser(ctx, r.pool, u)
+}
+
+const insertIdentitySQL = "INSERT INTO public.user_identities (user_id, provider, provider_subject) VALUES ($1, $2, $3)"
+
+// identityInsertError maps identity constraint violations to domain errors.
+func identityInsertError(err error) error {
+	var e *pgconn.PgError
+	if errors.As(err, &e) {
+		switch {
+		case e.Code == pgerrcode.UniqueViolation && e.ConstraintName == "user_identities_user_provider_key":
+			return ErrProviderAlreadyLinked
+		case e.Code == pgerrcode.UniqueViolation:
+			return ErrIdentityAlreadyLinked
+		case e.Code == pgerrcode.ForeignKeyViolation:
+			return ErrNotFound
+		}
+	}
+	return fmt.Errorf("insert identity failed: %w", err)
+}
+
+func (r *pgxUserRepository) CreateWithIdentity(ctx context.Context, u *User, provider, subject string) error {
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("begin create user tx failed: %w", err)
+	}
+	defer tx.Rollback(ctx) //nolint:errcheck
+
+	if err := insertUser(ctx, tx, u); err != nil {
+		return err
+	}
+	if _, err := tx.Exec(ctx, insertIdentitySQL, u.ID, provider, subject); err != nil {
+		return identityInsertError(err)
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return fmt.Errorf("commit create user tx failed: %w", err)
+	}
+	return nil
+}
+
+func (r *pgxUserRepository) AddIdentity(ctx context.Context, userID, provider, subject string) error {
+	if _, err := r.pool.Exec(ctx, insertIdentitySQL, userID, provider, subject); err != nil {
+		return identityInsertError(err)
+	}
+	return nil
+}
+
+func (r *pgxUserRepository) RemoveIdentity(ctx context.Context, userID, provider string) error {
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("begin remove identity tx failed: %w", err)
+	}
+	defer tx.Rollback(ctx) //nolint:errcheck
+
+	// Lock the user row so concurrent unlinks cannot both pass the check below.
+	var hasPassword bool
+	err = tx.QueryRow(ctx, "SELECT password_hash IS NOT NULL FROM public.users WHERE id = $1 FOR UPDATE", userID).Scan(&hasPassword)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return ErrNotFound
+		}
+		return fmt.Errorf("lock user failed: %w", err)
+	}
+
+	var count int
+	var linked bool
+	err = tx.QueryRow(ctx,
+		"SELECT count(*), COALESCE(bool_or(provider = $2), false) FROM public.user_identities WHERE user_id = $1",
+		userID, provider).Scan(&count, &linked)
+	if err != nil {
+		return fmt.Errorf("count identities failed: %w", err)
+	}
+	if !linked {
+		return ErrIdentityNotFound
+	}
+	if !hasPassword && count <= 1 {
+		return ErrLastLoginMethod
+	}
+
+	if _, err := tx.Exec(ctx, "DELETE FROM public.user_identities WHERE user_id = $1 AND provider = $2", userID, provider); err != nil {
+		return fmt.Errorf("delete identity failed: %w", err)
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return fmt.Errorf("commit remove identity tx failed: %w", err)
+	}
+	return nil
+}
+
+func (r *pgxUserRepository) SetCredentials(ctx context.Context, userID string, email *string, passwordHash string) error {
+	// COALESCE keeps an existing email; the password_hash IS NULL guard makes this a one-time set.
+	ct, err := r.pool.Exec(ctx,
+		"UPDATE public.users SET email = COALESCE(email, $2), password_hash = $3 WHERE id = $1 AND password_hash IS NULL",
+		userID, email, passwordHash)
+	if err != nil {
+		var e *pgconn.PgError
+		if errors.As(err, &e) {
+			switch e.Code {
+			case pgerrcode.UniqueViolation:
+				return ErrEmailAlreadyUsed
+			case pgerrcode.CheckViolation:
+				return ErrEmailRequired
+			}
+		}
+		return fmt.Errorf("set credentials failed: %w", err)
+	}
+	if ct.RowsAffected() == 0 {
+		// Distinguish a missing user from one that already has a password.
+		var exists bool
+		if err := r.pool.QueryRow(ctx, "SELECT EXISTS(SELECT 1 FROM public.users WHERE id = $1)", userID).Scan(&exists); err != nil {
+			return fmt.Errorf("check user failed: %w", err)
+		}
+		if !exists {
+			return ErrNotFound
+		}
+		return ErrPasswordAlreadySet
+	}
 	return nil
 }
 

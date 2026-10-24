@@ -29,9 +29,20 @@ UserResponse:
     email:
       type: string
       format: email
+      nullable: true
+      description: "以 LINE 註冊且未提供 email 的帳號為 null"
     username:
       type: string
       description: "唯一帳號代稱 (小寫英文、數字、底線，4-15 字)。目前不可修改。"
+    has_password:
+      type: boolean
+      description: "是否可用 email/密碼登入；以 LINE 註冊的帳號為 false，可呼叫 PUT /me/password 補上"
+    linked_providers:
+      type: array
+      items:
+        type: string
+        enum: [line]
+      description: "已綁定的外部登入"
     display_name:
       type: string
       nullable: true
@@ -87,6 +98,8 @@ UserResponse:
         $ref: "./organization.yml#/OrganizationBrief"
   required:
     - id
+    - has_password
+    - linked_providers
     - email
     - username
     - created_at
@@ -158,6 +171,9 @@ LoginResponse:
       type: string
     user:
       $ref: "#/UserResponse"
+    is_new_user:
+      type: boolean
+      description: "僅 POST /auth/line 回傳：本次呼叫是否建立了新帳號"
   required:
     - access_token
     - user
@@ -232,3 +248,41 @@ AddPickupHostRequest:
       format: uuid
   required:
     - user_id
+
+LineAuthRequest:
+  type: object
+  properties:
+    code:
+      type: string
+      description: LINE 授權完成後回傳的 authorization code
+    redirect_uri:
+      type: string
+      description: 授權請求時使用的 redirect URI，必須在後端允許清單內
+      example: https://app.example.com/line/callback
+    code_verifier:
+      type: string
+      minLength: 43
+      maxLength: 128
+      description: PKCE code verifier
+    nonce:
+      type: string
+      description: 授權請求時送出的 nonce，用於驗證 ID token
+  required:
+    - code
+    - redirect_uri
+    - code_verifier
+    - nonce
+
+SetPasswordRequest:
+  type: object
+  properties:
+    email:
+      type: string
+      format: email
+      description: 帳號尚無 email 時必填；已有 email 時忽略
+    password:
+      type: string
+      minLength: 8
+      maxLength: 72
+  required:
+    - password

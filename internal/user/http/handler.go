@@ -12,6 +12,7 @@ import (
 	"github.com/nekogravitycat/court-booking-backend/internal/auth"
 	"github.com/nekogravitycat/court-booking-backend/internal/file"
 	filehttp "github.com/nekogravitycat/court-booking-backend/internal/file/http"
+	"github.com/nekogravitycat/court-booking-backend/internal/lineauth"
 	"github.com/nekogravitycat/court-booking-backend/internal/pkg/request"
 	"github.com/nekogravitycat/court-booking-backend/internal/pkg/response"
 	"github.com/nekogravitycat/court-booking-backend/internal/session"
@@ -25,10 +26,12 @@ type UserHandler struct {
 	jwtManager     *auth.JWTManager
 	fileService    file.Service
 	fileHandler    *filehttp.Handler
+	lineClient     lineauth.Client // nil when LINE login is disabled
 }
 
-func NewHandler(userService user.Service, sessionService session.Service, sessionCookie auth.SessionCookie, jwtManager *auth.JWTManager, fileService file.Service, fileHandler *filehttp.Handler) *UserHandler {
+func NewHandler(userService user.Service, sessionService session.Service, sessionCookie auth.SessionCookie, jwtManager *auth.JWTManager, fileService file.Service, fileHandler *filehttp.Handler, lineClient lineauth.Client) *UserHandler {
 	return &UserHandler{
+		lineClient:     lineClient,
 		userService:    userService,
 		sessionService: sessionService,
 		sessionCookie:  sessionCookie,
@@ -117,11 +120,11 @@ func (h *UserHandler) Login(c *gin.Context) {
 	}
 	h.sessionCookie.Set(c, rawToken)
 
-	h.respondWithAccessToken(c, u, sess.ID)
+	h.respondWithAccessToken(c, u, sess.ID, nil)
 }
 
 // respondWithAccessToken issues an access token bound to the session and writes the login response.
-func (h *UserHandler) respondWithAccessToken(c *gin.Context, u *user.User, sessionID string) {
+func (h *UserHandler) respondWithAccessToken(c *gin.Context, u *user.User, sessionID string, isNewUser *bool) {
 	token, err := h.jwtManager.GenerateAccessToken(u.ID, sessionID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{
@@ -133,7 +136,118 @@ func (h *UserHandler) respondWithAccessToken(c *gin.Context, u *user.User, sessi
 	c.JSON(http.StatusOK, LoginResponse{
 		AccessToken: token,
 		User:        NewUserResponse(u),
+		IsNewUser:   isNewUser,
 	})
+}
+
+// lineProfile exchanges the LINE authorization result for an identity profile.
+// It writes the error response and returns false on failure.
+func (h *UserHandler) lineProfile(c *gin.Context) (user.IdentityProfile, bool) {
+	if h.lineClient == nil {
+		response.Error(c, user.ErrLineLoginDisabled)
+		return user.IdentityProfile{}, false
+	}
+
+	var req LineAuthRequest
+	if !request.BindJSON(c, &req) {
+		return user.IdentityProfile{}, false
+	}
+
+	ctx := c.Request.Context()
+	profile, err := h.lineClient.Exchange(ctx, lineauth.ExchangeInput{
+		Code:         req.Code,
+		RedirectURI:  req.RedirectURI,
+		CodeVerifier: req.CodeVerifier,
+		Nonce:        req.Nonce,
+	})
+	if err != nil {
+		response.Error(c, err)
+		return user.IdentityProfile{}, false
+	}
+
+	p := user.IdentityProfile{
+		Provider:    user.ProviderLine,
+		Subject:     profile.Subject,
+		DisplayName: profile.Name,
+		Email:       profile.Email,
+	}
+	if profile.PictureURL != "" {
+		p.FetchAvatar = func(ctx context.Context) ([]byte, error) {
+			return h.lineClient.FetchPicture(ctx, profile.PictureURL)
+		}
+	}
+	return p, true
+}
+
+// LineLogin signs in with a LINE authorization code, creating the account on
+// the first login. The response matches Login, plus is_new_user.
+func (h *UserHandler) LineLogin(c *gin.Context) {
+	p, ok := h.lineProfile(c)
+	if !ok {
+		return
+	}
+
+	ctx := c.Request.Context()
+	u, created, err := h.userService.LoginWithIdentity(ctx, p)
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+
+	sess, rawToken, err := h.sessionService.Create(ctx, u.ID)
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+	h.sessionCookie.Set(c, rawToken)
+
+	h.respondWithAccessToken(c, u, sess.ID, &created)
+}
+
+// LinkLine attaches the caller's LINE account to their existing account.
+func (h *UserHandler) LinkLine(c *gin.Context) {
+	userID := auth.GetUserID(c)
+	p, ok := h.lineProfile(c)
+	if !ok {
+		return
+	}
+
+	ctx := c.Request.Context()
+	if err := h.userService.LinkIdentity(ctx, userID, p); err != nil {
+		response.Error(c, err)
+		return
+	}
+
+	u, err := h.userService.GetByID(ctx, userID)
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, MeResponse{User: NewUserResponse(u)})
+}
+
+// UnlinkLine detaches LINE from the caller's account.
+func (h *UserHandler) UnlinkLine(c *gin.Context) {
+	if err := h.userService.UnlinkIdentity(c.Request.Context(), auth.GetUserID(c), user.ProviderLine); err != nil {
+		response.Error(c, err)
+		return
+	}
+	c.Status(http.StatusNoContent)
+}
+
+// SetPassword adds a password to a password-less account, such as one created
+// through LINE.
+func (h *UserHandler) SetPassword(c *gin.Context) {
+	var req SetPasswordRequest
+	if !request.BindJSON(c, &req) {
+		return
+	}
+
+	if err := h.userService.SetPassword(c.Request.Context(), auth.GetUserID(c), req.Email, req.Password); err != nil {
+		response.Error(c, err)
+		return
+	}
+	c.Status(http.StatusNoContent)
 }
 
 // Refresh exchanges the session cookie for a fresh access token. A frontend
@@ -168,7 +282,7 @@ func (h *UserHandler) Refresh(c *gin.Context) {
 		return
 	}
 
-	h.respondWithAccessToken(c, u, sess.ID)
+	h.respondWithAccessToken(c, u, sess.ID, nil)
 }
 
 // Logout revokes the caller's session, which also invalidates its access

@@ -11,6 +11,7 @@ import (
 	"github.com/nekogravitycat/court-booking-backend/internal/booking"
 	"github.com/nekogravitycat/court-booking-backend/internal/favorite"
 	"github.com/nekogravitycat/court-booking-backend/internal/file"
+	"github.com/nekogravitycat/court-booking-backend/internal/lineauth"
 	"github.com/nekogravitycat/court-booking-backend/internal/location"
 	"github.com/nekogravitycat/court-booking-backend/internal/notification"
 	"github.com/nekogravitycat/court-booking-backend/internal/organization"
@@ -33,6 +34,8 @@ type Config struct {
 	JWTTTL       time.Duration
 	SessionTTL   time.Duration
 	BcryptCost   int
+	// LineClient enables LINE login; nil leaves the endpoints disabled.
+	LineClient lineauth.Client
 }
 
 // Container holds the initialized components that are needed externally.
@@ -129,6 +132,7 @@ func NewContainer(cfg Config) *Container {
 		SessionService:      sessionService,
 		SessionCookie:       auth.NewSessionCookie(cfg.IsProduction, cfg.SessionTTL),
 		JWTManager:          jwtManager,
+		LineClient:          cfg.LineClient,
 	}
 
 	// Router

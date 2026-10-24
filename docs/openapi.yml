@@ -304,6 +304,9 @@ paths:
 
   /auth/login:
     $ref: "./paths/auth.yml#/login"
+
+  /auth/line:
+    $ref: "./paths/auth.yml#/line"
   /auth/refresh:
     $ref: "./paths/auth.yml#/refresh"
   /auth/logout:
@@ -314,6 +317,12 @@ paths:
   # ============================
   /me:
     $ref: "./paths/me.yml#/me"
+
+  /me/identities/line:
+    $ref: "./paths/me.yml#/lineIdentity"
+
+  /me/password:
+    $ref: "./paths/me.yml#/password"
 
   /me/skill-levels:
     $ref: "./paths/me.yml#/skillLevels"

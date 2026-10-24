@@ -11,13 +11,17 @@ func RegisterRoutes(g *gin.RouterGroup, h *UserHandler, authMiddleware, adminMid
 	{
 		authGroup.POST("/register", h.Register)            // Register new user
 		authGroup.POST("/login", h.Login)                  // Login and get token
+		authGroup.POST("/line", h.LineLogin)               // Sign in or sign up with a LINE authorization code
 		authGroup.POST("/refresh", originCheck, h.Refresh) // Exchange the session cookie for an access token
 		authGroup.POST("/logout", originCheck, h.Logout)   // Revoke the session
 	}
 
 	// === Authenticated Routes ===
-	g.GET("/me", authMiddleware, h.Me)         // Get current user profile
-	g.PATCH("/me", authMiddleware, h.UpdateMe) // Update own profile
+	g.GET("/me", authMiddleware, h.Me)                            // Get current user profile
+	g.PATCH("/me", authMiddleware, h.UpdateMe)                    // Update own profile
+	g.POST("/me/identities/line", authMiddleware, h.LinkLine)     // Link LINE to the account
+	g.DELETE("/me/identities/line", authMiddleware, h.UnlinkLine) // Unlink LINE from the account
+	g.PUT("/me/password", authMiddleware, h.SetPassword)          // Add a password to a password-less account
 	g.GET("/me/skill-levels", authMiddleware, h.ListSkillLevels)
 	g.GET("/me/skill-levels/:sport_id", authMiddleware, h.GetSkillLevel)
 	g.PUT("/me/skill-levels/:sport_id", authMiddleware, h.SetSkillLevel)

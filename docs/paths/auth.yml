@@ -127,3 +127,67 @@ logout:
           application/json:
             schema:
               $ref: "../components/schemas/common.yml#/ErrorResponse"
+
+line:
+  post:
+    tags:
+      - Auth
+    summary: "LINE 登入或註冊"
+    description: |
+      以 LINE Login（OpenID Connect）的 authorization code 登入。第一次登入時自動建立帳號，不需要另外填寫 email 或密碼。
+
+      **前端流程**：產生 `state`、`nonce` 與 PKCE `code_verifier`，將使用者導向 LINE 授權頁
+      （scope 建議 `openid profile email`，`code_challenge_method=S256`），授權完成後把回傳的 `code`
+      連同 `redirect_uri`、`code_verifier`、`nonce` 送到此端點。`redirect_uri` 必須是後端環境變數
+      `LINE_REDIRECT_URIS` 允許清單內的值，且與授權請求時使用的一致。
+
+      **新帳號會自動帶入**：
+      - `display_name`：LINE 顯示名稱（空白時為 "LINE user"，最長 50 字）。
+      - `username`：系統產生（`l` 開頭共 15 字元的隨機小寫英數），目前不可修改。
+      - `avatar`：LINE 大頭貼（下載失敗時略過，不影響註冊）。
+      - `email`：僅在使用者授權 email 且 LINE 提供時帶入；若該 email 已被其他帳號使用則不帶入（不會自動合併帳號），一律為 `null`。
+      - `phone`、`gender`、`birth_date` 為空。
+
+      回應格式與 `/auth/login` 相同（含 session Cookie），另有 `is_new_user` 讓前端決定是否引導使用者補資料。
+      未設定 LINE 環境變數時此端點回 `404`。
+
+      **權限 Access Control**:
+      - **Public**: 此公開 API 無需登入即可使用。
+    operationId: loginWithLine
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: "../components/schemas/user.yml#/LineAuthRequest"
+    responses:
+      "200":
+        description: Success - 回傳 Access Token、使用者資訊與 is_new_user
+        content:
+          application/json:
+            schema:
+              $ref: "../components/schemas/user.yml#/LoginResponse"
+      "400":
+        description: Invalid request 或 redirect_uri 不在允許清單內
+        content:
+          application/json:
+            schema:
+              $ref: "../components/schemas/common.yml#/ErrorResponse"
+      "401":
+        description: LINE 授權失敗（code 無效、已使用或 nonce 不符），或帳號已停用
+        content:
+          application/json:
+            schema:
+              $ref: "../components/schemas/common.yml#/ErrorResponse"
+      "404":
+        description: 此部署未啟用 LINE 登入
+        content:
+          application/json:
+            schema:
+              $ref: "../components/schemas/common.yml#/ErrorResponse"
+      "502":
+        description: LINE 服務無法連線
+        content:
+          application/json:
+            schema:
+              $ref: "../components/schemas/common.yml#/ErrorResponse"

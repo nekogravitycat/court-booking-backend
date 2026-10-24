@@ -6,6 +6,7 @@ ManagerResponse:
       format: uuid
     email:
       type: string
+      nullable: true
     display_name:
       type: string
       nullable: true
@@ -16,7 +17,6 @@ ManagerResponse:
       type: boolean
   required:
     - id
-    - email
     - created_at
     - is_active
 
@@ -31,11 +31,16 @@ AddOrganizationManagerRequest:
 
 AddMemberRequest:
   type: object
+  description: "email 與 username 擇一提供（兩者都給或都不給回 400）。以 LINE 註冊且沒有 email 的使用者請用 username。"
   properties:
     email:
       type: string
       format: email
       description: Email address of the user to add as a member
       example: user@example.com
-  required:
-    - email
+    username:
+      type: string
+      minLength: 4
+      maxLength: 15
+      description: Username of the user to add as a member
+      example: some_user

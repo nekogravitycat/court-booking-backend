@@ -1,6 +1,7 @@
 package http
 
 import (
+	"errors"
 	"time"
 
 	"github.com/nekogravitycat/court-booking-backend/internal/file"
@@ -96,7 +97,7 @@ func NewOrganizationResponse(o *organization.Organization) OrganizationResponse 
 // ManagerResponse matches the User entity structure for manager list.
 type ManagerResponse struct {
 	ID          string    `json:"id"`
-	Email       string    `json:"email"`
+	Email       *string   `json:"email"`
 	DisplayName *string   `json:"display_name"`
 	CreatedAt   time.Time `json:"created_at"`
 	IsActive    bool      `json:"is_active"`
@@ -123,13 +124,18 @@ func (r *AddOrganizationManagerRequest) Validate() error {
 	return nil
 }
 
-// AddOrganizationMemberRequest defines payload for adding a member.
+// AddOrganizationMemberRequest defines payload for adding a member. Exactly one
+// of email and username identifies the user.
 type AddOrganizationMemberRequest struct {
-	Email string `json:"email" binding:"required,email,max=254"`
+	Email    string `json:"email" binding:"omitempty,email,max=254"`
+	Username string `json:"username" binding:"omitempty,min=4,max=15"`
 }
 
 // Validate performs custom validation for AddOrganizationMemberRequest.
 func (r *AddOrganizationMemberRequest) Validate() error {
+	if (r.Email == "") == (r.Username == "") {
+		return errors.New("provide exactly one of email or username")
+	}
 	return nil
 }
 
@@ -148,7 +154,7 @@ func (r *ListMemberRequest) Validate() error {
 func NewManagerResponse(u *user.User) ManagerResponse {
 	return ManagerResponse{
 		ID:          u.ID,
-		Email:       u.Email,
+		Email:       u.EmailPtr(),
 		DisplayName: u.DisplayName,
 		CreatedAt:   u.CreatedAt.UTC(),
 		IsActive:    u.IsActive,
