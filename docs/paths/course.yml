@@ -1,0 +1,508 @@
+courses:
+  post:
+    tags:
+    - Courses
+    summary: 建立課程
+    description: |
+      教練或教練團可建立體驗課 / 單堂課 / 週期課；學員透過報名參加，不直接預約教練時段。
+
+      規則：
+      - 需為已通過審核的教練 (否則 403)。
+      - 以教練團名義開課 (group_id)：須為該團使用中的團長或教練；個人名義開課時，若所屬教練團不允許私人課程 (allow_private_courses=false) 回 403。
+      - `schedule` (每週模式) 與 `sessions` (明確清單) 擇一；週期課最多 100 堂，所有場次須在未來。
+      - 收費課程至少需一種付款方式；接受轉帳時必須提供 bank_code 與 bank_account。
+      - 開課與場地預約是**分開**的：課程不會預約任何場地，教練自備場地或自行用帳號預約。
+    security:
+    - bearerAuth: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: ../components/schemas/course.yml#/CreateCourseRequest
+    responses:
+      '201':
+        description: Created
+        content:
+          application/json:
+            schema:
+              $ref: ../components/schemas/course.yml#/CourseResponse
+      '400':
+        description: invalid body
+        content:
+          application/json:
+            schema: &id001
+              $ref: ../components/schemas/common.yml#/ErrorResponse
+      '403':
+        description: not an approved coach / group rules
+        content:
+          application/json:
+            schema: *id001
+  get:
+    tags:
+    - Courses
+    summary: 搜尋課程 (公開)
+    description: |
+      預設只列出開放報名、仍有未來場次、且授課教練未被停權的課程。帶登入資訊時可使用 managed / enrolled 篩選。
+    security: []
+    parameters:
+    - &id002
+      $ref: ../components/parameters.yml#/page
+    - &id003
+      $ref: ../components/parameters.yml#/page_size
+    - name: sport_id
+      in: query
+      schema:
+        type: string
+        format: uuid
+    - name: course_type
+      in: query
+      schema:
+        type: string
+        enum:
+        - trial
+        - single
+        - recurring
+    - name: coach_id
+      in: query
+      schema:
+        type: string
+        format: uuid
+      description: 該教練授課的課程 (含教練團課程)
+    - name: group_id
+      in: query
+      schema:
+        type: string
+        format: uuid
+    - name: location_id
+      in: query
+      schema:
+        type: string
+        format: uuid
+    - name: keyword
+      in: query
+      schema:
+        type: string
+      description: 搜尋課程名稱或開課者名稱
+    - name: status
+      in: query
+      schema:
+        type: string
+        enum:
+        - open
+        - closed
+        - cancelled
+      description: 預設 open
+    - name: free_only
+      in: query
+      schema:
+        type: boolean
+    - name: has_seats
+      in: query
+      schema:
+        type: boolean
+      description: 只列出還有名額的課程
+    - name: include_ended
+      in: query
+      schema:
+        type: boolean
+      description: 包含已無未來場次的課程
+    - name: start_from
+      in: query
+      schema:
+        type: string
+        format: date-time
+      description: 有場次落在此時間之後
+    - name: start_to
+      in: query
+      schema:
+        type: string
+        format: date-time
+      description: 有場次落在此時間之前
+    - name: managed
+      in: query
+      schema:
+        type: boolean
+      description: 只列出我管理的課程 (需登入)
+    - name: enrolled
+      in: query
+      schema:
+        type: boolean
+      description: 只列出我報名中的課程 (需登入)
+    - name: sort_by
+      in: query
+      schema:
+        type: string
+        enum:
+        - next_session
+        - created_at
+        - price
+    - $ref: ../components/parameters.yml#/sort_order
+    responses:
+      '200':
+        description: Success
+        content:
+          application/json:
+            schema:
+              allOf:
+              - $ref: ../components/schemas/common.yml#/PageResponse
+              - type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: ../components/schemas/course.yml#/CourseResponse
+      '400':
+        description: invalid query
+        content:
+          application/json:
+            schema: *id001
+      '401':
+        description: managed / enrolled need login
+        content:
+          application/json:
+            schema: *id001
+courseDetail:
+  get:
+    tags:
+    - Courses
+    summary: 取得課程詳情 (公開)
+    description: |
+      包含全部場次、授課教練與匿名名單摘要 (participant_stats，不顯示姓名)。
+      轉帳資訊 (bank_*) 僅開課者與已報名學員可見；登入者會額外取得 can_manage 與 my_enrollment_id。
+    security: []
+    parameters:
+    - name: id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    responses:
+      '200':
+        description: Success
+        content:
+          application/json:
+            schema:
+              $ref: ../components/schemas/course.yml#/CourseResponse
+      '404':
+        description: not found
+        content:
+          application/json:
+            schema: *id001
+  patch:
+    tags:
+    - Courses
+    summary: 更新課程 (開課者 / 系統管理員)
+    security:
+    - bearerAuth: []
+    parameters:
+    - name: id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: ../components/schemas/course.yml#/UpdateCourseRequest
+    responses:
+      '200':
+        description: Success
+        content:
+          application/json:
+            schema:
+              $ref: ../components/schemas/course.yml#/CourseResponse
+      '400':
+        description: invalid body
+        content:
+          application/json:
+            schema: *id001
+      '403':
+        description: not a manager
+        content:
+          application/json:
+            schema: *id001
+      '404':
+        description: not found
+        content:
+          application/json:
+            schema: *id001
+      '409':
+        description: capacity below enrolled / course cancelled
+        content:
+          application/json:
+            schema: *id001
+courseSessions:
+  post:
+    tags:
+    - Courses
+    summary: 追加場次 (週期課)
+    description: 體驗課 / 單堂課回 400。場次不可與其他未取消的場次重疊 (409)。
+    security:
+    - bearerAuth: []
+    parameters:
+    - name: id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: ../components/schemas/course.yml#/AddSessionRequest
+    responses:
+      '201':
+        description: Created
+        content:
+          application/json:
+            schema:
+              $ref: ../components/schemas/course.yml#/SessionResponse
+      '400':
+        description: invalid / not recurring
+        content:
+          application/json:
+            schema: *id001
+      '403':
+        description: not a manager
+        content:
+          application/json:
+            schema: *id001
+      '409':
+        description: overlaps another session
+        content:
+          application/json:
+            schema: *id001
+courseSessionDetail:
+  patch:
+    tags:
+    - Courses
+    summary: 改期 / 取消單一場次
+    security:
+    - bearerAuth: []
+    parameters:
+    - name: id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    - name: session_id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: ../components/schemas/course.yml#/UpdateSessionRequest
+    responses:
+      '200':
+        description: Success
+        content:
+          application/json:
+            schema:
+              $ref: ../components/schemas/course.yml#/SessionResponse
+      '400':
+        description: invalid body
+        content:
+          application/json:
+            schema: *id001
+      '403':
+        description: not a manager
+        content:
+          application/json:
+            schema: *id001
+      '404':
+        description: not found
+        content:
+          application/json:
+            schema: *id001
+      '409':
+        description: past / cancelled / overlap
+        content:
+          application/json:
+            schema: *id001
+courseEnrollments:
+  post:
+    tags:
+    - Courses
+    summary: 報名課程
+    description: |
+      報名與付款狀態分開記錄：報名成功後 status=active，付款狀態為 unpaid (免費課程為 not_required)。金額為報名當下的快照 (課程費 + 場地費)。
+
+      規則 (名額在鎖定課程後再次確認，不會超賣)：
+      - 課程須為 open、未過報名截止、有未來場次、授課教練未被停權。
+      - 授課教練不可報名自己的課程 (403)；已報名中回 409；額滿回 409。
+      - 收費課程必須帶 `payment_method`，且為課程接受的方式 (400)。
+      - 成功後會通知授課教練。
+    security:
+    - bearerAuth: []
+    parameters:
+    - name: id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: ../components/schemas/course.yml#/EnrollRequest
+    responses:
+      '201':
+        description: Created
+        content:
+          application/json:
+            schema:
+              $ref: ../components/schemas/course.yml#/EnrollmentResponse
+      '400':
+        description: invalid payment method
+        content:
+          application/json:
+            schema: *id001
+      '403':
+        description: teacher cannot enroll
+        content:
+          application/json:
+            schema: *id001
+      '404':
+        description: not found
+        content:
+          application/json:
+            schema: *id001
+      '409':
+        description: full / closed / already enrolled
+        content:
+          application/json:
+            schema: *id001
+  get:
+    tags:
+    - Courses
+    summary: 查看報名名單 (開課者 / 系統管理員)
+    description: 包含學員聯絡方式與該球類的程度。其他人請使用課程詳情的 participant_stats。
+    security:
+    - bearerAuth: []
+    parameters:
+    - name: id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    - *id002
+    - *id003
+    - name: status
+      in: query
+      schema:
+        type: string
+        enum:
+        - active
+        - cancelled
+    - name: payment_status
+      in: query
+      schema:
+        type: string
+        enum:
+        - not_required
+        - unpaid
+        - reported
+        - paid
+        - refunded
+    responses:
+      '200':
+        description: Success
+        content:
+          application/json:
+            schema:
+              allOf:
+              - $ref: ../components/schemas/common.yml#/PageResponse
+              - type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: ../components/schemas/course.yml#/EnrollmentResponse
+      '403':
+        description: not a manager
+        content:
+          application/json:
+            schema: *id001
+myEnrollments:
+  get:
+    tags:
+    - Enrollments
+    summary: 我的報名列表
+    security:
+    - bearerAuth: []
+    parameters:
+    - *id002
+    - *id003
+    - name: status
+      in: query
+      schema:
+        type: string
+        enum:
+        - active
+        - cancelled
+    - name: payment_status
+      in: query
+      schema:
+        type: string
+        enum:
+        - not_required
+        - unpaid
+        - reported
+        - paid
+        - refunded
+    responses:
+      '200':
+        description: Success
+        content:
+          application/json:
+            schema:
+              allOf:
+              - $ref: ../components/schemas/common.yml#/PageResponse
+              - type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: ../components/schemas/course.yml#/EnrollmentResponse
+enrollmentDetail:
+  get:
+    tags:
+    - Enrollments
+    summary: 取得報名詳情 (本人 / 開課者 / 系統管理員)
+    security:
+    - bearerAuth: []
+    parameters:
+    - name: id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    responses:
+      '200':
+        description: Success
+        content:
+          application/json:
+            schema:
+              $ref: ../components/schemas/course.yml#/EnrollmentResponse
+      '404':
+        description: not found
+        content:
+          application/json:
+            schema: *id001

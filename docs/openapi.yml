@@ -53,6 +53,28 @@ tags:
     description: 我的最愛
   - name: Notifications
     description: 站內通知 (個人收件匣)
+  - name: Coaches
+    description: 教練資料與申請審核
+  - name: Coach Groups
+    description: 教練團、成員與邀請
+  - name: Courses
+    description: 課程、場次與報名
+  - name: Enrollments
+    description: 我的報名
+  - name: Payments
+    description: 付款狀態、轉帳回報與核帳 (收款方為教練)
+  - name: Cancellations
+    description: 取消、爽約與退款紀錄
+  - name: Attendance
+    description: 請假、補課與出席
+  - name: Reviews
+    description: 教練公開評價
+  - name: Complaints
+    description: 申訴 (學員 / 教練)
+  - name: Reputation
+    description: 教練內部信譽 (系統管理員)
+  - name: Suspensions
+    description: 教練停權 (系統管理員)
   - name: System
     description: 系統資訊
 
@@ -548,6 +570,159 @@ paths:
 
   /notifications/{id}/read:
     $ref: "./paths/notifications.yml#/markRead"
+
+  # ============================
+  # Coaches & Coach Groups
+  # ============================
+  /coach-applications:
+    $ref: "./paths/coach.yml#/coachApplications"
+
+  /coaches:
+    $ref: "./paths/coach.yml#/coaches"
+
+  /coaches/me:
+    $ref: "./paths/coach.yml#/coachMe"
+
+  /coaches/me/group:
+    $ref: "./paths/coach.yml#/myCoachGroup"
+
+  /coaches/me/invitations:
+    $ref: "./paths/coach.yml#/myCoachInvitations"
+
+  /coaches/{id}:
+    $ref: "./paths/coach.yml#/coachDetail"
+
+  /admin/coach-applications:
+    $ref: "./paths/coach.yml#/adminCoachApplications"
+
+  /admin/coach-applications/{id}/review:
+    $ref: "./paths/coach.yml#/adminCoachApplicationReview"
+
+  /coach-groups:
+    $ref: "./paths/coach.yml#/coachGroups"
+
+  /coach-groups/{id}:
+    $ref: "./paths/coach.yml#/coachGroupDetail"
+
+  /coach-groups/{id}/invitations:
+    $ref: "./paths/coach.yml#/coachGroupInvitations"
+
+  /coach-groups/{id}/invitations/{invitation_id}:
+    $ref: "./paths/coach.yml#/coachGroupInvitationDetail"
+
+  /coach-groups/{id}/members/{user_id}:
+    $ref: "./paths/coach.yml#/coachGroupMember"
+
+  /coach-invitations/{id}/accept:
+    $ref: "./paths/coach.yml#/acceptCoachInvitation"
+
+  /coach-invitations/{id}/decline:
+    $ref: "./paths/coach.yml#/declineCoachInvitation"
+
+  # ============================
+  # Courses & Enrollments
+  # ============================
+  /courses:
+    $ref: "./paths/course.yml#/courses"
+
+  /courses/{id}:
+    $ref: "./paths/course.yml#/courseDetail"
+
+  /courses/{id}/sessions:
+    $ref: "./paths/course.yml#/courseSessions"
+
+  /courses/{id}/sessions/{session_id}:
+    $ref: "./paths/course.yml#/courseSessionDetail"
+
+  /courses/{id}/enrollments:
+    $ref: "./paths/course.yml#/courseEnrollments"
+
+  /enrollments:
+    $ref: "./paths/course.yml#/myEnrollments"
+
+  /enrollments/{id}:
+    $ref: "./paths/course.yml#/enrollmentDetail"
+
+  /enrollments/{id}/payment:
+    $ref: "./paths/payment.yml#/enrollmentPayment"
+
+  /enrollments/{id}/transfer-reports:
+    $ref: "./paths/payment.yml#/enrollmentTransferReports"
+
+  /transfer-reports:
+    $ref: "./paths/payment.yml#/transferReports"
+
+  /transfer-reports/{id}/review:
+    $ref: "./paths/payment.yml#/transferReportReview"
+
+  /enrollments/{id}/cancellation-requests:
+    $ref: "./paths/payment.yml#/enrollmentCancellations"
+
+  /cancellation-requests:
+    $ref: "./paths/payment.yml#/cancellations"
+
+  /cancellation-requests/{id}/resolve:
+    $ref: "./paths/payment.yml#/cancellationResolve"
+
+  /sessions/{id}/leave-requests:
+    $ref: "./paths/attendance.yml#/sessionLeave"
+
+  /sessions/{id}/attendance:
+    $ref: "./paths/attendance.yml#/sessionAttendance"
+
+  /leave-requests/{id}:
+    $ref: "./paths/attendance.yml#/leaveDetail"
+
+  /leave-requests/{id}/makeup-options:
+    $ref: "./paths/attendance.yml#/makeupOptions"
+
+  /leave-requests/{id}/makeup-selection:
+    $ref: "./paths/attendance.yml#/makeupSelection"
+
+  /enrollments/{id}/attendance:
+    $ref: "./paths/attendance.yml#/enrollmentAttendance"
+
+  # ============================
+  # Reviews, Complaints, Reputation, Suspensions
+  # ============================
+  /enrollments/{id}/review:
+    $ref: "./paths/trust.yml#/enrollmentReview"
+
+  /coaches/{id}/reviews:
+    $ref: "./paths/trust.yml#/coachReviews"
+
+  /complaints:
+    $ref: "./paths/trust.yml#/complaints"
+
+  /complaints/{id}:
+    $ref: "./paths/trust.yml#/complaintDetail"
+
+  /admin/reviews:
+    $ref: "./paths/trust.yml#/adminReviews"
+
+  /admin/reviews/{id}:
+    $ref: "./paths/trust.yml#/adminReviewDetail"
+
+  /admin/complaints:
+    $ref: "./paths/trust.yml#/adminComplaints"
+
+  /admin/complaints/{id}:
+    $ref: "./paths/trust.yml#/adminComplaintDetail"
+
+  /admin/complaints/{id}/notes:
+    $ref: "./paths/trust.yml#/adminComplaintNotes"
+
+  /admin/coaches/{id}/reputation:
+    $ref: "./paths/trust.yml#/adminReputation"
+
+  /admin/coaches/{id}/reputation-events:
+    $ref: "./paths/trust.yml#/adminReputationEvents"
+
+  /admin/coaches/{id}/suspensions:
+    $ref: "./paths/trust.yml#/adminSuspensions"
+
+  /admin/suspensions/{id}/lift:
+    $ref: "./paths/trust.yml#/adminSuspensionLift"
 
   # ============================
   # Shared / Common Schemas for Reference

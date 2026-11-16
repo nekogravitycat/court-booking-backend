@@ -22,6 +22,36 @@ NotificationResponse:
         - pickup_group_cancelled
         - pickup_group_updated
         - skill_rated
+        - coach_application_submitted
+        - coach_application_approved
+        - coach_application_rejected
+        - coach_group_invited
+        - coach_group_invite_accepted
+        - coach_group_invite_declined
+        - coach_group_member_changed
+        - coach_group_member_removed
+        - coach_group_member_left
+        - coach_group_disbanded
+        - course_enrolled
+        - course_session_changed
+        - course_session_cancelled
+        - course_cancelled
+        - course_updated
+        - transfer_reported
+        - transfer_approved
+        - transfer_rejected
+        - payment_updated
+        - cancellation_requested
+        - cancellation_resolved
+        - enrollment_cancelled
+        - leave_requested
+        - makeup_booked
+        - makeup_released
+        - coach_review_received
+        - complaint_filed
+        - complaint_updated
+        - coach_suspended
+        - coach_suspension_lifted
     title:
       type: string
     content:
@@ -32,6 +62,14 @@ NotificationResponse:
       nullable: true
       description: "相關臨打團 (可用於導向)；該團被刪除後為 null"
     pickup_order_id:
+      type: string
+      format: uuid
+      nullable: true
+    ref_type:
+      type: string
+      nullable: true
+      description: "教練相關通知所指向的實體類型 (coach / coach_group / coach_group_invitation ...)，其他通知為 null"
+    ref_id:
       type: string
       format: uuid
       nullable: true

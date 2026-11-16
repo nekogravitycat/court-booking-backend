@@ -1,0 +1,639 @@
+enrollmentReview:
+  post:
+    tags:
+    - Reviews
+    summary: 評價教練 (已上課學員)
+    description: |
+      學員在課後對教練評分 (0~5，以 0.5 為單位) 並可附最多 50 字的評論。評價是**公開**的，與平台內部的信譽分數分開處理。
+
+      規則：
+      - 僅限本人的報名，且至少出席過一堂 (被標記 present，含補課) 才能評價 (403)。
+      - 同一報名對同一位教練只能評一次 (409)，送出後學員不能修改；不當內容由管理員隱藏。
+      - 課程有多位授課教練時須指定 `coach_id`，每位教練各可評一次。
+      - 會通知被評價的教練 (coach_review_received)。
+    security:
+    - bearerAuth: []
+    parameters:
+    - name: id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: ../components/schemas/trust.yml#/ReviewRequest
+    responses:
+      '201':
+        description: Created
+        content:
+          application/json:
+            schema:
+              $ref: ../components/schemas/trust.yml#/ReviewResponse
+      '400':
+        description: invalid rating / comment / coach
+        content:
+          application/json:
+            schema: &id001
+              $ref: ../components/schemas/common.yml#/ErrorResponse
+      '403':
+        description: has not attended
+        content:
+          application/json:
+            schema: *id001
+      '404':
+        description: not found
+        content:
+          application/json:
+            schema: *id001
+      '409':
+        description: already reviewed
+        content:
+          application/json:
+            schema: *id001
+  get:
+    tags:
+    - Reviews
+    summary: 我在這筆報名送出的評價
+    security:
+    - bearerAuth: []
+    parameters:
+    - name: id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    responses:
+      '200':
+        description: Success
+        content:
+          application/json:
+            schema:
+              allOf:
+              - $ref: ../components/schemas/common.yml#/PageResponse
+              - type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: ../components/schemas/trust.yml#/ReviewResponse
+      '404':
+        description: not found
+        content:
+          application/json:
+            schema: *id001
+coachReviews:
+  get:
+    tags:
+    - Reviews
+    summary: 教練的公開評價 (公開)
+    description: 只包含未被隱藏的評價，附平均分與則數。
+    security: []
+    parameters:
+    - name: id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    - &id002
+      $ref: ../components/parameters.yml#/page
+    - &id003
+      $ref: ../components/parameters.yml#/page_size
+    responses:
+      '200':
+        description: Success
+        content:
+          application/json:
+            schema:
+              $ref: ../components/schemas/trust.yml#/CoachReviewsResponse
+      '404':
+        description: coach not found
+        content:
+          application/json:
+            schema: *id001
+adminReviews:
+  get:
+    tags:
+    - Reviews
+    summary: 評價管理列表 (系統管理員)
+    description: 含被隱藏的評價與隱藏原因。
+    security:
+    - bearerAuth: []
+    parameters:
+    - *id002
+    - *id003
+    - name: coach_id
+      in: query
+      schema:
+        type: string
+        format: uuid
+    - name: hidden
+      in: query
+      schema:
+        type: boolean
+      description: 只列出被隱藏的評價
+    responses:
+      '200':
+        description: Success
+        content:
+          application/json:
+            schema:
+              allOf:
+              - $ref: ../components/schemas/common.yml#/PageResponse
+              - type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: ../components/schemas/trust.yml#/ReviewResponse
+adminReviewDetail:
+  patch:
+    tags:
+    - Reviews
+    summary: 隱藏或恢復評價 (系統管理員)
+    description: 隱藏必須附原因。隱藏的評價不會出現在公開列表，也不計入平均分。
+    security:
+    - bearerAuth: []
+    parameters:
+    - name: id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: ../components/schemas/trust.yml#/ReviewVisibilityRequest
+    responses:
+      '200':
+        description: Success
+        content:
+          application/json:
+            schema:
+              $ref: ../components/schemas/trust.yml#/ReviewResponse
+      '400':
+        description: reason required
+        content:
+          application/json:
+            schema: *id001
+      '404':
+        description: not found
+        content:
+          application/json:
+            schema: *id001
+complaints:
+  post:
+    tags:
+    - Complaints
+    summary: 提出申訴
+    description: |
+      簡單的工單：學員可申訴授課教練，教練可申訴自己課程的學員，皆須針對某筆報名並附上敘述。
+      同一申訴人對同一對象、同一報名同時只能有一筆處理中的申訴 (409)；結案後可再提出。
+      系統管理員會收到通知 (complaint_filed)。
+    security:
+    - bearerAuth: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: ../components/schemas/trust.yml#/CreateComplaintRequest
+    responses:
+      '201':
+        description: Created
+        content:
+          application/json:
+            schema:
+              $ref: ../components/schemas/trust.yml#/ComplaintResponse
+      '400':
+        description: invalid category / description / target
+        content:
+          application/json:
+            schema: *id001
+      '404':
+        description: no relation to the enrollment
+        content:
+          application/json:
+            schema: *id001
+      '409':
+        description: complaint already open
+        content:
+          application/json:
+            schema: *id001
+  get:
+    tags:
+    - Complaints
+    summary: 我提出的申訴
+    security:
+    - bearerAuth: []
+    parameters:
+    - *id002
+    - *id003
+    - name: status
+      in: query
+      schema:
+        type: string
+        enum:
+        - open
+        - in_review
+        - resolved
+        - dismissed
+    responses:
+      '200':
+        description: Success
+        content:
+          application/json:
+            schema:
+              allOf:
+              - $ref: ../components/schemas/common.yml#/PageResponse
+              - type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: ../components/schemas/trust.yml#/ComplaintResponse
+complaintDetail:
+  get:
+    tags:
+    - Complaints
+    summary: 申訴詳情 (申訴人)
+    description: 含狀態變更紀錄；內部備註不會顯示。被申訴者看不到申訴內容。
+    security:
+    - bearerAuth: []
+    parameters:
+    - name: id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    responses:
+      '200':
+        description: Success
+        content:
+          application/json:
+            schema:
+              $ref: ../components/schemas/trust.yml#/ComplaintResponse
+      '404':
+        description: not found
+        content:
+          application/json:
+            schema: *id001
+adminComplaints:
+  get:
+    tags:
+    - Complaints
+    summary: 申訴列表 (系統管理員)
+    description: 處理中的排在最前面。
+    security:
+    - bearerAuth: []
+    parameters:
+    - *id002
+    - *id003
+    - name: status
+      in: query
+      schema:
+        type: string
+        enum:
+        - open
+        - in_review
+        - resolved
+        - dismissed
+    - name: category
+      in: query
+      schema:
+        type: string
+    - name: target_user_id
+      in: query
+      schema:
+        type: string
+        format: uuid
+      description: 針對某位教練 / 學員的申訴
+    responses:
+      '200':
+        description: Success
+        content:
+          application/json:
+            schema:
+              allOf:
+              - $ref: ../components/schemas/common.yml#/PageResponse
+              - type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: ../components/schemas/trust.yml#/ComplaintResponse
+adminComplaintDetail:
+  get:
+    tags:
+    - Complaints
+    summary: 申訴詳情與完整紀錄 (系統管理員)
+    description: 含內部備註。
+    security:
+    - bearerAuth: []
+    parameters:
+    - name: id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    responses:
+      '200':
+        description: Success
+        content:
+          application/json:
+            schema:
+              $ref: ../components/schemas/trust.yml#/ComplaintResponse
+      '404':
+        description: not found
+        content:
+          application/json:
+            schema: *id001
+  patch:
+    tags:
+    - Complaints
+    summary: 更新申訴狀態：處理中 / 已解決 / 駁回 / 重新開啟 (系統管理員)
+    description: |
+      狀態可在 open / in_review / resolved / dismissed 之間自由切換 (方便日後擴充流程)。結案 (resolved / dismissed) 須附 note，會成為申訴人看到的處理結果；重新開啟會清除結案資訊。
+      每次變更都會通知申訴人 (complaint_updated)。
+    security:
+    - bearerAuth: []
+    parameters:
+    - name: id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: ../components/schemas/trust.yml#/UpdateComplaintRequest
+    responses:
+      '200':
+        description: Success
+        content:
+          application/json:
+            schema:
+              $ref: ../components/schemas/trust.yml#/ComplaintResponse
+      '400':
+        description: invalid status / note required
+        content:
+          application/json:
+            schema: *id001
+      '404':
+        description: not found
+        content:
+          application/json:
+            schema: *id001
+      '409':
+        description: status unchanged / duplicate open complaint
+        content:
+          application/json:
+            schema: *id001
+adminComplaintNotes:
+  post:
+    tags:
+    - Complaints
+    summary: 新增內部備註 (系統管理員)
+    description: 只有系統管理員看得到。
+    security:
+    - bearerAuth: []
+    parameters:
+    - name: id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: ../components/schemas/trust.yml#/ComplaintNoteRequest
+    responses:
+      '201':
+        description: Created
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                id:
+                  type: string
+                  format: uuid
+                note:
+                  type: string
+                created_at:
+                  type: string
+                  format: date-time
+      '400':
+        description: note required
+        content:
+          application/json:
+            schema: *id001
+      '404':
+        description: not found
+        content:
+          application/json:
+            schema: *id001
+adminReputation:
+  get:
+    tags:
+    - Reputation
+    summary: 查看教練信譽 (系統管理員)
+    description: |
+      平台**內部**信譽檢視，與公開評價分開。目前只是人工記錄的帳本：扣分、門檻與停權規則須先經平台確認，系統**不會**自動扣分或自動停權 (起始分數 100 為暫定顯示值)。
+      包含公開評價摘要、申訴數量與目前的停權狀態 (含受影響的場次與報名)。
+    security:
+    - bearerAuth: []
+    parameters:
+    - name: id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    responses:
+      '200':
+        description: Success
+        content:
+          application/json:
+            schema:
+              $ref: ../components/schemas/trust.yml#/ReputationResponse
+      '403':
+        description: admin only
+        content:
+          application/json:
+            schema: *id001
+      '404':
+        description: not found
+        content:
+          application/json:
+            schema: *id001
+adminReputationEvents:
+  post:
+    tags:
+    - Reputation
+    summary: 手動記錄加扣分 (系統管理員)
+    security:
+    - bearerAuth: []
+    parameters:
+    - name: id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: ../components/schemas/trust.yml#/ReputationEventRequest
+    responses:
+      '201':
+        description: Created
+        content:
+          application/json:
+            schema:
+              $ref: ../components/schemas/trust.yml#/ReputationEvent
+      '400':
+        description: invalid delta / reason
+        content:
+          application/json:
+            schema: *id001
+      '404':
+        description: coach or complaint not found
+        content:
+          application/json:
+            schema: *id001
+adminSuspensions:
+  post:
+    tags:
+    - Suspensions
+    summary: 停權教練 (系統管理員)
+    description: |
+      僅已通過審核的教練可停權。停權後：該教練不再出現在公開目錄與搜尋、不能新增報名或開新課；既有課程仍可由教練自行管理 (例如取消課程與處理退款)。
+
+      **系統不會自動取消任何場次或報名**，回應的 `impact` 會列出受影響的課程 (含是否還有其他教練可接手)、未來場次與有效報名，供管理員人工處理。會通知教練。
+    security:
+    - bearerAuth: []
+    parameters:
+    - name: id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: ../components/schemas/trust.yml#/SuspendRequest
+    responses:
+      '201':
+        description: Created
+        content:
+          application/json:
+            schema:
+              $ref: ../components/schemas/trust.yml#/SuspensionResponse
+      '400':
+        description: reason required
+        content:
+          application/json:
+            schema: *id001
+      '404':
+        description: coach not found
+        content:
+          application/json:
+            schema: *id001
+      '409':
+        description: already suspended / not approved
+        content:
+          application/json:
+            schema: *id001
+  get:
+    tags:
+    - Suspensions
+    summary: 教練的停權紀錄 (系統管理員)
+    description: 停權中的紀錄會附上目前受影響的場次與報名。
+    security:
+    - bearerAuth: []
+    parameters:
+    - name: id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    responses:
+      '200':
+        description: Success
+        content:
+          application/json:
+            schema:
+              allOf:
+              - $ref: ../components/schemas/common.yml#/PageResponse
+              - type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: ../components/schemas/trust.yml#/SuspensionResponse
+      '404':
+        description: coach not found
+        content:
+          application/json:
+            schema: *id001
+adminSuspensionLift:
+  post:
+    tags:
+    - Suspensions
+    summary: 解除停權 (系統管理員)
+    description: 教練狀態恢復為 approved 並通知教練。
+    security:
+    - bearerAuth: []
+    parameters:
+    - name: id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: ../components/schemas/trust.yml#/LiftSuspensionRequest
+    responses:
+      '200':
+        description: Success
+        content:
+          application/json:
+            schema:
+              $ref: ../components/schemas/trust.yml#/SuspensionResponse
+      '404':
+        description: not found
+        content:
+          application/json:
+            schema: *id001
+      '409':
+        description: already lifted
+        content:
+          application/json:
+            schema: *id001

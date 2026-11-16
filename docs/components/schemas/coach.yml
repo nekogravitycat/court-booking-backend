@@ -1,0 +1,221 @@
+CertificateRequest:
+  type: object
+  required: [file_id, title]
+  properties:
+    file_id:
+      type: string
+      format: uuid
+      description: "先以 POST /files 上傳的檔案，必須是本人上傳的圖片或 PDF"
+    title:
+      type: string
+      maxLength: 50
+
+ApplyCoachRequest:
+  type: object
+  required: [bio, teaching_content, target_audience, fee_info, sport_ids]
+  properties:
+    bio:
+      type: string
+      maxLength: 1000
+      description: "教練簡介"
+    teaching_content:
+      type: string
+      maxLength: 1000
+      description: "授課內容"
+    target_audience:
+      type: string
+      maxLength: 500
+      description: "適合授課對象"
+    experience:
+      type: string
+      maxLength: 1000
+      description: "經歷 (選填)"
+    fee_info:
+      type: string
+      maxLength: 500
+      description: "收費資訊 (文字說明)"
+    photo_file_id:
+      type: string
+      format: uuid
+      nullable: true
+      description: "教練照片 (選填，必須是本人上傳的圖片)"
+    sport_ids:
+      type: array
+      minItems: 1
+      maxItems: 10
+      items:
+        type: string
+        format: uuid
+      description: "專門球類 (GET /sports)"
+    certificates:
+      type: array
+      maxItems: 10
+      items:
+        $ref: "#/CertificateRequest"
+      description: "證照 (選填)；有任何一筆即視為「已提供證照」"
+
+UpdateCoachRequest:
+  type: object
+  description: "所有欄位皆為選填；至少需提供一個。sport_ids / certificates 一旦提供即整份取代。photo_file_id 傳 null 代表移除照片。"
+  properties:
+    bio: { type: string, maxLength: 1000 }
+    teaching_content: { type: string, maxLength: 1000 }
+    target_audience: { type: string, maxLength: 500 }
+    experience: { type: string, maxLength: 1000 }
+    fee_info: { type: string, maxLength: 500 }
+    photo_file_id: { type: string, format: uuid, nullable: true }
+    sport_ids:
+      type: array
+      items: { type: string, format: uuid }
+    certificates:
+      type: array
+      items:
+        $ref: "#/CertificateRequest"
+
+CoachResponse:
+  type: object
+  properties:
+    id:
+      type: string
+      format: uuid
+      description: "教練 ID，與使用者 ID 相同"
+    display_name: { type: string }
+    avatar: { type: string, nullable: true }
+    avatar_thumbnail: { type: string, nullable: true }
+    status:
+      type: string
+      enum: [pending, approved, rejected, suspended]
+    bio: { type: string }
+    teaching_content: { type: string }
+    target_audience: { type: string }
+    experience: { type: string }
+    fee_info: { type: string }
+    photo: { type: string, nullable: true, description: "照片 URL" }
+    photo_thumbnail: { type: string, nullable: true }
+    sports:
+      type: array
+      items:
+        type: object
+        properties:
+          id: { type: string, format: uuid }
+          code: { type: string }
+          name: { type: string }
+    certificates:
+      type: array
+      items:
+        type: object
+        properties:
+          id: { type: string, format: uuid }
+          title: { type: string }
+          file_url: { type: string, description: "需登入才能讀取" }
+    certificate_provided:
+      type: boolean
+      description: "是否已提供證照"
+    group:
+      type: object
+      nullable: true
+      description: "所屬教練團 (沒有則為 null)"
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        role: { type: string, enum: [leader, coach, assistant] }
+    rating:
+      type: object
+      description: "公開評價摘要 (見 GET /coaches/{id}/reviews)"
+      properties:
+        average: { type: number, nullable: true }
+        count: { type: integer }
+    reject_reason:
+      type: string
+      nullable: true
+    applied_at: { type: string, format: date-time }
+    reviewed_at: { type: string, format: date-time, nullable: true }
+
+ReviewCoachApplicationRequest:
+  type: object
+  required: [decision]
+  properties:
+    decision:
+      type: string
+      enum: [approve, reject]
+    reason:
+      type: string
+      maxLength: 500
+      description: "退回時必填，會通知申請者"
+
+CreateCoachGroupRequest:
+  type: object
+  required: [name]
+  properties:
+    name:
+      type: string
+      maxLength: 50
+    allow_private_courses:
+      type: boolean
+      default: false
+      description: "false 時，團員只能以教練團名義開課，不可用個人名義"
+
+UpdateCoachGroupRequest:
+  type: object
+  description: "至少提供一個欄位"
+  properties:
+    name: { type: string, maxLength: 50 }
+    allow_private_courses: { type: boolean }
+
+CoachGroupMemberResponse:
+  type: object
+  properties:
+    user_id: { type: string, format: uuid }
+    display_name: { type: string }
+    avatar: { type: string, nullable: true }
+    avatar_thumbnail: { type: string, nullable: true }
+    role: { type: string, enum: [leader, coach, assistant] }
+    status: { type: string, enum: [active, inactive] }
+    joined_at: { type: string, format: date-time }
+
+CoachGroupResponse:
+  type: object
+  properties:
+    id: { type: string, format: uuid }
+    name: { type: string }
+    allow_private_courses: { type: boolean }
+    member_count: { type: integer }
+    members:
+      type: array
+      description: "團長排在最前面"
+      items:
+        $ref: "#/CoachGroupMemberResponse"
+    created_at: { type: string, format: date-time }
+
+InviteCoachRequest:
+  type: object
+  required: [user_id, role]
+  properties:
+    user_id:
+      type: string
+      format: uuid
+      description: "被邀請的教練 (須為已通過審核的教練，且尚未加入任何教練團)"
+    role:
+      type: string
+      enum: [coach, assistant]
+
+CoachGroupInvitationResponse:
+  type: object
+  properties:
+    id: { type: string, format: uuid }
+    group_id: { type: string, format: uuid }
+    group_name: { type: string }
+    invitee_id: { type: string, format: uuid }
+    invitee_name: { type: string }
+    invited_by: { type: string, format: uuid, nullable: true }
+    role: { type: string, enum: [coach, assistant] }
+    status: { type: string, enum: [pending, accepted, declined, cancelled] }
+    created_at: { type: string, format: date-time }
+    responded_at: { type: string, format: date-time, nullable: true }
+
+UpdateCoachGroupMemberRequest:
+  type: object
+  description: "至少提供一個欄位"
+  properties:
+    role: { type: string, enum: [leader, coach, assistant] }
+    status: { type: string, enum: [active, inactive] }

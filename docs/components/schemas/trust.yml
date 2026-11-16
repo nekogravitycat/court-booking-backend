@@ -1,0 +1,216 @@
+ReviewRequest:
+  type: object
+  required: [rating]
+  properties:
+    rating: { type: number, minimum: 0, maximum: 5, multipleOf: 0.5, description: "0 到 5，以 0.5 為單位 (0 為有效評分)" }
+    comment: { type: string, maxLength: 50, description: "選填，最多 50 個字 (以字元計算)" }
+    coach_id: { type: string, format: uuid, description: "課程有多位授課教練時必填，須為該課程的授課教練" }
+
+ReviewResponse:
+  type: object
+  properties:
+    id: { type: string, format: uuid }
+    coach_id: { type: string, format: uuid }
+    course_id: { type: string, format: uuid }
+    course_title: { type: string }
+    reviewer:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+    rating: { type: number }
+    comment: { type: string }
+    created_at: { type: string, format: date-time }
+    enrollment_id: { type: string, format: uuid, description: "僅管理員端" }
+    is_visible: { type: boolean, description: "僅管理員端" }
+    hidden_reason: { type: string, nullable: true, description: "僅管理員端" }
+    hidden_at: { type: string, format: date-time, nullable: true, description: "僅管理員端" }
+
+CoachReviewsResponse:
+  type: object
+  properties:
+    summary:
+      type: object
+      properties:
+        average: { type: number, nullable: true, description: "公開評價的平均分 (沒有評價為 null)" }
+        count: { type: integer }
+    items:
+      type: array
+      items: { $ref: "#/ReviewResponse" }
+    page: { type: integer }
+    page_size: { type: integer }
+    total: { type: integer }
+
+ReviewVisibilityRequest:
+  type: object
+  required: [is_visible]
+  properties:
+    is_visible: { type: boolean }
+    reason: { type: string, maxLength: 200, description: "隱藏時必填" }
+
+CreateComplaintRequest:
+  type: object
+  required: [enrollment_id, category, description]
+  properties:
+    enrollment_id: { type: string, format: uuid, description: "申訴須針對某筆報名：學員或該課程的開課者才能提出" }
+    target_user_id: { type: string, format: uuid, description: "學員申訴時，課程有多位教練才需指定；教練申訴時固定為該報名的學員" }
+    category: { type: string, enum: [no_show, misconduct, payment, safety, quality, other] }
+    description: { type: string, minLength: 1, maxLength: 1000 }
+
+UpdateComplaintRequest:
+  type: object
+  required: [status]
+  properties:
+    status: { type: string, enum: [open, in_review, resolved, dismissed] }
+    note: { type: string, maxLength: 1000, description: "給申訴人看的說明；resolved / dismissed 時必填" }
+
+ComplaintNoteRequest:
+  type: object
+  required: [note]
+  properties:
+    note: { type: string, maxLength: 1000, description: "內部備註，申訴人看不到" }
+
+ComplaintResponse:
+  type: object
+  properties:
+    id: { type: string, format: uuid }
+    reporter:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+    reporter_role: { type: string, enum: [student, coach] }
+    target:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+    enrollment_id: { type: string, format: uuid }
+    course_id: { type: string, format: uuid }
+    course_title: { type: string }
+    category: { type: string }
+    description: { type: string }
+    status: { type: string, enum: [open, in_review, resolved, dismissed] }
+    resolution_note: { type: string, nullable: true }
+    resolved_at: { type: string, format: date-time, nullable: true }
+    created_at: { type: string, format: date-time }
+    updated_at: { type: string, format: date-time }
+    events:
+      type: array
+      description: "僅詳情頁。申訴人只看得到狀態變更；管理員另可看到內部備註"
+      items:
+        type: object
+        properties:
+          id: { type: string, format: uuid }
+          type: { type: string, enum: [created, status_changed, note] }
+          actor_name: { type: string, description: "僅管理員端" }
+          from_status: { type: string, nullable: true }
+          to_status: { type: string, nullable: true }
+          note: { type: string }
+          is_internal: { type: boolean }
+          created_at: { type: string, format: date-time }
+
+ReputationEventRequest:
+  type: object
+  required: [delta, reason]
+  properties:
+    delta: { type: integer, minimum: -100, maximum: 100, description: "非零；負數為扣分" }
+    reason: { type: string, maxLength: 200 }
+    complaint_id: { type: string, format: uuid, description: "選填：關聯針對該教練的申訴" }
+
+ReputationEvent:
+  type: object
+  properties:
+    id: { type: string, format: uuid }
+    delta: { type: integer }
+    reason: { type: string }
+    complaint_id: { type: string, format: uuid, nullable: true }
+    created_by: { type: string, format: uuid, nullable: true }
+    created_at: { type: string, format: date-time }
+
+SuspendRequest:
+  type: object
+  required: [reason]
+  properties:
+    reason: { type: string, maxLength: 1000 }
+
+LiftSuspensionRequest:
+  type: object
+  properties:
+    note: { type: string, maxLength: 1000 }
+
+SuspensionResponse:
+  type: object
+  properties:
+    id: { type: string, format: uuid }
+    coach_id: { type: string, format: uuid }
+    coach_name: { type: string }
+    reason: { type: string }
+    status: { type: string, enum: [active, lifted] }
+    created_by: { type: string, format: uuid, nullable: true }
+    created_at: { type: string, format: date-time }
+    lifted_at: { type: string, format: date-time, nullable: true }
+    lift_note: { type: string, nullable: true }
+    impact:
+      type: object
+      description: "受影響的既有課程、場次與報名，供管理員人工處理 (系統不會自動取消任何東西)。僅停權中的紀錄會帶。"
+      properties:
+        courses:
+          type: array
+          items:
+            type: object
+            properties:
+              id: { type: string, format: uuid }
+              title: { type: string }
+              status: { type: string }
+              other_active_teachers: { type: integer, description: "還能繼續授課的其他教練數" }
+              upcoming_sessions: { type: integer }
+              active_enrollments: { type: integer }
+        sessions:
+          type: array
+          items:
+            type: object
+            properties:
+              id: { type: string, format: uuid }
+              course_id: { type: string, format: uuid }
+              course_title: { type: string }
+              start_at: { type: string, format: date-time }
+              end_at: { type: string, format: date-time }
+        enrollments:
+          type: array
+          items:
+            type: object
+            properties:
+              id: { type: string, format: uuid }
+              course_id: { type: string, format: uuid }
+              course_title: { type: string }
+              student:
+                type: object
+                properties:
+                  id: { type: string, format: uuid }
+                  name: { type: string }
+              payment_status: { type: string }
+              amount_due: { type: integer }
+
+ReputationResponse:
+  type: object
+  description: "平台內部的信譽檢視 (僅系統管理員)。與公開評價分開處理。"
+  properties:
+    coach_id: { type: string, format: uuid }
+    coach_name: { type: string }
+    coach_status: { type: string, enum: [pending, approved, rejected, suspended] }
+    base_score: { type: integer, description: "暫定起始分數 100，僅供顯示；平台尚未確認任何扣分規則或門檻" }
+    total_adjustment: { type: integer }
+    score: { type: integer, description: "base_score + total_adjustment。不會自動觸發停權" }
+    rating:
+      type: object
+      description: "公開評價摘要"
+      properties:
+        average: { type: number, nullable: true }
+        count: { type: integer }
+    open_complaints: { type: integer }
+    total_complaints: { type: integer }
+    active_suspension: { $ref: "#/SuspensionResponse" }
+    events:
+      type: array
+      items: { $ref: "#/ReputationEvent" }

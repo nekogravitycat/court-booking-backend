@@ -13,6 +13,10 @@ import (
 	"github.com/nekogravitycat/court-booking-backend/internal/auth"
 	"github.com/nekogravitycat/court-booking-backend/internal/booking"
 	bookingHttp "github.com/nekogravitycat/court-booking-backend/internal/booking/http"
+	"github.com/nekogravitycat/court-booking-backend/internal/coach"
+	coachHttp "github.com/nekogravitycat/court-booking-backend/internal/coach/http"
+	"github.com/nekogravitycat/court-booking-backend/internal/course"
+	courseHttp "github.com/nekogravitycat/court-booking-backend/internal/course/http"
 	"github.com/nekogravitycat/court-booking-backend/internal/favorite"
 	favoriteHttp "github.com/nekogravitycat/court-booking-backend/internal/favorite/http"
 	"github.com/nekogravitycat/court-booking-backend/internal/file"
@@ -35,6 +39,8 @@ import (
 	skillRatingHttp "github.com/nekogravitycat/court-booking-backend/internal/skillrating/http"
 	"github.com/nekogravitycat/court-booking-backend/internal/sports"
 	sportsHttp "github.com/nekogravitycat/court-booking-backend/internal/sports/http"
+	"github.com/nekogravitycat/court-booking-backend/internal/trust"
+	trustHttp "github.com/nekogravitycat/court-booking-backend/internal/trust/http"
 	"github.com/nekogravitycat/court-booking-backend/internal/user"
 	userHttp "github.com/nekogravitycat/court-booking-backend/internal/user/http"
 )
@@ -55,6 +61,12 @@ type Config struct {
 	SkillRatingService  skillrating.Service
 	NotificationService notification.Service
 	FavoriteService     favorite.Service
+	CoachService        coach.Service
+	CoachGroupService   coach.GroupService
+	CourseService       course.Service
+	PaymentService      course.PaymentService
+	AttendanceService   course.AttendanceService
+	TrustService        trust.Service
 	FileService         file.Service
 	SessionService      session.Service
 	SessionCookie       auth.SessionCookie
@@ -158,6 +170,9 @@ func NewRouter(cfg Config) *gin.Engine {
 	favoriteHandler := favoriteHttp.NewHandler(cfg.FavoriteService)
 	skillRatingHandler := skillRatingHttp.NewHandler(cfg.SkillRatingService)
 	notificationHandler := notificationHttp.NewHandler(cfg.NotificationService)
+	coachHandler := coachHttp.NewHandler(cfg.CoachService, cfg.CoachGroupService)
+	courseHandler := courseHttp.NewHandler(cfg.CourseService, cfg.PaymentService, cfg.AttendanceService)
+	trustHandler := trustHttp.NewHandler(cfg.TrustService)
 
 	// Register Routes
 	v1 := r.Group("/v1")
@@ -177,6 +192,9 @@ func NewRouter(cfg Config) *gin.Engine {
 		favoriteHttp.RegisterRoutes(v1, favoriteHandler, authMiddleware)
 		skillRatingHttp.RegisterRoutes(v1, skillRatingHandler, authMiddleware)
 		notificationHttp.RegisterRoutes(v1, notificationHandler, authMiddleware, sysAdminMiddleware)
+		coachHttp.RegisterRoutes(v1, coachHandler, authMiddleware, optionalAuthMiddleware, sysAdminMiddleware)
+		courseHttp.RegisterRoutes(v1, courseHandler, authMiddleware, optionalAuthMiddleware)
+		trustHttp.RegisterRoutes(v1, trustHandler, authMiddleware, sysAdminMiddleware)
 	}
 
 	return r

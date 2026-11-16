@@ -1,0 +1,279 @@
+ScheduleRequest:
+  type: object
+  required: [start_date, end_date, weekdays, start_time, end_time]
+  description: "每週重複的上課模式；時間為課程時區的牆上時間 (跨日光節約仍維持同一時刻)。範圍最長 366 天，展開後最多 100 堂。"
+  properties:
+    start_date: { type: string, format: date, example: "2027-01-04" }
+    end_date: { type: string, format: date, example: "2027-03-29" }
+    weekdays:
+      type: array
+      minItems: 1
+      items: { type: integer, minimum: 0, maximum: 6 }
+      description: "0 = 週日 ... 6 = 週六"
+    start_time: { type: string, example: "19:00" }
+    end_time: { type: string, example: "21:00" }
+    skip_dates:
+      type: array
+      items: { type: string, format: date }
+      description: "要略過的日期 (例如國定假日)"
+
+SessionRange:
+  type: object
+  required: [start_at, end_at]
+  properties:
+    start_at: { type: string, format: date-time }
+    end_at: { type: string, format: date-time }
+
+CreateCourseRequest:
+  type: object
+  required: [title, sport_id, course_type, capacity]
+  description: |
+    建立課程。`schedule` (每週模式) 與 `sessions` (明確的場次清單) **擇一**提供；
+    體驗課 (trial) 與單堂課 (single) 只能有一堂。所有場次須在未來且互不重疊。
+  properties:
+    group_id:
+      type: string
+      format: uuid
+      nullable: true
+      description: "以教練團名義開課 (需為該團使用中的團長或教練)；省略則以個人名義 (所屬教練團若不允許私人課程則 403)"
+    coach_ids:
+      type: array
+      items: { type: string, format: uuid }
+      description: "授課教練 (僅教練團課程；須為該團使用中的成員，預設為開課者)"
+    title: { type: string, maxLength: 100 }
+    description: { type: string, maxLength: 2000 }
+    teaching_content: { type: string, maxLength: 2000 }
+    sport_id: { type: string, format: uuid }
+    course_type: { type: string, enum: [trial, single, recurring] }
+    capacity: { type: integer, minimum: 1, maximum: 500, description: "名額 (1 = 一對一，2 = 一對二，3 以上為團班)" }
+    venue_name: { type: string, maxLength: 100, description: "上課地點 (自由文字，教練可自備場地)" }
+    location_id: { type: string, format: uuid, nullable: true, description: "選填：連結到系統內已知場域 (僅供顯示，不會預約場地)" }
+    timezone: { type: string, default: "Asia/Taipei", description: "IANA 時區" }
+    price: { type: integer, minimum: 0, maximum: 1000000, default: 0, description: "課程費 (新台幣，0 = 免費)" }
+    venue_fee: { type: integer, minimum: 0, maximum: 1000000, default: 0, description: "場地費 (每位學員，計入轉帳金額)" }
+    payment_methods:
+      type: array
+      items: { type: string, enum: [onsite, transfer] }
+      description: "收費課程至少需一種"
+    bank_code: { type: string, nullable: true, description: "銀行 + 分行代碼，3-7 位數字；接受 transfer 時必填" }
+    bank_account: { type: string, nullable: true, description: "6-20 位數字；接受 transfer 時必填" }
+    bank_account_name: { type: string, nullable: true, maxLength: 50 }
+    allow_leave: { type: boolean, default: false }
+    leave_deadline_hours: { type: integer, nullable: true, minimum: 0, description: "上課前幾小時內不可請假" }
+    allow_makeup: { type: boolean, default: false }
+    makeup_limit: { type: integer, nullable: true, minimum: 0, description: "每位學員可補課堂數 (null = 不限)" }
+    makeup_valid_days: { type: integer, nullable: true, minimum: 1, description: "缺課後幾天內可補 (null = 不限)" }
+    allow_cancel: { type: boolean, default: false }
+    cancel_deadline_hours: { type: integer, nullable: true, minimum: 0, description: "第一堂課前幾小時內不可取消" }
+    rules_leave: { type: string, maxLength: 500, description: "請假規則 (給學員看的文字，系統不判讀)" }
+    rules_makeup: { type: string, maxLength: 500 }
+    rules_cancellation: { type: string, maxLength: 500 }
+    rules_refund: { type: string, maxLength: 500 }
+    rules_noshow: { type: string, maxLength: 500, description: "教練爽約處理規則" }
+    enrollment_deadline: { type: string, format: date-time, nullable: true }
+    schedule: { $ref: "#/ScheduleRequest" }
+    sessions:
+      type: array
+      maxItems: 100
+      items: { $ref: "#/SessionRange" }
+
+UpdateCourseRequest:
+  type: object
+  description: |
+    所有欄位選填。課程類型、球類、歸屬與時區不可修改。
+    - 價格、場地費變更只影響之後的報名 (既有報名金額為報名當下的快照)，並會通知已報名學員。
+    - capacity 不可低於目前報名人數 (409)。
+    - `status`: open / closed (停止新報名)；設為 `cancelled` 會取消整個課程、未來場次與所有報名並通知學員 (不可與其他欄位併用)，退款需由教練自行處理。
+    - 可為 null 的欄位傳 null 代表清除。
+  properties:
+    title: { type: string }
+    description: { type: string }
+    teaching_content: { type: string }
+    capacity: { type: integer }
+    venue_name: { type: string }
+    location_id: { type: string, format: uuid, nullable: true }
+    price: { type: integer }
+    venue_fee: { type: integer }
+    payment_methods: { type: array, items: { type: string, enum: [onsite, transfer] } }
+    bank_code: { type: string }
+    bank_account: { type: string }
+    bank_account_name: { type: string }
+    allow_leave: { type: boolean }
+    leave_deadline_hours: { type: integer, nullable: true }
+    allow_makeup: { type: boolean }
+    makeup_limit: { type: integer, nullable: true }
+    makeup_valid_days: { type: integer, nullable: true }
+    allow_cancel: { type: boolean }
+    cancel_deadline_hours: { type: integer, nullable: true }
+    rules_leave: { type: string }
+    rules_makeup: { type: string }
+    rules_cancellation: { type: string }
+    rules_refund: { type: string }
+    rules_noshow: { type: string }
+    enrollment_deadline: { type: string, format: date-time, nullable: true }
+    status: { type: string, enum: [open, closed, cancelled] }
+    coach_ids: { type: array, items: { type: string, format: uuid }, description: "僅教練團課程：整份取代授課教練" }
+
+AddSessionRequest:
+  type: object
+  required: [start_at, end_at]
+  description: "為週期課追加一堂 (體驗課 / 單堂課不可追加)"
+  properties:
+    start_at: { type: string, format: date-time }
+    end_at: { type: string, format: date-time }
+    venue_note: { type: string, maxLength: 200 }
+
+UpdateSessionRequest:
+  type: object
+  description: |
+    改期 (start_at 與 end_at 須一起提供)、修改地點備註，或取消 (cancel=true，可附 reason)。
+    只能操作未來且未取消的場次；改期與取消會通知已報名學員。
+  properties:
+    start_at: { type: string, format: date-time }
+    end_at: { type: string, format: date-time }
+    venue_note: { type: string, maxLength: 200 }
+    cancel: { type: boolean }
+    reason: { type: string, maxLength: 200 }
+
+EnrollRequest:
+  type: object
+  description: "收費課程必須指定課程接受的付款方式；免費課程不需 body"
+  properties:
+    payment_method: { type: string, enum: [onsite, transfer] }
+
+SessionResponse:
+  type: object
+  properties:
+    id: { type: string, format: uuid }
+    seq: { type: integer }
+    start_at: { type: string, format: date-time }
+    end_at: { type: string, format: date-time }
+    status: { type: string, enum: [scheduled, cancelled] }
+    venue_note: { type: string }
+    cancel_reason: { type: string, nullable: true }
+
+ParticipantStatsResponse:
+  type: object
+  description: "匿名名單摘要 (格式同臨打團參加者統計，不含姓名)。skill_levels 的 level 0 代表尚未宣告程度。"
+  properties:
+    total: { type: integer }
+    genders:
+      type: array
+      items: { type: object, properties: { key: { type: string }, count: { type: integer } } }
+    age_groups:
+      type: array
+      items: { type: object, properties: { key: { type: string }, count: { type: integer } } }
+    skill_levels:
+      type: array
+      items: { type: object, properties: { level: { type: integer }, label: { type: string }, count: { type: integer } } }
+
+CourseResponse:
+  type: object
+  properties:
+    id: { type: string, format: uuid }
+    owner_type: { type: string, enum: [coach, group] }
+    coach_id: { type: string, format: uuid, nullable: true }
+    group_id: { type: string, format: uuid, nullable: true }
+    owner_name: { type: string }
+    title: { type: string }
+    description: { type: string }
+    teaching_content: { type: string }
+    sport_id: { type: string, format: uuid }
+    sport_name: { type: string }
+    course_type: { type: string, enum: [trial, single, recurring] }
+    capacity: { type: integer }
+    enrolled_count: { type: integer }
+    remaining_seats: { type: integer }
+    venue_name: { type: string }
+    location_id: { type: string, format: uuid, nullable: true }
+    timezone: { type: string }
+    is_free: { type: boolean }
+    price: { type: integer }
+    venue_fee: { type: integer }
+    total_fee: { type: integer, description: "price + venue_fee，即轉帳金額" }
+    payment_methods: { type: array, items: { type: string } }
+    bank_code: { type: string, nullable: true, description: "僅開課者與已報名學員可見" }
+    bank_account: { type: string, nullable: true, description: "同上" }
+    bank_account_name: { type: string, nullable: true, description: "同上" }
+    bank_info_available: { type: boolean, description: "課程是否設定了轉帳資訊 (任何人可見)" }
+    allow_leave: { type: boolean }
+    leave_deadline_hours: { type: integer, nullable: true }
+    allow_makeup: { type: boolean }
+    makeup_limit: { type: integer, nullable: true }
+    makeup_valid_days: { type: integer, nullable: true }
+    allow_cancel: { type: boolean }
+    cancel_deadline_hours: { type: integer, nullable: true }
+    rules_leave: { type: string }
+    rules_makeup: { type: string }
+    rules_cancellation: { type: string }
+    rules_refund: { type: string }
+    rules_noshow: { type: string }
+    enrollment_deadline: { type: string, format: date-time, nullable: true }
+    status: { type: string, enum: [open, closed, cancelled] }
+    teachers:
+      type: array
+      items:
+        type: object
+        properties:
+          user_id: { type: string, format: uuid }
+          display_name: { type: string }
+          avatar: { type: string, nullable: true }
+          avatar_thumbnail: { type: string, nullable: true }
+    session_count: { type: integer, description: "未取消的場次數" }
+    first_session_at: { type: string, format: date-time, nullable: true }
+    last_session_at: { type: string, format: date-time, nullable: true }
+    next_session_at: { type: string, format: date-time, nullable: true }
+    sessions:
+      type: array
+      description: "僅詳情頁回傳"
+      items: { $ref: "#/SessionResponse" }
+    can_manage: { type: boolean, description: "僅詳情頁：目前使用者能否管理此課程" }
+    my_enrollment_id: { type: string, format: uuid, description: "僅詳情頁：目前使用者的有效報名" }
+    participant_stats: { $ref: "#/ParticipantStatsResponse" }
+    created_at: { type: string, format: date-time }
+
+EnrollmentResponse:
+  type: object
+  description: "報名狀態 (status) 與付款狀態 (payment_status) 分開記錄；未經核帳的轉帳不會標示為 paid。"
+  properties:
+    id: { type: string, format: uuid }
+    course_id: { type: string, format: uuid }
+    user_id: { type: string, format: uuid }
+    status: { type: string, enum: [active, cancelled] }
+    payment_status: { type: string, enum: [not_required, unpaid, reported, paid, refunded] }
+    payment_method: { type: string, enum: [onsite, transfer], nullable: true }
+    price: { type: integer, description: "報名當下的課程費快照" }
+    venue_fee: { type: integer }
+    amount_due: { type: integer }
+    cancel_source: { type: string, nullable: true, enum: [student, coach, course_cancelled, system] }
+    cancelled_at: { type: string, format: date-time, nullable: true }
+    created_at: { type: string, format: date-time }
+    attendance:
+      type: object
+      description: "出席 / 缺席 / 請假次數"
+      properties:
+        present: { type: integer }
+        absent: { type: integer }
+        leave: { type: integer }
+    course:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        title: { type: string }
+        course_type: { type: string }
+        status: { type: string }
+        sport_name: { type: string }
+        owner_name: { type: string }
+        next_session_at: { type: string, format: date-time, nullable: true }
+    student:
+      type: object
+      description: "學員資料；列表僅開課者 / 系統管理員可取得"
+      properties:
+        user_id: { type: string, format: uuid }
+        display_name: { type: string }
+        avatar: { type: string, nullable: true }
+        avatar_thumbnail: { type: string, nullable: true }
+        phone: { type: string, nullable: true }
+        line_id: { type: string, nullable: true }
+        skill_level: { type: integer, nullable: true, description: "該課程球類的程度" }
+        skill_label: { type: string, nullable: true }

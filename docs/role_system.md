@@ -381,6 +381,36 @@ flowchart TD
 | --- | --- |
 | `GET/POST/DELETE /v1/favorites/host` | 已登入使用者，且**只能操作自己的收藏清單**；被收藏對象必須當前具有 Pickup Host 角色（[favorite/service.go:35](../internal/favorite/service.go#L35)），否則回 `ErrNotPickupHost` |
 
+### 6.8 教練系統（coach / course / trust）
+
+教練身份**同樣沒有 `role` 欄位**，由資料列動態推導：
+
+| 身份 | 判定依據 |
+| --- | --- |
+| **Coach（教練）** | `coaches.status = 'approved'` 且使用者帳號為啟用中；`coaches.user_id` 即教練 ID。申請中 (pending) / 被退回 (rejected) / 停權 (suspended) 都不具教練權限 |
+| **Coach Group Leader / Member** | `coach_group_members.role`（leader / coach / assistant）；一位教練最多一個教練團（`coach_group_members.user_id` UNIQUE） |
+| **Course Manager（課程管理者）** | 課程的個人擁有者、授課教練（`course_coaches`）、開課者（`created_by`），或所屬教練團的團長；系統管理員視為管理者 |
+
+收款方是教練，所以轉帳核帳與取消 / 退款處理由 **Course Manager** 負責，系統管理員只做監督與介入。
+
+| 端點 | 權限 |
+| --- | --- |
+| `POST /v1/coach-applications`、`PATCH /v1/coaches/me` | 已登入使用者（申請）；本人（更新，停權中不可） |
+| `GET /v1/coaches`、`GET /v1/coaches/:id`、`GET /v1/coaches/:id/reviews` | 公開（只有 approved 的教練；其他狀態僅本人與系統管理員可看資料） |
+| `/v1/admin/coach-applications/**` | 系統管理員 |
+| `POST /v1/coach-groups` | 已通過審核的教練（建立者成為團長） |
+| `PATCH/DELETE /v1/coach-groups/:id`、邀請、調整他人角色 / 移除成員 | 該團團長或系統管理員；成員可調整**自己**的狀態與退出 |
+| `POST /v1/coach-invitations/:id/accept\|decline` | 被邀請的教練本人（需同意才加入） |
+| `POST /v1/courses` | 已通過審核的教練；以教練團名義需為該團使用中的團長 / 教練；個人名義需所屬教練團允許私人課程 |
+| `GET /v1/courses`、`GET /v1/courses/:id` | 公開；轉帳資訊只給課程管理者與已報名學員 |
+| `PATCH /v1/courses/:id`、場次管理、報名名單、標記付款、審核轉帳回報、處理取消申請、場次出席名單與記錄 | Course Manager（系統管理員可介入） |
+| 報名、轉帳回報、請假、補課、提出取消 | 已登入使用者（授課教練不可報名自己的課程）；只能操作自己的報名 |
+| `POST /v1/enrollments/:id/review` | 本人報名，且至少出席過一堂 |
+| `POST /v1/complaints` | 該報名的學員（申訴授課教練）或該課程的管理者（申訴學員） |
+| `/v1/admin/reviews`、`/v1/admin/complaints`、`/v1/admin/coaches/:id/{reputation,reputation-events,suspensions}`、`/v1/admin/suspensions/:id/lift` | 系統管理員 |
+
+停權不會自動取消任何課程或報名：停權中的教練從公開目錄與搜尋消失、不能開新課與接受新報名，但仍可管理既有課程以便處理退款。信譽分數是人工記錄的帳本，沒有自動扣分或自動停權規則。
+
 ---
 
 ## 7. 認證流程與運作細節

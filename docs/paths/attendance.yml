@@ -1,0 +1,293 @@
+sessionLeave:
+  post:
+    tags:
+    - Attendance
+    summary: 學員請假
+    description: |
+      學員為自己尚未開始的場次請假。請假會空出該場次的名額；是否能補課見 `makeup-options`。
+
+      依課程規則 (系統每次都會重新檢查)：
+      - 課程 `allow_leave` 須為 true (409)。
+      - 須在 `leave_deadline_hours` 之前提出 (409)。
+      - 只有該場次的正式學員可請假 (其他人 404)；同一場次只能請假一次 (409)。
+      - 已被教練標記出席 / 缺席的場次不可請假。
+      會通知授課教練 (leave_requested)。
+    security:
+    - bearerAuth: []
+    parameters:
+    - name: id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: ../components/schemas/attendance.yml#/LeaveRequestBody
+    responses:
+      '201':
+        description: Created
+        content:
+          application/json:
+            schema:
+              $ref: ../components/schemas/attendance.yml#/LeaveResponse
+      '400':
+        description: invalid body
+        content:
+          application/json:
+            schema: &id001
+              $ref: ../components/schemas/common.yml#/ErrorResponse
+      '404':
+        description: not in this session
+        content:
+          application/json:
+            schema: *id001
+      '409':
+        description: not allowed / deadline / duplicate / started
+        content:
+          application/json:
+            schema: *id001
+leaveDetail:
+  delete:
+    tags:
+    - Attendance
+    summary: 取消請假
+    description: 場次開始前可取消。已預約補課的請假須先取消補課 (409)。
+    security:
+    - bearerAuth: []
+    parameters:
+    - name: id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    responses:
+      '204':
+        description: No Content
+      '404':
+        description: not found
+        content:
+          application/json:
+            schema: *id001
+      '409':
+        description: make-up booked / session started
+        content:
+          application/json:
+            schema: *id001
+makeupOptions:
+  get:
+    tags:
+    - Attendance
+    summary: 查詢可選的補課時段
+    description: |
+      學員 (或開課者) 查看某筆請假可以補課的場次。
+
+      符合資格的條件取決於請假所屬課程的規則：`allow_makeup`、`makeup_limit` (可補堂數)、`makeup_valid_days` (缺課後幾天內)。不符合時 `eligible=false` 並說明原因。
+
+      可選場次的條件：同一開課者 (同教練或同教練團) 的**其他班級**、同球類、尚未開始、仍有名額 (請假的正式學員與補課學員都會計入名額)，且學員尚未參加。
+    security:
+    - bearerAuth: []
+    parameters:
+    - name: id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    responses:
+      '200':
+        description: Success
+        content:
+          application/json:
+            schema:
+              $ref: ../components/schemas/attendance.yml#/MakeupOptionsResponse
+      '404':
+        description: not found
+        content:
+          application/json:
+            schema: *id001
+makeupSelection:
+  post:
+    tags:
+    - Attendance
+    summary: 選定補課
+    description: |
+      學員選擇一個補課場次。**後端會再次確認資格、時段與名額** (鎖定場次後重算)，同時搶最後一個名額只會有一人成功，其餘回 409。
+      成功後該場次的教練會收到通知 (makeup_booked)，補課學員會出現在該場次的出席名單 (kind=makeup)。
+    security:
+    - bearerAuth: []
+    parameters:
+    - name: id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: ../components/schemas/attendance.yml#/MakeupSelectionRequest
+    responses:
+      '200':
+        description: Success
+        content:
+          application/json:
+            schema:
+              $ref: ../components/schemas/attendance.yml#/LeaveResponse
+      '400':
+        description: invalid body
+        content:
+          application/json:
+            schema: *id001
+      '404':
+        description: not found
+        content:
+          application/json:
+            schema: *id001
+      '409':
+        description: not eligible / full / already used
+        content:
+          application/json:
+            schema: *id001
+  delete:
+    tags:
+    - Attendance
+    summary: 取消補課預約
+    description: 補課場次開始前可取消；請假回到 open，名額釋出。若教練取消了補課場次，系統也會自動這樣處理並通知學員 (makeup_released)。
+    security:
+    - bearerAuth: []
+    parameters:
+    - name: id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    responses:
+      '200':
+        description: Success
+        content:
+          application/json:
+            schema:
+              $ref: ../components/schemas/attendance.yml#/LeaveResponse
+      '404':
+        description: not found
+        content:
+          application/json:
+            schema: *id001
+      '409':
+        description: no make-up booked / session started
+        content:
+          application/json:
+            schema: *id001
+sessionAttendance:
+  get:
+    tags:
+    - Attendance
+    summary: 查看場次出席名單 (開課者 / 系統管理員)
+    description: 包含正式學員與補課學員、請假狀態，以及學員在該球類的技能等級。
+    security:
+    - bearerAuth: []
+    parameters:
+    - name: id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    responses:
+      '200':
+        description: Success
+        content:
+          application/json:
+            schema:
+              $ref: ../components/schemas/attendance.yml#/SessionRoster
+      '403':
+        description: not a manager
+        content:
+          application/json:
+            schema: *id001
+      '404':
+        description: not found
+        content:
+          application/json:
+            schema: *id001
+  patch:
+    tags:
+    - Attendance
+    summary: 記錄出席 (開課者 / 系統管理員)
+    description: |
+      批次標記學員出席 (present) / 缺席 (absent)，pending 可清除紀錄；可重複呼叫更正。
+      - 場次須已開始 (409)，且未取消。
+      - 每筆都必須是該場次名單上的學員 (含補課學員)，否則整批 400 且不會寫入任何紀錄。
+      - 已請假的學員不可標記 (409)，須先由學員取消請假。
+    security:
+    - bearerAuth: []
+    parameters:
+    - name: id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: ../components/schemas/attendance.yml#/MarkAttendanceRequest
+    responses:
+      '200':
+        description: Success
+        content:
+          application/json:
+            schema:
+              $ref: ../components/schemas/attendance.yml#/SessionRoster
+      '400':
+        description: invalid records
+        content:
+          application/json:
+            schema: *id001
+      '403':
+        description: not a manager
+        content:
+          application/json:
+            schema: *id001
+      '409':
+        description: session not started / on leave
+        content:
+          application/json:
+            schema: *id001
+enrollmentAttendance:
+  get:
+    tags:
+    - Attendance
+    summary: 查看某報名的出席紀錄 (本人 / 開課者 / 系統管理員)
+    description: 回傳該學員應上的場次與補課場次的出席狀態，以及出席 / 缺席 / 請假統計。
+    security:
+    - bearerAuth: []
+    parameters:
+    - name: id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    responses:
+      '200':
+        description: Success
+        content:
+          application/json:
+            schema:
+              $ref: ../components/schemas/attendance.yml#/EnrollmentAttendance
+      '404':
+        description: not found
+        content:
+          application/json:
+            schema: *id001

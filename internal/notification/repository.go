@@ -37,12 +37,12 @@ func NewPgxRepository(pool *pgxpool.Pool) Repository {
 	return &pgxRepository{pool: pool}
 }
 
-const insertSQL = `INSERT INTO public.notifications (user_id, type, title, content, pickup_group_id, pickup_order_id)
-	VALUES ($1, $2, $3, $4, $5, $6)`
+const insertSQL = `INSERT INTO public.notifications (user_id, type, title, content, pickup_group_id, pickup_order_id, ref_type, ref_id)
+	VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`
 
 func (r *pgxRepository) Create(ctx context.Context, n *Notification) error {
 	err := r.pool.QueryRow(ctx, insertSQL+" RETURNING id, is_read, created_at",
-		n.UserID, n.Type, n.Title, n.Content, n.PickupGroupID, n.PickupOrderID,
+		n.UserID, n.Type, n.Title, n.Content, n.PickupGroupID, n.PickupOrderID, n.RefType, n.RefID,
 	).Scan(&n.ID, &n.IsRead, &n.CreatedAt)
 	if err != nil {
 		return fmt.Errorf("create notification failed: %w", err)
@@ -56,7 +56,7 @@ func (r *pgxRepository) CreateMany(ctx context.Context, ns []*Notification) erro
 	}
 	batch := &pgx.Batch{}
 	for _, n := range ns {
-		batch.Queue(insertSQL, n.UserID, n.Type, n.Title, n.Content, n.PickupGroupID, n.PickupOrderID)
+		batch.Queue(insertSQL, n.UserID, n.Type, n.Title, n.Content, n.PickupGroupID, n.PickupOrderID, n.RefType, n.RefID)
 	}
 	results := r.pool.SendBatch(ctx, batch)
 	defer results.Close()
@@ -71,7 +71,7 @@ func (r *pgxRepository) CreateMany(ctx context.Context, ns []*Notification) erro
 func (r *pgxRepository) List(ctx context.Context, filter Filter) ([]*Notification, int, error) {
 	psql := squirrel.StatementBuilder.PlaceholderFormat(squirrel.Dollar)
 	query := psql.Select(
-		"n.id", "n.user_id", "n.type", "n.title", "n.content", "n.pickup_group_id", "n.pickup_order_id",
+		"n.id", "n.user_id", "n.type", "n.title", "n.content", "n.pickup_group_id", "n.pickup_order_id", "n.ref_type", "n.ref_id",
 		"n.sender_id", "u.display_name", "n.is_read", "n.created_at",
 		"count(*) OVER() AS total_count",
 	).
@@ -87,7 +87,7 @@ func (r *pgxRepository) List(ctx context.Context, filter Filter) ([]*Notificatio
 	return pagination.Collect(ctx, r.pool, query, filter.Page, filter.PageSize, "notification", func(rows pgx.Rows, total *int) (*Notification, error) {
 		var n Notification
 		if err := rows.Scan(
-			&n.ID, &n.UserID, &n.Type, &n.Title, &n.Content, &n.PickupGroupID, &n.PickupOrderID, &n.SenderID, &n.SenderName, &n.IsRead, &n.CreatedAt,
+			&n.ID, &n.UserID, &n.Type, &n.Title, &n.Content, &n.PickupGroupID, &n.PickupOrderID, &n.RefType, &n.RefID, &n.SenderID, &n.SenderName, &n.IsRead, &n.CreatedAt,
 			total,
 		); err != nil {
 			return nil, fmt.Errorf("scan notification failed: %w", err)

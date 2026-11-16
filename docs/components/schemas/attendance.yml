@@ -1,0 +1,132 @@
+LeaveRequestBody:
+  type: object
+  properties:
+    reason: { type: string, maxLength: 200 }
+
+LeaveResponse:
+  type: object
+  properties:
+    id: { type: string, format: uuid }
+    session_id: { type: string, format: uuid }
+    enrollment_id: { type: string, format: uuid }
+    student:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+    course_id: { type: string, format: uuid }
+    course_title: { type: string }
+    session_start_at: { type: string, format: date-time }
+    session_end_at: { type: string, format: date-time }
+    reason: { type: string }
+    status: { type: string, enum: [open, used], description: "open：尚未選補課；used：已預約補課" }
+    makeup:
+      type: object
+      nullable: true
+      description: "已預約的補課場次"
+      properties:
+        session_id: { type: string, format: uuid }
+        course_title: { type: string, nullable: true }
+        start_at: { type: string, format: date-time, nullable: true }
+    created_at: { type: string, format: date-time }
+
+MakeupOptionsResponse:
+  type: object
+  properties:
+    eligible: { type: boolean, description: "依課程規則是否符合補課資格" }
+    reason: { type: string, description: "不符合資格的原因 (eligible=false 時)" }
+    remaining_makeups: { type: integer, nullable: true, description: "還可補幾堂 (null = 不限)" }
+    valid_until: { type: string, format: date-time, nullable: true, description: "補課場次須在此時間前開始 (null = 不限)" }
+    options:
+      type: array
+      items:
+        type: object
+        properties:
+          session_id: { type: string, format: uuid }
+          course_id: { type: string, format: uuid }
+          course_title: { type: string }
+          owner_name: { type: string }
+          start_at: { type: string, format: date-time }
+          end_at: { type: string, format: date-time }
+          timezone: { type: string }
+          venue_name: { type: string }
+          remaining_seats: { type: integer }
+
+MakeupSelectionRequest:
+  type: object
+  required: [session_id]
+  properties:
+    session_id: { type: string, format: uuid, description: "makeup-options 回傳的場次" }
+
+AttendanceRecord:
+  type: object
+  required: [enrollment_id, status]
+  properties:
+    enrollment_id: { type: string, format: uuid }
+    status: { type: string, enum: [present, absent, pending], description: "pending 代表清除先前的紀錄" }
+
+MarkAttendanceRequest:
+  type: object
+  required: [records]
+  properties:
+    records:
+      type: array
+      minItems: 1
+      maxItems: 200
+      items: { $ref: "#/AttendanceRecord" }
+
+SessionRoster:
+  type: object
+  properties:
+    session:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        course_id: { type: string, format: uuid }
+        course_title: { type: string }
+        start_at: { type: string, format: date-time }
+        end_at: { type: string, format: date-time }
+        status: { type: string, enum: [scheduled, cancelled] }
+    total: { type: integer }
+    items:
+      type: array
+      items:
+        type: object
+        properties:
+          enrollment_id: { type: string, format: uuid }
+          user_id: { type: string, format: uuid }
+          display_name: { type: string }
+          avatar: { type: string, nullable: true }
+          avatar_thumbnail: { type: string, nullable: true }
+          phone: { type: string, nullable: true }
+          line_id: { type: string, nullable: true }
+          skill_level: { type: integer, nullable: true, description: "該堂課球類的程度" }
+          skill_label: { type: string, nullable: true }
+          kind: { type: string, enum: [regular, makeup], description: "makeup 代表從別班來補課的學員" }
+          status: { type: string, enum: [pending, present, absent, leave] }
+          marked_at: { type: string, format: date-time, nullable: true }
+          from_course: { type: string, nullable: true, description: "補課學員原本的課程" }
+
+EnrollmentAttendance:
+  type: object
+  properties:
+    summary:
+      type: object
+      properties:
+        present: { type: integer }
+        absent: { type: integer }
+        leave: { type: integer }
+    total: { type: integer }
+    items:
+      type: array
+      items:
+        type: object
+        properties:
+          session_id: { type: string, format: uuid }
+          course_id: { type: string, format: uuid }
+          course_title: { type: string }
+          start_at: { type: string, format: date-time }
+          end_at: { type: string, format: date-time }
+          session_status: { type: string, enum: [scheduled, cancelled] }
+          kind: { type: string, enum: [regular, makeup] }
+          status: { type: string, enum: [pending, present, absent, leave] }

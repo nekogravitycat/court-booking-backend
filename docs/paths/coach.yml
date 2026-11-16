@@ -1,0 +1,773 @@
+coachApplications:
+  post:
+    tags:
+    - Coaches
+    summary: 提出教練申請
+    description: |
+      申請建立教練資料。必填：bio、teaching_content、target_audience、fee_info、sport_ids (至少一個)。證照與照片為選填，不以持證作為申請條件。
+
+      規則：
+      - 已有 pending / approved / suspended 的申請時回 409；被退回 (rejected) 後可再次呼叫，會重置為 pending 並以新內容覆蓋。
+      - 檔案 (photo_file_id、certificates[].file_id) 須為本人上傳；照片須為圖片，證照可為圖片或 PDF。
+      - 送出後會通知所有系統管理員 (coach_application_submitted)。
+
+      **權限 Access Control**:
+      - **Authenticated User**
+    security:
+    - bearerAuth: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: ../components/schemas/coach.yml#/ApplyCoachRequest
+    responses:
+      '201':
+        description: Created
+        content:
+          application/json:
+            schema:
+              $ref: ../components/schemas/coach.yml#/CoachResponse
+      '400':
+        description: invalid body / sport / file
+        content:
+          application/json:
+            schema:
+              $ref: ../components/schemas/common.yml#/ErrorResponse
+      '409':
+        description: application already exists
+        content:
+          application/json:
+            schema:
+              $ref: ../components/schemas/common.yml#/ErrorResponse
+coaches:
+  get:
+    tags:
+    - Coaches
+    summary: 教練列表 (公開)
+    description: |
+      只列出已通過審核 (approved) 的教練。
+    security: []
+    parameters:
+    - $ref: ../components/parameters.yml#/page
+    - $ref: ../components/parameters.yml#/page_size
+    - name: sport_id
+      in: query
+      schema:
+        type: string
+        format: uuid
+    - name: keyword
+      in: query
+      schema:
+        type: string
+      description: 依顯示名稱搜尋
+    responses:
+      '200':
+        description: Success
+        content:
+          application/json:
+            schema:
+              allOf:
+              - $ref: ../components/schemas/common.yml#/PageResponse
+              - type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: ../components/schemas/coach.yml#/CoachResponse
+coachMe:
+  get:
+    tags:
+    - Coaches
+    summary: 取得我的教練資料 / 申請狀態
+    description: |
+      沒有申請過時回 404。
+    security:
+    - bearerAuth: []
+    responses:
+      '200':
+        description: Success
+        content:
+          application/json:
+            schema:
+              $ref: ../components/schemas/coach.yml#/CoachResponse
+      '404':
+        description: not a coach / no application
+        content:
+          application/json:
+            schema:
+              $ref: ../components/schemas/common.yml#/ErrorResponse
+  patch:
+    tags:
+    - Coaches
+    summary: 更新我的教練資料
+    description: |
+      pending 與 approved 狀態可編輯，立即生效 (不需重新審核)；suspended 回 403；rejected 請改用 POST /coach-applications 重新申請。
+      被取代的舊照片與被移除的證照檔案會一併刪除。
+    security:
+    - bearerAuth: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: ../components/schemas/coach.yml#/UpdateCoachRequest
+    responses:
+      '200':
+        description: Success
+        content:
+          application/json:
+            schema:
+              $ref: ../components/schemas/coach.yml#/CoachResponse
+      '400':
+        description: invalid body
+        content:
+          application/json:
+            schema:
+              $ref: ../components/schemas/common.yml#/ErrorResponse
+      '403':
+        description: suspended or not a coach
+        content:
+          application/json:
+            schema:
+              $ref: ../components/schemas/common.yml#/ErrorResponse
+coachDetail:
+  get:
+    tags:
+    - Coaches
+    summary: 取得教練公開資料
+    description: |
+      approved 的教練任何人可看 (免登入)；其他狀態僅本人與系統管理員可看，其餘回 404。
+      證照檔案 (file_url) 需登入才能讀取。
+    security: []
+    parameters:
+    - name: id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    responses:
+      '200':
+        description: Success
+        content:
+          application/json:
+            schema:
+              $ref: ../components/schemas/coach.yml#/CoachResponse
+      '404':
+        description: not found
+        content:
+          application/json:
+            schema:
+              $ref: ../components/schemas/common.yml#/ErrorResponse
+adminCoachApplications:
+  get:
+    tags:
+    - Coaches
+    summary: 教練申請列表 (系統管理員)
+    description: |
+      以 status 篩選，預設 pending。
+    security:
+    - bearerAuth: []
+    parameters:
+    - $ref: ../components/parameters.yml#/page
+    - $ref: ../components/parameters.yml#/page_size
+    - name: status
+      in: query
+      schema:
+        type: string
+        enum:
+        - pending
+        - approved
+        - rejected
+        - suspended
+    responses:
+      '200':
+        description: Success
+        content:
+          application/json:
+            schema:
+              allOf:
+              - $ref: ../components/schemas/common.yml#/PageResponse
+              - type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: ../components/schemas/coach.yml#/CoachResponse
+      '403':
+        description: admin only
+        content:
+          application/json:
+            schema:
+              $ref: ../components/schemas/common.yml#/ErrorResponse
+adminCoachApplicationReview:
+  post:
+    tags:
+    - Coaches
+    summary: 審核教練申請 (系統管理員)
+    description: |
+      僅 pending 可審核 (否則 409)。退回須附 reason。結果會通知申請者 (coach_application_approved / coach_application_rejected)。
+      {id} 為教練 ID (即使用者 ID)。
+    security:
+    - bearerAuth: []
+    parameters:
+    - name: id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: ../components/schemas/coach.yml#/ReviewCoachApplicationRequest
+    responses:
+      '200':
+        description: Success
+        content:
+          application/json:
+            schema:
+              $ref: ../components/schemas/coach.yml#/CoachResponse
+      '400':
+        description: invalid decision / missing reason
+        content:
+          application/json:
+            schema:
+              $ref: ../components/schemas/common.yml#/ErrorResponse
+      '404':
+        description: not found
+        content:
+          application/json:
+            schema:
+              $ref: ../components/schemas/common.yml#/ErrorResponse
+      '409':
+        description: not pending
+        content:
+          application/json:
+            schema:
+              $ref: ../components/schemas/common.yml#/ErrorResponse
+coachGroups:
+  post:
+    tags:
+    - Coach Groups
+    summary: 建立教練團
+    description: |
+      建立者自動成為團長。需為已通過審核的教練 (否則 403)；一位教練只能加入一個教練團 (已加入回 409)。
+    security:
+    - bearerAuth: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: ../components/schemas/coach.yml#/CreateCoachGroupRequest
+    responses:
+      '201':
+        description: Created
+        content:
+          application/json:
+            schema:
+              $ref: ../components/schemas/coach.yml#/CoachGroupResponse
+      '400':
+        description: invalid name
+        content:
+          application/json:
+            schema:
+              $ref: ../components/schemas/common.yml#/ErrorResponse
+      '403':
+        description: not an approved coach
+        content:
+          application/json:
+            schema:
+              $ref: ../components/schemas/common.yml#/ErrorResponse
+      '409':
+        description: already in a group
+        content:
+          application/json:
+            schema:
+              $ref: ../components/schemas/common.yml#/ErrorResponse
+  get:
+    tags:
+    - Coach Groups
+    summary: 教練團列表
+    description: |
+      已登入者皆可讀取。
+    security:
+    - bearerAuth: []
+    parameters:
+    - $ref: ../components/parameters.yml#/page
+    - $ref: ../components/parameters.yml#/page_size
+    - name: keyword
+      in: query
+      schema:
+        type: string
+    responses:
+      '200':
+        description: Success
+        content:
+          application/json:
+            schema:
+              allOf:
+              - $ref: ../components/schemas/common.yml#/PageResponse
+              - type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: ../components/schemas/coach.yml#/CoachGroupResponse
+coachGroupDetail:
+  get:
+    tags:
+    - Coach Groups
+    summary: 取得教練團詳情 (團名、成員名單與角色、團長顯示名稱)
+    security:
+    - bearerAuth: []
+    parameters:
+    - name: id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    responses:
+      '200':
+        description: Success
+        content:
+          application/json:
+            schema:
+              $ref: ../components/schemas/coach.yml#/CoachGroupResponse
+      '404':
+        description: not found
+        content:
+          application/json:
+            schema:
+              $ref: ../components/schemas/common.yml#/ErrorResponse
+  patch:
+    tags:
+    - Coach Groups
+    summary: 更新教練團 (團長 / 系統管理員)
+    security:
+    - bearerAuth: []
+    parameters:
+    - name: id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: ../components/schemas/coach.yml#/UpdateCoachGroupRequest
+    responses:
+      '200':
+        description: Success
+        content:
+          application/json:
+            schema:
+              $ref: ../components/schemas/coach.yml#/CoachGroupResponse
+      '400':
+        description: invalid body
+        content:
+          application/json:
+            schema:
+              $ref: ../components/schemas/common.yml#/ErrorResponse
+      '403':
+        description: leader only
+        content:
+          application/json:
+            schema:
+              $ref: ../components/schemas/common.yml#/ErrorResponse
+  delete:
+    tags:
+    - Coach Groups
+    summary: 解散教練團 (團長 / 系統管理員)
+    description: |
+      解散後所有成員恢復為無團狀態，未回覆的邀請全部取消，並通知成員。
+    security:
+    - bearerAuth: []
+    parameters:
+    - name: id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    responses:
+      '204':
+        description: No Content
+      '403':
+        description: leader only
+        content:
+          application/json:
+            schema:
+              $ref: ../components/schemas/common.yml#/ErrorResponse
+coachGroupInvitations:
+  post:
+    tags:
+    - Coach Groups
+    summary: 邀請教練加入 (團長 / 系統管理員)
+    description: |
+      被邀請者須**同意**後才會加入。規則：
+      - 被邀請者須為已通過審核且尚未加入教練團的教練；同一人同時只能有一筆待回覆邀請 (409)。
+      - role 只能邀請為 coach 或 assistant；要成為團長請在加入後由團長調整。
+      - 會通知被邀請者 (coach_group_invited)。
+    security:
+    - bearerAuth: []
+    parameters:
+    - name: id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: ../components/schemas/coach.yml#/InviteCoachRequest
+    responses:
+      '201':
+        description: Created
+        content:
+          application/json:
+            schema:
+              $ref: ../components/schemas/coach.yml#/CoachGroupInvitationResponse
+      '400':
+        description: invalid invitee / role
+        content:
+          application/json:
+            schema:
+              $ref: ../components/schemas/common.yml#/ErrorResponse
+      '403':
+        description: leader only
+        content:
+          application/json:
+            schema:
+              $ref: ../components/schemas/common.yml#/ErrorResponse
+      '409':
+        description: already in a group / invitation pending
+        content:
+          application/json:
+            schema:
+              $ref: ../components/schemas/common.yml#/ErrorResponse
+  get:
+    tags:
+    - Coach Groups
+    summary: 列出該團的邀請 (團長 / 系統管理員)
+    security:
+    - bearerAuth: []
+    parameters:
+    - name: id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    - $ref: ../components/parameters.yml#/page
+    - $ref: ../components/parameters.yml#/page_size
+    - name: status
+      in: query
+      schema:
+        type: string
+        enum:
+        - pending
+        - accepted
+        - declined
+        - cancelled
+    responses:
+      '200':
+        description: Success
+        content:
+          application/json:
+            schema:
+              allOf:
+              - $ref: ../components/schemas/common.yml#/PageResponse
+              - type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: ../components/schemas/coach.yml#/CoachGroupInvitationResponse
+      '403':
+        description: leader only
+        content:
+          application/json:
+            schema:
+              $ref: ../components/schemas/common.yml#/ErrorResponse
+coachGroupInvitationDetail:
+  delete:
+    tags:
+    - Coach Groups
+    summary: 取消待回覆的邀請 (團長 / 系統管理員)
+    security:
+    - bearerAuth: []
+    parameters:
+    - name: id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    - name: invitation_id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    responses:
+      '204':
+        description: No Content
+      '403':
+        description: leader only
+        content:
+          application/json:
+            schema:
+              $ref: ../components/schemas/common.yml#/ErrorResponse
+      '404':
+        description: not found
+        content:
+          application/json:
+            schema:
+              $ref: ../components/schemas/common.yml#/ErrorResponse
+      '409':
+        description: invitation no longer pending
+        content:
+          application/json:
+            schema:
+              $ref: ../components/schemas/common.yml#/ErrorResponse
+coachGroupMember:
+  patch:
+    tags:
+    - Coach Groups
+    summary: 調整成員角色或狀態
+    description: |
+      - 團長 / 系統管理員可調整任何成員的角色 (leader / coach / assistant) 與狀態 (active / inactive)。
+      - 一般成員只能調整**自己**的狀態；試圖改角色回 403。
+      - 團內必須至少保留一位團長，降級最後一位團長回 409。
+      - 成員被他人調整時會收到通知 (coach_group_member_changed)。
+    security:
+    - bearerAuth: []
+    parameters:
+    - name: id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    - name: user_id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: ../components/schemas/coach.yml#/UpdateCoachGroupMemberRequest
+    responses:
+      '200':
+        description: Success
+        content:
+          application/json:
+            schema:
+              $ref: ../components/schemas/coach.yml#/CoachGroupMemberResponse
+      '400':
+        description: invalid body
+        content:
+          application/json:
+            schema:
+              $ref: ../components/schemas/common.yml#/ErrorResponse
+      '403':
+        description: forbidden
+        content:
+          application/json:
+            schema:
+              $ref: ../components/schemas/common.yml#/ErrorResponse
+      '404':
+        description: not a member
+        content:
+          application/json:
+            schema:
+              $ref: ../components/schemas/common.yml#/ErrorResponse
+      '409':
+        description: last leader
+        content:
+          application/json:
+            schema:
+              $ref: ../components/schemas/common.yml#/ErrorResponse
+  delete:
+    tags:
+    - Coach Groups
+    summary: 移除成員 / 退出教練團
+    description: |
+      團長 / 系統管理員可移除成員；成員可移除自己 (即退出)。
+      最後一位團長不能退出 (須先指定其他團長，409)；但團內只剩一人時退出會解散教練團。
+      被移除者與團長會收到通知。
+    security:
+    - bearerAuth: []
+    parameters:
+    - name: id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    - name: user_id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    responses:
+      '204':
+        description: No Content
+      '403':
+        description: forbidden
+        content:
+          application/json:
+            schema:
+              $ref: ../components/schemas/common.yml#/ErrorResponse
+      '404':
+        description: not a member
+        content:
+          application/json:
+            schema:
+              $ref: ../components/schemas/common.yml#/ErrorResponse
+      '409':
+        description: last leader
+        content:
+          application/json:
+            schema:
+              $ref: ../components/schemas/common.yml#/ErrorResponse
+myCoachGroup:
+  get:
+    tags:
+    - Coach Groups
+    summary: 取得我所屬的教練團
+    security:
+    - bearerAuth: []
+    responses:
+      '200':
+        description: Success
+        content:
+          application/json:
+            schema:
+              $ref: ../components/schemas/coach.yml#/CoachGroupResponse
+      '404':
+        description: not in a group
+        content:
+          application/json:
+            schema:
+              $ref: ../components/schemas/common.yml#/ErrorResponse
+myCoachInvitations:
+  get:
+    tags:
+    - Coach Groups
+    summary: 我收到的教練團邀請
+    security:
+    - bearerAuth: []
+    parameters:
+    - $ref: ../components/parameters.yml#/page
+    - $ref: ../components/parameters.yml#/page_size
+    - name: status
+      in: query
+      schema:
+        type: string
+        enum:
+        - pending
+        - accepted
+        - declined
+        - cancelled
+    responses:
+      '200':
+        description: Success
+        content:
+          application/json:
+            schema:
+              allOf:
+              - $ref: ../components/schemas/common.yml#/PageResponse
+              - type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: ../components/schemas/coach.yml#/CoachGroupInvitationResponse
+acceptCoachInvitation:
+  post:
+    tags:
+    - Coach Groups
+    summary: 接受邀請並加入教練團
+    description: |
+      加入時再次檢查未在任何教練團內 (409)；邀請已被處理 / 取消回 409；非本人邀請回 404。
+    security:
+    - bearerAuth: []
+    parameters:
+    - name: id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    responses:
+      '200':
+        description: Success
+        content:
+          application/json:
+            schema:
+              $ref: ../components/schemas/coach.yml#/CoachGroupResponse
+      '403':
+        description: not an approved coach
+        content:
+          application/json:
+            schema:
+              $ref: ../components/schemas/common.yml#/ErrorResponse
+      '404':
+        description: not found
+        content:
+          application/json:
+            schema:
+              $ref: ../components/schemas/common.yml#/ErrorResponse
+      '409':
+        description: already in a group / invitation closed
+        content:
+          application/json:
+            schema:
+              $ref: ../components/schemas/common.yml#/ErrorResponse
+declineCoachInvitation:
+  post:
+    tags:
+    - Coach Groups
+    summary: 拒絕邀請
+    security:
+    - bearerAuth: []
+    parameters:
+    - name: id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    responses:
+      '204':
+        description: No Content
+      '404':
+        description: not found
+        content:
+          application/json:
+            schema:
+              $ref: ../components/schemas/common.yml#/ErrorResponse
+      '409':
+        description: invitation closed
+        content:
+          application/json:
+            schema:
+              $ref: ../components/schemas/common.yml#/ErrorResponse

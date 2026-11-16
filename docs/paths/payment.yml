@@ -1,0 +1,400 @@
+enrollmentPayment:
+  patch:
+    tags:
+    - Payments
+    summary: 手動標記付款狀態 (開課者 / 系統管理員)
+    description: |
+      現場付款時由教練標記為已付款 (paid)，標錯可改回 unpaid。收款方是教練，平台不經手款項。
+      - 免費報名 (not_required) 與已退款 (refunded) 的報名回 409。
+      - 狀態為 reported (有待審核轉帳回報) 時不可改回 unpaid；標記為 paid 會同時結案該筆回報。
+      - 會通知學員 (payment_updated)。
+    security:
+    - bearerAuth: []
+    parameters:
+    - name: id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: ../components/schemas/payment.yml#/UpdatePaymentRequest
+    responses:
+      '200':
+        description: Success
+        content:
+          application/json:
+            schema:
+              $ref: ../components/schemas/course.yml#/EnrollmentResponse
+      '400':
+        description: invalid status
+        content:
+          application/json:
+            schema: &id001
+              $ref: ../components/schemas/common.yml#/ErrorResponse
+      '403':
+        description: not a manager
+        content:
+          application/json:
+            schema: *id001
+      '404':
+        description: not found
+        content:
+          application/json:
+            schema: *id001
+      '409':
+        description: status cannot be changed
+        content:
+          application/json:
+            schema: *id001
+enrollmentTransferReports:
+  post:
+    tags:
+    - Payments
+    summary: 回報轉帳 (學員)
+    description: |
+      學員轉帳後回報帳號末五碼，由**開課教練**人工確認是否入帳 (收款方是教練)。**未核帳的轉帳不會標示為已付款**：回報後報名的付款狀態為 `reported`，直到教練核准才變成 `paid`。
+
+      規則：
+      - 僅限本人、有效的報名，且報名時選擇的付款方式為 transfer。
+      - 同一報名同時只能有一筆待審回報 (409)；已付款 / 已退款回 409。被退回後可重新回報。
+      - 轉帳金額應為課程費 + 適用場地費；回報金額與應付金額不同時 `amount_matches=false`，由教練判斷。
+      - 會通知授課教練 (transfer_reported)。
+    security:
+    - bearerAuth: []
+    parameters:
+    - name: id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: ../components/schemas/payment.yml#/TransferReportRequest
+    responses:
+      '201':
+        description: Created
+        content:
+          application/json:
+            schema:
+              $ref: ../components/schemas/payment.yml#/TransferReportResponse
+      '400':
+        description: invalid report
+        content:
+          application/json:
+            schema: *id001
+      '404':
+        description: not found
+        content:
+          application/json:
+            schema: *id001
+      '409':
+        description: not transfer / already paid / report pending
+        content:
+          application/json:
+            schema: *id001
+  get:
+    tags:
+    - Payments
+    summary: 查看某報名的轉帳回報紀錄 (本人 / 開課者 / 系統管理員)
+    security:
+    - bearerAuth: []
+    parameters:
+    - name: id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    - &id002
+      $ref: ../components/parameters.yml#/page
+    - &id003
+      $ref: ../components/parameters.yml#/page_size
+    - &id004
+      name: status
+      in: query
+      schema:
+        type: string
+        enum:
+        - pending
+        - approved
+        - rejected
+    responses:
+      '200':
+        description: Success
+        content:
+          application/json:
+            schema:
+              allOf:
+              - $ref: ../components/schemas/common.yml#/PageResponse
+              - type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: ../components/schemas/payment.yml#/TransferReportResponse
+      '404':
+        description: not found
+        content:
+          application/json:
+            schema: *id001
+transferReports:
+  get:
+    tags:
+    - Payments
+    summary: 轉帳回報待審清單 (開課者 / 系統管理員)
+    description: |
+      開課者看到自己管理的課程的回報；系統管理員看到全部 (監督用途)。待審 (pending) 排在最前面。
+    security:
+    - bearerAuth: []
+    parameters:
+    - *id002
+    - *id003
+    - *id004
+    - name: course_id
+      in: query
+      schema:
+        type: string
+        format: uuid
+    responses:
+      '200':
+        description: Success
+        content:
+          application/json:
+            schema:
+              allOf:
+              - $ref: ../components/schemas/common.yml#/PageResponse
+              - type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: ../components/schemas/payment.yml#/TransferReportResponse
+transferReportReview:
+  post:
+    tags:
+    - Payments
+    summary: 核帳：通過或退回 (開課者 / 系統管理員)
+    description: |
+      - approve：回報標記為 approved，報名付款狀態變為 paid。
+      - reject：須附 note；報名付款狀態回到 unpaid，學員可重新回報。
+      - 僅 pending 可審核 (409)；同時審核同一筆只會有一個成功。會通知學員。
+    security:
+    - bearerAuth: []
+    parameters:
+    - name: id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: ../components/schemas/payment.yml#/ReviewTransferRequest
+    responses:
+      '200':
+        description: Success
+        content:
+          application/json:
+            schema:
+              $ref: ../components/schemas/payment.yml#/TransferReportResponse
+      '400':
+        description: invalid decision / missing note
+        content:
+          application/json:
+            schema: *id001
+      '404':
+        description: not found / not your course
+        content:
+          application/json:
+            schema: *id001
+      '409':
+        description: already reviewed / enrollment not active
+        content:
+          application/json:
+            schema: *id001
+enrollmentCancellations:
+  post:
+    tags:
+    - Cancellations
+    summary: 提出取消 / 爽約 / 退款申請
+    description: |
+      學員 (本人報名) 或開課教練 (代為提出) 皆可提出。平台只記錄申請與處理結果，**不自動計算退款**，需由教練人工處理。
+
+      唯一的自動化：學員對**整個報名**提出，且同時符合下列條件時，會立即取消 (申請狀態直接為 resolved / cancelled)：
+      - 課程 `allow_cancel = true`；
+      - 報名尚未涉及金錢 (payment_status 為 not_required 或 unpaid)；
+      - 現在距第一堂課開始仍早於 `cancel_deadline_hours` (未設定則第一堂開始前皆可)。
+
+      其他情況一律成為 pending，等候教練處理。同一報名同一範圍 (整個報名 / 同一場次) 只能有一筆待處理 (409)。
+      可帶 `session_id` 針對單一場次 (如教練爽約)。
+    security:
+    - bearerAuth: []
+    parameters:
+    - name: id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: ../components/schemas/payment.yml#/CreateCancellationRequest
+    responses:
+      '201':
+        description: Created
+        content:
+          application/json:
+            schema:
+              $ref: ../components/schemas/payment.yml#/CancellationRequestResponse
+      '400':
+        description: invalid body / session
+        content:
+          application/json:
+            schema: *id001
+      '404':
+        description: not found
+        content:
+          application/json:
+            schema: *id001
+      '409':
+        description: already pending / enrollment not active
+        content:
+          application/json:
+            schema: *id001
+  get:
+    tags:
+    - Cancellations
+    summary: 查看某報名的取消申請 (本人 / 開課者 / 系統管理員)
+    security:
+    - bearerAuth: []
+    parameters:
+    - name: id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    - *id002
+    - *id003
+    - name: status
+      in: query
+      schema:
+        type: string
+        enum:
+        - pending
+        - resolved
+    responses:
+      '200':
+        description: Success
+        content:
+          application/json:
+            schema:
+              allOf:
+              - $ref: ../components/schemas/common.yml#/PageResponse
+              - type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: ../components/schemas/payment.yml#/CancellationRequestResponse
+cancellations:
+  get:
+    tags:
+    - Cancellations
+    summary: 取消申請清單
+    description: |
+      學員看到自己報名的申請；開課者看到自己管理的課程的申請；系統管理員看到全部 (可介入處理)。待處理排在最前面。
+      整個課程被取消時，已付款或已回報的報名會自動建立一筆待處理申請，作為教練的退款待辦清單。
+    security:
+    - bearerAuth: []
+    parameters:
+    - *id002
+    - *id003
+    - name: status
+      in: query
+      schema:
+        type: string
+        enum:
+        - pending
+        - resolved
+    - name: course_id
+      in: query
+      schema:
+        type: string
+        format: uuid
+    responses:
+      '200':
+        description: Success
+        content:
+          application/json:
+            schema:
+              allOf:
+              - $ref: ../components/schemas/common.yml#/PageResponse
+              - type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: ../components/schemas/payment.yml#/CancellationRequestResponse
+cancellationResolve:
+  post:
+    tags:
+    - Cancellations
+    summary: 記錄處理結果：退款或補課決定 (開課者 / 系統管理員)
+    security:
+    - bearerAuth: []
+    parameters:
+    - name: id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: ../components/schemas/payment.yml#/ResolveCancellationRequest
+    responses:
+      '200':
+        description: Success
+        content:
+          application/json:
+            schema:
+              $ref: ../components/schemas/payment.yml#/CancellationRequestResponse
+      '400':
+        description: invalid resolution / refund
+        content:
+          application/json:
+            schema: *id001
+      '403':
+        description: students cannot resolve their own request
+        content:
+          application/json:
+            schema: *id001
+      '404':
+        description: not found
+        content:
+          application/json:
+            schema: *id001
+      '409':
+        description: already resolved / nothing to refund
+        content:
+          application/json:
+            schema: *id001

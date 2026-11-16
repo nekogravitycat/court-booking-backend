@@ -9,6 +9,8 @@ import (
 	"github.com/nekogravitycat/court-booking-backend/internal/api"
 	"github.com/nekogravitycat/court-booking-backend/internal/auth"
 	"github.com/nekogravitycat/court-booking-backend/internal/booking"
+	"github.com/nekogravitycat/court-booking-backend/internal/coach"
+	"github.com/nekogravitycat/court-booking-backend/internal/course"
 	"github.com/nekogravitycat/court-booking-backend/internal/favorite"
 	"github.com/nekogravitycat/court-booking-backend/internal/file"
 	"github.com/nekogravitycat/court-booking-backend/internal/lineauth"
@@ -22,6 +24,7 @@ import (
 	"github.com/nekogravitycat/court-booking-backend/internal/skilllevel"
 	"github.com/nekogravitycat/court-booking-backend/internal/skillrating"
 	"github.com/nekogravitycat/court-booking-backend/internal/sports"
+	"github.com/nekogravitycat/court-booking-backend/internal/trust"
 	"github.com/nekogravitycat/court-booking-backend/internal/user"
 )
 
@@ -107,10 +110,24 @@ func NewContainer(cfg Config) *Container {
 	skillRatingRepo := skillrating.NewPgxRepository(cfg.DBPool)
 	skillRatingService := skillrating.NewService(skillRatingRepo, pickupService, skillLevelService, userService, notificationService)
 
+	// Coach Module (profiles, groups and invitations)
+	coachService := coach.NewService(coach.NewPgxRepository(cfg.DBPool), fileService, notificationService)
+	coachGroupService := coach.NewGroupService(coach.NewPgxGroupRepository(cfg.DBPool), coachService, notificationService)
+
+	// Course Module (courses, sessions, enrollments)
+	courseRepo := course.NewPgxRepository(cfg.DBPool)
+	courseService := course.NewService(courseRepo, coachService, coachGroupService, skillLevelService, notificationService)
+	paymentService := course.NewPaymentService(courseRepo, course.NewPgxPaymentRepository(cfg.DBPool), notificationService)
+	attendanceService := course.NewAttendanceService(courseRepo, course.NewPgxAttendanceRepository(cfg.DBPool), notificationService)
+
+	// Trust Module (reviews, complaints, reputation, suspensions)
+	trustService := trust.NewService(trust.NewPgxRepository(cfg.DBPool), courseRepo, attendanceService, notificationService)
+
 	// Account deactivation releases the user's upcoming bookings and pickup
 	// commitments.
 	userService.AddDeactivationHook(bookingService)
 	userService.AddDeactivationHook(pickupService)
+	userService.AddDeactivationHook(courseService)
 
 	// API Router Config
 	routerParams := api.Config{
@@ -128,6 +145,12 @@ func NewContainer(cfg Config) *Container {
 		SkillRatingService:  skillRatingService,
 		NotificationService: notificationService,
 		FavoriteService:     favoriteService,
+		CoachService:        coachService,
+		CoachGroupService:   coachGroupService,
+		CourseService:       courseService,
+		PaymentService:      paymentService,
+		AttendanceService:   attendanceService,
+		TrustService:        trustService,
 		FileService:         fileService,
 		SessionService:      sessionService,
 		SessionCookie:       auth.NewSessionCookie(cfg.IsProduction, cfg.SessionTTL),

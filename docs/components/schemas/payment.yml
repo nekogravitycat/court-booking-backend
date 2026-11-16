@@ -1,0 +1,96 @@
+TransferReportRequest:
+  type: object
+  required: [last5]
+  properties:
+    last5: { type: string, pattern: "^[0-9]{5}$", description: "轉出帳號末五碼" }
+    amount: { type: integer, minimum: 1, description: "實際轉帳金額；省略則視為應付金額 (課程費 + 場地費)" }
+    transferred_at: { type: string, format: date-time, description: "轉帳時間 (選填，不可為未來)" }
+    note: { type: string, maxLength: 200 }
+
+TransferReportResponse:
+  type: object
+  properties:
+    id: { type: string, format: uuid }
+    enrollment_id: { type: string, format: uuid }
+    course_id: { type: string, format: uuid }
+    course_title: { type: string }
+    student:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+    last5: { type: string }
+    amount: { type: integer }
+    expected_amount: { type: integer, description: "報名的應付金額" }
+    amount_matches: { type: boolean, description: "回報金額是否等於應付金額 (審核時的提示，不會自動核准)" }
+    transferred_at: { type: string, format: date-time, nullable: true }
+    note: { type: string }
+    status: { type: string, enum: [pending, approved, rejected] }
+    review_note: { type: string, nullable: true }
+    reviewed_at: { type: string, format: date-time, nullable: true }
+    created_at: { type: string, format: date-time }
+
+ReviewTransferRequest:
+  type: object
+  required: [decision]
+  properties:
+    decision: { type: string, enum: [approve, reject] }
+    note: { type: string, maxLength: 500, description: "退回時必填，會通知學員" }
+
+UpdatePaymentRequest:
+  type: object
+  required: [payment_status]
+  properties:
+    payment_status: { type: string, enum: [paid, unpaid] }
+
+CreateCancellationRequest:
+  type: object
+  required: [reason]
+  properties:
+    reason: { type: string, maxLength: 200 }
+    session_id:
+      type: string
+      format: uuid
+      description: "選填：針對單一場次 (例如教練爽約)。有帶時，處理結果只留下紀錄，不會取消整個報名。"
+
+ResolveCancellationRequest:
+  type: object
+  required: [resolution]
+  description: |
+    記錄處理結果。系統**不計算也不執行退款**，只記錄教練的決定：
+    - `cancelled`：取消報名 (不退款)
+    - `refunded`：取消報名並記錄退款 (須帶 refund_amount，不可超過應付金額，且報名須已付款)
+    - `makeup`：改以補課處理 (報名維持有效)
+    - `rejected`：拒絕申請
+    - `other`：其他，請在 note 說明
+    針對單一場次 (有 session_id) 的申請，`cancelled` / `refunded` 只記錄結果，不會取消整個報名。
+  properties:
+    resolution: { type: string, enum: [cancelled, refunded, makeup, rejected, other] }
+    refund_amount: { type: integer, minimum: 0, description: "僅 refunded 使用" }
+    note: { type: string, maxLength: 500 }
+
+CancellationRequestResponse:
+  type: object
+  properties:
+    id: { type: string, format: uuid }
+    enrollment_id: { type: string, format: uuid }
+    course_id: { type: string, format: uuid }
+    course_title: { type: string }
+    student:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+    session_id: { type: string, format: uuid, nullable: true }
+    requested_by: { type: string, format: uuid, nullable: true }
+    requester_role: { type: string, enum: [student, coach, system] }
+    reason: { type: string }
+    status: { type: string, enum: [pending, resolved] }
+    resolution: { type: string, nullable: true, enum: [cancelled, refunded, makeup, rejected, other] }
+    refund_amount: { type: integer, nullable: true }
+    resolution_note: { type: string, nullable: true }
+    resolved_at: { type: string, format: date-time, nullable: true }
+    amount_due: { type: integer }
+    payment_status: { type: string, enum: [not_required, unpaid, reported, paid, refunded] }
+    enrollment_status: { type: string, enum: [active, cancelled] }
+    created_at: { type: string, format: date-time }

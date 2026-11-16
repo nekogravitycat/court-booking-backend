@@ -46,10 +46,14 @@ type Notification struct {
 	Content       string
 	PickupGroupID *string
 	PickupOrderID *string
-	SenderID      *string // Set for user-to-user messages only
-	SenderName    *string // Sender's display name, populated on List
-	IsRead        bool
-	CreatedAt     time.Time
+	// RefType / RefID point at the entity a coaching notification is about
+	// (e.g. "coach_group_invitation"); both nil for other notifications.
+	RefType    *string
+	RefID      *string
+	SenderID   *string // Set for user-to-user messages only
+	SenderName *string // Sender's display name, populated on List
+	IsRead     bool
+	CreatedAt  time.Time
 }
 
 // Filter defines parameters for listing a user's notifications.
